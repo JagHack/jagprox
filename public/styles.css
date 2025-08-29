@@ -1,26 +1,144 @@
-body { font-family: sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 2rem; }
-.container { max-width: 800px; margin: auto; }
-h1, h2 { color: #fff; border-bottom: 2px solid #333; padding-bottom: 0.5rem; }
-.card { background-color: #1e1e1e; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; }
-.form-group { margin-bottom: 1rem; display: flex; flex-direction: column; }
-.form-group label { margin-bottom: 0.5rem; font-weight: bold; }
-input[type="text"], input[type="password"] { background-color: #333; border: 1px solid #555; color: #e0e0e0; padding: 0.8rem; border-radius: 4px; font-size: 1rem; }
-.save-btn, #add-alias-btn { background-color: #bb86fc; color: #121212; border: none; padding: 0.8rem 1.5rem; border-radius: 4px; font-size: 1rem; cursor: pointer; font-weight: bold; }
-.save-btn { width: 100%; margin-top: 1rem; }
-.status-hidden { display: none; }
-.status-success, .status-error { padding: 1rem; border-radius: 4px; margin-bottom: 1rem; }
-.status-success { background-color: #03dac6; color: #121212; }
-.status-error { background-color: #cf6679; color: #121212; }
-.alias-group { flex-direction: row; align-items: center; gap: 0.5rem; }
-.alias-group span { font-size: 1.5rem; color: #777; }
-.alias-key, .alias-value { flex: 1; }
-.remove-alias-btn { background: #cf6679; color: #fff; border: none; border-radius: 50%; width: 25px; height: 25px; font-size: 1.2rem; cursor: pointer; line-height: 25px; text-align: center; }
-.toggle-group { flex-direction: row; align-items: center; justify-content: space-between; }
-.checkbox-group { flex-direction: row; align-items: center; gap: 0.5rem; }
-.switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; }
-.slider.round { border-radius: 34px; }
-.slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-input:checked + .slider { background-color: #bb86fc; }
-input:checked + .slider:before { transform: translateX(26px); }
+body {
+	font-family: sans-serif;
+	background-color: #121212;
+	color: #e0e0e0;
+	margin: 0;
+	padding: 2rem;
+}
+.container {
+	max-width: 800px;
+	margin: auto;
+}
+h1, h2 {
+	color: #fff;
+	border-bottom: 2px solid #333;
+	padding-bottom: 0.5rem;
+}
+.card {
+	background-color: #1e1e1e;
+	border-radius: 8px;
+	padding: 1.5rem;
+	margin-bottom: 2rem;
+}
+.form-group {
+	margin-bottom: 1rem;
+	display: flex;
+	flex-direction: column;
+}
+.form-group label {
+	margin-bottom: 0.5rem;
+	font-weight: bold;
+}
+input[type="text"], input[type="password"] {
+	background-color: #333;
+	border: 1px solid #555;
+	color: #e0e0e0;
+	padding: 0.8rem;
+	border-radius: 4px;
+	font-size: 1rem;
+}
+.save-btn, #add-alias-btn {
+	background-color: #03a9f4;
+	color: #121212;
+	border: none;
+	padding: 0.8rem 1.5rem;
+	border-radius: 4px;
+	font-size: 1rem;
+	cursor: pointer;
+	font-weight: bold;
+}
+.save-btn {
+	width: 100%;
+	margin-top: 1rem;
+}
+.status-hidden {
+	display: none;
+}
+.status-success, .status-error {
+	padding: 1rem;
+	border-radius: 4px;
+	margin-bottom: 1rem;
+}
+.status-success {
+	background-color: #00bfa5;
+	color: #121212;
+}
+.status-error {
+	background-color: #cf6679;
+	color: #121212;
+}
+.alias-group {
+	flex-direction: row;
+	align-items: center;
+	gap: 0.5rem;
+}
+.alias-group span {
+	font-size: 1.5rem;
+	color: #777;
+}
+.alias-key, .alias-value {
+	flex: 1;
+}
+.remove-alias-btn {
+	background: #cf6679;
+	color: #fff;
+	border: none;
+	border-radius: 50%;
+	width: 25px;
+	height: 25px;
+	font-size: 1.2rem;
+	cursor: pointer;
+	line-height: 25px;
+	text-align: center;
+}
+.toggle-group {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+.checkbox-group {
+	flex-direction: row;
+	align-items: center;
+	gap: 0.5rem;
+}
+.switch {
+	position: relative;
+	display: inline-block;
+	width: 60px;
+	height: 34px;
+}
+.switch input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+.slider {
+	position: absolute;
+	cursor: pointer;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: #ccc;
+	transition: .4s;
+}
+.slider.round {
+	border-radius: 34px;
+}
+.slider:before {
+	position: absolute;
+	content: "";
+	height: 26px;
+	width: 26px;
+	left: 4px;
+	bottom: 4px;
+	background-color: white;
+	transition: .4s;
+	border-radius: 50%;
+}
+input:checked + .slider {
+	background-color: #03a9f4;
+}
+input:checked + .slider:before {
+	transform: translateX(26px);
+}
