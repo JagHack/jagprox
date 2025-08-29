@@ -1,0 +1,35 @@
+version: 1.8.9
+port: 2107
+debug_mode: true
+cache_folder: ./profile_cache
+commands:
+  statcheck: sc
+  stat_filter: scfilter
+  status: status
+name_prefix: ""
+fkdr_benchmarks:
+  high: 2.5
+  medium: 1.5
+threat_benchmarks:
+  fkdr: 3
+  stars: 300
+threats_only: false
+check_delay: 200
+filter_self: true
+filter_list: []
+guild_list: []
+auto_who: true
+slumber_alerts: false
+ping_alerts: false
+ping_interval: 10000
+ping_benchmarks:
+  medium: 150
+  high: 250
+show_tag: true
+tag: JagProxy
+tag_prefix: §8[§d
+bypasses:
+  enabled: true
+  lunar: true
+  forge: false
+aliases: {}

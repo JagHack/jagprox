@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyProxy Control Panel</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>HyProxy Control Panel</h1>
+        <div id="status-message" class="status-hidden"></div>
+        <form id="config-form">
+            <div class="card">
+                <h2>API Key</h2>
+                <div class="form-group">
+                    <label for="apiKey">Hypixel API Key</label>
+                    <input type="password" id="apiKey" name="apiKey" placeholder="Enter your key">
+                </div>
+            </div>
+            <div class="card">
+                <h2>Command Aliases</h2>
+                <div id="aliases-container"></div>
+                <button type="button" id="add-alias-btn">Add Alias</button>
+            </div>
+            <button type="submit" class="save-btn">Save and Apply</button>
+        </form>
+    </div>
+    <script>
+        const form = document.getElementById('config-form');
+        const aliasesContainer = document.getElementById('aliases-container');
+        const addAliasBtn = document.getElementById('add-alias-btn');
+        const statusMessage = document.getElementById('status-message');
+        async function loadConfig() {
+            const response = await fetch('/api/get-config');
+            const data = await response.json();
+            document.getElementById('apiKey').value = data.apiKey;
+            aliasesContainer.innerHTML = '';
+            for (const alias in data.aliases) {
+                createAliasInput(alias, data.aliases[alias]);
+            }
+        }
+        function createAliasInput(alias = '', command = '') {
+            const div = document.createElement('div');
+            div.className = 'form-group alias-group';
+            div.innerHTML = `<input type="text" class="alias-key" value="${alias}" placeholder="/play solobw"><span>→</span><input type="text" class="alias-value" value="${command}" placeholder="/play bedwars_eight_one"><button type="button" class="remove-alias-btn">×</button>`;
+            aliasesContainer.appendChild(div);
+            div.querySelector('.remove-alias-btn').addEventListener('click', () => div.remove());
+        }
+        addAliasBtn.addEventListener('click', () => createAliasInput());
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const aliases = {};
+            document.querySelectorAll('.alias-group').forEach(group => {
+                const key = group.querySelector('.alias-key').value.trim();
+                const value = group.querySelector('.alias-value').value.trim();
+                if (key && value) { aliases[key] = value; }
+            });
+            const data = { apiKey: document.getElementById('apiKey').value, aliases: aliases };
+            const response = await fetch('/api/save-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            const result = await response.json();
+            statusMessage.textContent = result.message;
+            statusMessage.className = result.success ? 'status-success' : 'status-error';
+            setTimeout(() => statusMessage.className = 'status-hidden', 3000);
+        });
+        loadConfig();
+    </script>
+</body>
+</html>
