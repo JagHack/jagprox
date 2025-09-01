@@ -33,3 +33,8 @@ bypasses:
   lunar: true
   forge: false
 aliases: {}
+super_friends:
+  S11one:
+    - Duels
+  uhMcd:
+    - duels

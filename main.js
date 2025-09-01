@@ -19,4 +19,4 @@ if (!env.apiKey) {
 }
 
 const proxy = new JagProx(config, env);
-startWebPanel(2108, config, env);
+startWebPanel(2108, config, env, proxy);
