@@ -41,8 +41,8 @@ Before you begin, ensure you have the following installed:
 - **Git:** Required to clone the repository. [Download here](https://git-scm.com/).
 - **A valid Minecraft: Java Edition account.**
 - **A Hypixel API Key:**
-  1. Log into the Hypixel server.
-  2. Type the command `/api new` in the chat.
+  1. Go to [Hypixel Developer Dashboard](https://developer.hypixel.net/)
+  2. Register or login to your Hypixel Forums Account
   3. Copy the new API key securely.
 
 ### 2. Cloning the Repository
