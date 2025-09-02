@@ -134,7 +134,7 @@ Here you can manage your command aliases, set your API key, and use the player s
 
 ## Contributing
 
-Contributions are welcome! If you have ideas for new features or find bugs, feel free to open an issue or submit a pull request on the GitHub repository.
+Contributions are welcome and already made! Huge shoutout to Yanice and TheMackabu for helping me with some stuff. If you have ideas for new features or find bugs, feel free to open an issue or submit a pull request on the GitHub repository.
 
 ---
 
