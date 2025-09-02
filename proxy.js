@@ -48,6 +48,10 @@ class JagProx {
         this.target.on("connect", () => formatter.log(`Client connected to target: ${this.target.username}`));
 
         this.client.on("packet", (data, meta) => {
+            if (meta.name === "custom_payload" && data.channel === "MC|Brand") {
+                console.log(JSON.stringify(data));
+                data.data = Buffer.from("\x07vanilla")
+            }
             if (meta.name === "chat" && data.message && data.message.startsWith("/") && this.commands.handle(data.message)) {
                 return;
             }
