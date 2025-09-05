@@ -9,7 +9,7 @@ class JagProx {
         this.env = env;
         this.client = null;
         this.target = null;
-        
+
         this.hypixel = new HypixelHandler(this);
         this.commands = new CommandHandler(this);
 

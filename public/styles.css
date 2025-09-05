@@ -13,7 +13,6 @@
     --danger-primary: #ff1b8d;
     --danger-hover: #ff4aa4;
     --success-primary: #00ffc8;
-
     --rotate-x: 0;
     --rotate-y: 0;
 }
@@ -110,7 +109,6 @@ input[type="text"]:focus, input[type="password"]:focus { outline: none; border-c
 
 @keyframes slide-in-bottom { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-/* --- Styles für die Spielersuche --- */
 .form-group-grid {
     display: flex;
     gap: 1rem;
@@ -177,8 +175,6 @@ fieldset {
     border: none;
     padding: 0;
 }
-
-/* --- ADDED: Discord Link --- */
 .discord-link {
     position: fixed;
     bottom: 2rem;
@@ -189,9 +185,8 @@ fieldset {
     transition: all 0.3s ease;
     z-index: 1001;
 }
-
 .discord-link:hover {
-    color: #5865F2; /* Official Discord color */
+    color: #5865F2;
     transform: scale(1.1);
     text-shadow: 0 0 15px #5865F2;
 }

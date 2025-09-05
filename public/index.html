@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>[ JagProx // System Interface ]</title>
     <link rel="stylesheet" href="styles.css">
-    <!-- Ensure Font Awesome is loaded, which it already is -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -48,7 +47,6 @@
         </form>
     </div>
 
-    <!-- Confirmation Modal HTML -->
     <div id="confirm-modal" class="modal-overlay">
         <div class="modal-content">
             <p>Security Confirmation: Permanently delete alias?</p>
@@ -61,7 +59,6 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- DOM Elements ---
         const configForm = document.getElementById('config-form');
         const fieldset = document.getElementById('config-fieldset');
         const aliasesContainer = document.getElementById('aliases-container');
@@ -74,14 +71,11 @@
         const modalCancelBtn = document.getElementById('modal-cancel-btn');
         let elementToRemove = null;
         const API = { GET: '/api/get-config', SAVE: '/api/save-config' };
-
-        const playerSearchContainer = document.getElementById('player-search-container');
         const playerSearchNameInput = document.getElementById('player-search-name');
         const playerSearchGamemodeSelect = document.getElementById('player-search-gamemode');
         const playerSearchResults = document.getElementById('player-search-results');
         const playerSearchBtn = document.getElementById('player-search-btn');
 
-        // --- 3D Hologram Card Effect ---
         document.querySelectorAll('.card').forEach(card => {
             card.addEventListener('mousemove', (e) => {
                 const rect = card.getBoundingClientRect();
@@ -100,7 +94,6 @@
             });
         });
 
-        // --- Utility Functions ---
         const showStatus = (message, success = true) => {
             statusMessage.textContent = `[SYSTEM]: ${message}`;
             statusMessage.className = `status-message ${success ? 'status-success' : 'status-error'} show`;
@@ -137,7 +130,6 @@
             div.querySelector('.remove-alias-btn').addEventListener('click', () => openConfirmationModal(div));
         };
 
-        // --- Core Logic ---
         const loadConfig = async () => {
             try {
                 const res = await fetch(API.GET);
@@ -288,7 +280,6 @@
             }
         };
 
-        // --- Event Listeners ---
         configForm.addEventListener('submit', handleConfigFormSubmit);
         playerSearchBtn.addEventListener('click', handlePlayerSearch);
         addAliasBtn.addEventListener('click', () => createAliasInput());
@@ -299,14 +290,13 @@
         });
         modalCancelBtn.addEventListener('click', closeConfirmationModal);
 
-        // --- Initialisation ---
         loadConfig();
     });
     </script>
-
-    <!-- ADDED: Discord Link -->
-    <a href="https://discord.gg/pUuuzx6uJm" target="_blank" rel="noopener noreferrer" class="discord-link" title="Join our Discord!">
+    <a href="https://discord.gg/your-invite" target="_blank" rel="noopener noreferrer" class="discord-link" title="Join our Discord!">
         <i class="fa-brands fa-discord"></i>
     </a>
 </body>
 </html>
+
+  

@@ -8,20 +8,18 @@ class HypixelHandler {
         this.proxy = proxy;
     }
 
-    // --- NEW: Function to return stats as JSON for the web panel ---
     async getStatsForAPI(gamemode, username) {
-        const gameInfo = gameModeMap[gamemode.toLowerCase()]; // Ensure gamemode is lowercase
+        const gameInfo = gameModeMap[gamemode.toLowerCase()];
         if (!gameInfo) {
             return { error: `Unknown game mode: ${gamemode}` };
         }
         try {
             const mojangData = await this.getMojangUUID(username);
             if (!mojangData) return { error: `Player '${username}' not found.` };
-            
+
             const stats = await this.getStats(mojangData.uuid, gameInfo.apiName);
             if (!stats) return { error: `No ${gameInfo.displayName} stats found for '${mojangData.username}'.` };
-            
-            // Return raw but structured data for the frontend to process
+
             return {
                 username: mojangData.username,
                 uuid: mojangData.uuid,
@@ -34,10 +32,9 @@ class HypixelHandler {
         }
     }
 
-    // --- NEW: Party Stat Check Logic ---
     handlePartyStatCheck() {
         this.proxy.proxyChat("§eRequesting party member list...");
-        const partyMembers = new Set(); // Use a Set to avoid duplicates
+        const partyMembers = new Set();
         let capturing = false;
 
         const partyListener = (data, meta) => {
@@ -61,16 +58,14 @@ class HypixelHandler {
                 capturing = true;
             }
 
-            // Party list can span multiple lines. We check for the line starting with names.
             if (capturing && (cleanMessage.startsWith('Party Leader:') || cleanMessage.startsWith('Party Moderators:') || cleanMessage.startsWith('Party Members:'))) {
                  const players = cleanMessage.split(':')[1].split(',').map(p => p.trim());
                  players.forEach(p => partyMembers.add(p));
             }
 
-            // The list ends when we see this line
             if (capturing && cleanMessage.startsWith('Total Members:')) {
                 capturing = false;
-                this.proxy.target.removeListener('packet', partyListener); // Stop listening
+                this.proxy.target.removeListener('packet', partyListener);
                 this.processPartyMembers(Array.from(partyMembers));
             }
         };
@@ -78,7 +73,6 @@ class HypixelHandler {
         this.proxy.target.on('packet', partyListener);
         this.proxy.target.write('chat', { message: '/party list' });
 
-        // Failsafe: remove the listener after 5 seconds to prevent memory leaks
         setTimeout(() => {
             this.proxy.target.removeListener('packet', partyListener);
         }, 5000);
@@ -93,20 +87,17 @@ class HypixelHandler {
         this.proxy.proxyChat(`§aFound ${partyMembers.length} members. Fetching Bedwars stats...`);
         this.proxy.proxyChat("§7§m----------------------------------------");
 
-        // We can reuse the same bulk processing logic from the queue stats feature
-        const statPromises = partyMembers.map(username => 
-            // Defaulting to Bedwars for now, but this could be made a command argument
-            this.getAndFormatPlayerStats(username.replace(/\[.*?\]\s/g, ''), gameModeMap.bedwars) 
+        const statPromises = partyMembers.map(username =>
+            this.getAndFormatPlayerStats(username.replace(/\[.*?\]\s/g, ''), gameModeMap.bedwars)
         );
         const statLines = await Promise.all(statPromises);
-        
+
         statLines.forEach(line => {
             if (line) this.proxy.proxyChat(line);
         });
         this.proxy.proxyChat("§7§m----------------------------------------");
     }
 
-    // This helper is used by processPartyMembers
     async getAndFormatPlayerStats(username, gameInfo) {
         try {
             const cleanUsername = username.replace(/§[0-9a-fk-or]/g, '').replace(/\[.*?\]\s/g, '');
@@ -122,8 +113,7 @@ class HypixelHandler {
             return `§cError for ${username}.`;
         }
     }
-    
-    // This helper returns a formatted string for a single player
+
     formatSinglePlayerQueueStats(username, stats, gameInfo) {
         const d = stats.data;
         const a = stats.achievements;
@@ -141,8 +131,6 @@ class HypixelHandler {
         }
         return statLine;
     }
-
-    // --- [ Original functions remain below ] ---
 
     async getMojangUUID(username) {
         try {
@@ -259,7 +247,7 @@ class HypixelHandler {
             return null;
         }
     }
-    
+
     async displayFormattedStats(username, uuid, stats, gameInfo) {
         try {
             const image = await Jimp.read(`https://crafatar.com/avatars/${uuid}?size=8&overlay=true`);
