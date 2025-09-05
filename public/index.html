@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>[ JagProx // System Interface ]</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Ensure Font Awesome is loaded, which it already is -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -27,7 +28,7 @@
                 <div class="card">
                     <h2><i class="fa-solid fa-search"></i> Player Stat Search</h2>
                     <div id="player-search-container" class="form-group-grid">
-                        <input type="text" id="player-search-name" placeholder="Enter player name" required>
+                        <input type="text" id="player-search-name" placeholder="Enter player name">
                         <select id="player-search-gamemode"></select>
                         <button type="button" id="player-search-btn" class="btn"><i class="fa-solid fa-search"></i> Search</button>
                     </div>
@@ -73,7 +74,7 @@
         const modalCancelBtn = document.getElementById('modal-cancel-btn');
         let elementToRemove = null;
         const API = { GET: '/api/get-config', SAVE: '/api/save-config' };
-        
+
         const playerSearchContainer = document.getElementById('player-search-container');
         const playerSearchNameInput = document.getElementById('player-search-name');
         const playerSearchGamemodeSelect = document.getElementById('player-search-gamemode');
@@ -98,7 +99,7 @@
                 card.style.setProperty('--rotate-y', '0deg');
             });
         });
-        
+
         // --- Utility Functions ---
         const showStatus = (message, success = true) => {
             statusMessage.textContent = `[SYSTEM]: ${message}`;
@@ -135,16 +136,20 @@
             aliasesContainer.appendChild(div);
             div.querySelector('.remove-alias-btn').addEventListener('click', () => openConfirmationModal(div));
         };
-        
+
         // --- Core Logic ---
         const loadConfig = async () => {
             try {
                 const res = await fetch(API.GET);
                 if (!res.ok) throw new Error(`Network error: ${res.statusText}`);
                 const data = await res.json();
-                
-                apiKeyInput.value = data.apiKey || '';
-                
+
+                if (data.apiKeyIsSet) {
+                    apiKeyInput.placeholder = 'API Key is set. Enter a new one to change it.';
+                } else {
+                    apiKeyInput.placeholder = 'SYSTEM KEY REQUIRED';
+                }
+
                 aliasesContainer.innerHTML = '';
                 if (data.aliases) {
                     Object.entries(data.aliases).forEach(([key, val]) => createAliasInput(key, val));
@@ -152,8 +157,7 @@
 
                 if (data.availableGamemodes) {
                     playerSearchGamemodeSelect.innerHTML = data.availableGamemodes
-                        .sort()
-                        .map(gm => `<option value="${gm}">${gm.charAt(0).toUpperCase() + gm.slice(1)}</option>`)
+                        .map(gm => `<option value="${gm.value}">${gm.text}</option>`)
                         .join('');
                 }
 
@@ -174,11 +178,13 @@
                 const value = group.querySelector('.alias-value').value.trim();
                 if (key && value) aliases[key] = value;
             });
-            
-            const dataToSave = { 
-                apiKey: apiKeyInput.value.trim(), 
-                aliases
-            };
+
+            const dataToSave = { aliases };
+
+            const newApiKey = apiKeyInput.value.trim();
+            if (newApiKey) {
+                dataToSave.apiKey = newApiKey;
+            }
 
             try {
                 const res = await fetch(API.SAVE, {
@@ -188,6 +194,12 @@
                 });
                 const result = await res.json();
                 showStatus(result.message, result.success);
+
+                if (dataToSave.apiKey) {
+                    apiKeyInput.value = '';
+                    loadConfig();
+                }
+
             } catch (error) {
                 showStatus(`Critical transmission error: ${error.message}`, false);
             } finally {
@@ -214,7 +226,7 @@
                     playerSearchResults.innerHTML = `<p class="status-error show" style="margin-top: 1rem;">${data.error}</p>`;
                     return;
                 }
-                
+
                 const d = data.stats.data;
                 const a = data.stats.achievements;
                 let resultsHTML = `
@@ -229,40 +241,40 @@
                         const fkdr_bw = ((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2);
                         const wlr_bw = ((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2);
                         resultsHTML += `
-                            <div><span>Level:</span><span>${(a.bedwars_level || 0).toLocaleString()}✫</span></div>
-                            <div><span>FKDR:</span><span>${fkdr_bw}</span></div>
-                            <div><span>WLR:</span><span>${wlr_bw}</span></div>
-                            <div><span>Wins:</span><span>${(d.wins_bedwars || 0).toLocaleString()}</span></div>
-                            <div><span>Final Kills:</span><span>${(d.final_kills_bedwars || 0).toLocaleString()}</span></div>
-                            <div><span>Beds Broken:</span><span>${(d.beds_broken_bedwars || 0).toLocaleString()}</span></div>`;
+                            <span>Level:</span><span>${(a.bedwars_level || 0).toLocaleString()}✫</span>
+                            <span>FKDR:</span><span>${fkdr_bw}</span>
+                            <span>WLR:</span><span>${wlr_bw}</span>
+                            <span>Wins:</span><span>${(d.wins_bedwars || 0).toLocaleString()}</span>
+                            <span>Final Kills:</span><span>${(d.final_kills_bedwars || 0).toLocaleString()}</span>
+                            <span>Beds Broken:</span><span>${(d.beds_broken_bedwars || 0).toLocaleString()}</span>`;
                         break;
 
                     case 'SkyWars':
                         const kdr_sw = ((d.kills || 0) / (d.deaths || 1)).toFixed(2);
                         const wlr_sw = ((d.wins || 0) / (d.losses || 1)).toFixed(2);
                         resultsHTML += `
-                            <div><span>Level:</span><span>${d.levelFormatted || 'N/A'}</span></div>
-                            <div><span>KDR:</span><span>${kdr_sw}</span></div>
-                            <div><span>WLR:</span><span>${wlr_sw}</span></div>
-                            <div><span>Wins:</span><span>${(d.wins || 0).toLocaleString()}</span></div>
-                            <div><span>Kills:</span><span>${(d.kills || 0).toLocaleString()}</span></div>
-                            <div><span>Losses:</span><span>${(d.losses || 0).toLocaleString()}</span></div>`;
+                            <span>Level:</span><span>${d.levelFormatted || 'N/A'}</span>
+                            <span>KDR:</span><span>${kdr_sw}</span>
+                            <span>WLR:</span><span>${wlr_sw}</span>
+                            <span>Wins:</span><span>${(d.wins || 0).toLocaleString()}</span>
+                            <span>Kills:</span><span>${(d.kills || 0).toLocaleString()}</span>
+                            <span>Losses:</span><span>${(d.losses || 0).toLocaleString()}</span>`;
                         break;
-                    
+
                     case 'Duels':
-                        const kdr_duels = ((d.kills || 0) / (d.deaths || 1)).toFixed(2);
                         const wlr_duels = ((d.wins || 0) / (d.losses || 1)).toFixed(2);
+                        const kdr_duels = ((d.kills || 0) / (d.deaths || 1)).toFixed(2);
                         resultsHTML += `
-                            <div><span>WLR:</span><span>${wlr_duels}</span></div>
-                            <div><span>KDR:</span><span>${kdr_duels}</span></div>
-                            <div><span>Wins:</span><span>${(d.wins || 0).toLocaleString()}</span></div>
-                            <div><span>Losses:</span><span>${(d.losses || 0).toLocaleString()}</span></div>
-                            <div><span>Kills:</span><span>${(d.kills || 0).toLocaleString()}</span></div>
-                            <div><span>Deaths:</span><span>${(d.deaths || 0).toLocaleString()}</span></div>`;
+                            <span>WLR:</span><span>${wlr_duels}</span>
+                            <span>Wins:</span><span>${(d.wins || 0).toLocaleString()}</span>
+                            <span>KDR:</span><span>${kdr_duels}</span>
+                            <span>Kills:</span><span>${(d.kills || 0).toLocaleString()}</span>
+                            <span>Losses:</span><span>${(d.losses || 0).toLocaleString()}</span>
+                            <span>Deaths:</span><span>${(d.deaths || 0).toLocaleString()}</span>`;
                         break;
 
                     default:
-                        resultsHTML += `<div><span>Wins:</span><span>${(d.wins || 'N/A').toLocaleString()}</span></div>`;
+                        resultsHTML += `<span>Wins:</span><span>${(d.wins || 'N/A').toLocaleString()}</span>`;
                 }
 
                 resultsHTML += `</div>`;
@@ -275,7 +287,7 @@
                  playerSearchBtn.innerHTML = '<i class="fa-solid fa-search"></i> Search';
             }
         };
-        
+
         // --- Event Listeners ---
         configForm.addEventListener('submit', handleConfigFormSubmit);
         playerSearchBtn.addEventListener('click', handlePlayerSearch);
@@ -286,10 +298,15 @@
             closeConfirmationModal();
         });
         modalCancelBtn.addEventListener('click', closeConfirmationModal);
-        
+
         // --- Initialisation ---
         loadConfig();
     });
     </script>
+
+    <!-- ADDED: Discord Link -->
+    <a href="https://discord.gg/pUuuzx6uJm" target="_blank" rel="noopener noreferrer" class="discord-link" title="Join our Discord!">
+        <i class="fa-brands fa-discord"></i>
+    </a>
 </body>
 </html>
