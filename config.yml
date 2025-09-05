@@ -35,6 +35,6 @@ bypasses:
 aliases: {}
 super_friends:
   S11one:
-    - Duels
+    - duels
   uhMcd:
     - duels

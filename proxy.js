@@ -1,7 +1,3 @@
-// ========================================================================= //
-// ============================= JAGPROX =================================== //
-// ========================================================================= //
-
 const mc = require("minecraft-protocol");
 const formatter = require("./formatter.js");
 const CommandHandler = require("./modules/commandHandler.js");
@@ -49,8 +45,7 @@ class JagProx {
 
         this.client.on("packet", (data, meta) => {
             if (meta.name === "custom_payload" && data.channel === "MC|Brand") {
-                console.log(JSON.stringify(data));
-                data.data = Buffer.from("\x07vanilla")
+                data.data = Buffer.from("\x07vanilla");
             }
             if (meta.name === "chat" && data.message && data.message.startsWith("/") && this.commands.handle(data.message)) {
                 return;
@@ -62,6 +57,9 @@ class JagProx {
         });
 
         this.target.on("packet", (data, meta) => {
+            if (meta.name === "custom_payload" && data.channel === "MC|Brand") {
+                data.data = Buffer.from("\x07vanilla");
+            }
             if (this.client.state === meta.state) {
                 try { this.client.write(meta.name, data); }
                 catch (e) { formatter.log(`Error writing packet to client: ${e.message}`); }

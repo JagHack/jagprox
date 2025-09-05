@@ -13,7 +13,7 @@ class CommandHandler {
         // Map config aliases to the actual command
         const alias = Object.entries(this.proxy.config.commands || {})
             .find(([_, alias]) => alias === command);
-        
+
         const baseCommand = alias ? alias[0] : command;
 
         switch (baseCommand) {
@@ -26,13 +26,13 @@ class CommandHandler {
                 // Usage: /status <player>
                 this.proxy.hypixel.getPlayerStatus(args[0]);
                 return true;
-            
+
             // --- NEW: Super Friends Command ---
             case 'superf':
                 // Usage: /superf <add|remove> <username> [gamemodes...]
                 this.handleSuperFriend(args);
                 return true;
-            
+
             // --- NEW: Party Stat Check Command ---
             case 'psc':
                 // Usage: /psc
@@ -46,7 +46,7 @@ class CommandHandler {
      * Handles the logic for adding/removing tracked "super friends".
      * @param {string[]} args - The arguments for the command.
      */
-    handleSuperFriend(args) {
+    async handleSuperFriend(args) { // Made async to await API calls
         const action = args.shift()?.toLowerCase();
         const username = args.shift();
 
@@ -61,28 +61,41 @@ class CommandHandler {
         }
 
         switch(action) {
-            case 'add':
+            case 'add': {
                 const gamemodes = args;
                 if (gamemodes.length === 0) {
                     this.proxy.proxyChat("§cYou must specify at least one gamemode to track (e.g., bedwars).");
                     return;
                 }
-                // Use the player's name with correct capitalization for the key
-                this.proxy.config.super_friends[username] = gamemodes;
-                this.saveConfig();
-                this.proxy.proxyChat(`§aNow tracking ${username} for: §e${gamemodes.join(', ')}§a.`);
-                break;
 
-            case 'remove':
-                if (this.proxy.config.super_friends[username]) {
-                    delete this.proxy.config.super_friends[username];
+                // Get correct username casing from Mojang API
+                const mojangData = await this.proxy.hypixel.getMojangUUID(username);
+                if (!mojangData) {
+                    this.proxy.proxyChat(`§cPlayer '${username}' not found.`);
+                    return;
+                }
+                const correctUsername = mojangData.username;
+
+                // Use the player's name with correct capitalization for the key
+                this.proxy.config.super_friends[correctUsername] = gamemodes;
+                this.saveConfig();
+                this.proxy.proxyChat(`§aNow tracking ${correctUsername} for: §e${gamemodes.join(', ')}§a.`);
+                break;
+            }
+            case 'remove': {
+                // Find the key in the config, ignoring case, to allow for easy removal
+                const keyToRemove = Object.keys(this.proxy.config.super_friends)
+                    .find(key => key.toLowerCase() === username.toLowerCase());
+
+                if (keyToRemove) {
+                    delete this.proxy.config.super_friends[keyToRemove];
                     this.saveConfig();
-                    this.proxy.proxyChat(`§aRemoved ${username} from tracked friends.`);
+                    this.proxy.proxyChat(`§aRemoved ${keyToRemove} from tracked friends.`);
                 } else {
                     this.proxy.proxyChat(`§cPlayer ${username} is not currently being tracked.`);
                 }
                 break;
-            
+            }
             default:
                 this.proxy.proxyChat("§cInvalid action. Use 'add' or 'remove'.");
         }
