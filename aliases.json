@@ -17,6 +17,7 @@
     "/q combo": "/play duels_combo_duel",
     "/q op": "/play duels_op_duel",
     "/q solo": "/play bedwars_eight_one",
+    "/q quake": "/play duels_quake_duel",
     "/queue solobw": "/play bedwars_eight_one",
     "/queue doublesbw": "/play bedwars_eight_two",
     "/queue 3sbw": "/play bedwars_four_three",
@@ -34,5 +35,6 @@
     "/queue bow": "/play duels_bow_duel",
     "/queue combo": "/play duels_combo_duel",
     "/queue op": "/play duels_op_duel",
-    "/queue solo": "/play bedwars_eight_one"
+    "/queue solo": "/play bedwars_eight_one",
+    "/queue quake": "/play duels_quake_duel"
 }

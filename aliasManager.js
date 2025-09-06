@@ -9,7 +9,7 @@ function loadAliases() {
     try {
         if (fs.existsSync(aliasesPath)) {
             let fileContent = fs.readFileSync(aliasesPath, 'utf8');
-            if (fileContent.charCodeAt(0) === 0xFEFF) { // Removes the BOM (Byte Order Mark)
+            if (fileContent.charCodeAt(0) === 0xFEFF) {
                 fileContent = fileContent.slice(1);
             }
             aliases = JSON.parse(fileContent);

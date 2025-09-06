@@ -1,5 +1,3 @@
-// formatter.js (aktualisiert mit korrekter MVP++ Farbe)
-
 function log(message) {
     const timestamp = new Date().toLocaleTimeString();
     console.log(`[${timestamp}] ${message}`);
@@ -12,7 +10,6 @@ function extractText(chatObj, fullText = "") {
     return fullText;
 }
 
-// AKTUALISIERT: MVP++ ist jetzt orange
 function formatRank(rank) {
     switch (rank) {
         case "MVP_PLUS_PLUS": return "§6[MVP§c++§6]";
@@ -20,12 +17,12 @@ function formatRank(rank) {
         case "MVP": return "§a[MVP]";
         case "VIP_PLUS": return "§a[VIP§6+§a]";
         case "VIP": return "§a[VIP]";
-        default: return "§7"; // Standard-Grau für Non-Ranks
+        default: return "§7";
     }
 }
 
-module.exports = { 
-    log, 
-    extractText, 
+module.exports = {
+    log,
+    extractText,
     formatRank
 };

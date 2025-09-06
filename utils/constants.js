@@ -42,7 +42,6 @@ const commandAliases = {
     "/play opduels": "/play duels_op_duel",
 };
 
-// --- Definitions for cleaner mapping ---
 const duelsModes = {
     general: { apiName: "Duels", displayName: "Duels", prefix: "" },
     classic: { apiName: "Duels", displayName: "Classic Duels", prefix: "classic_duel" },
@@ -55,14 +54,11 @@ const duelsModes = {
     op: { apiName: "Duels", displayName: "OP Duels", prefix: "op_duel" }
 };
 
-// --- Main Game Mode Map ---
 const gameModeMap = {
     "bedwars": { apiName: "Bedwars", displayName: "Bed Wars" },
     "bw": { apiName: "Bedwars", displayName: "Bed Wars" },
     "skywars": { apiName: "SkyWars", displayName: "SkyWars" },
     "sw": { apiName: "SkyWars", displayName: "SkyWars" },
-
-    // Duels (with short aliases)
     "duels": duelsModes.general,
     "classic": duelsModes.classic,
     "classicduels": duelsModes.classic,
@@ -70,7 +66,7 @@ const gameModeMap = {
     "bridgeduels": duelsModes.bridge,
     "uhc": duelsModes.uhc,
     "uhcduels": duelsModes.uhc,
-    "skywarsduels": duelsModes.skywars, // Exception: only long alias
+    "skywarsduels": duelsModes.skywars,
     "sumo": duelsModes.sumo,
     "sumoduels": duelsModes.sumo,
     "bow": duelsModes.bow,
@@ -79,8 +75,6 @@ const gameModeMap = {
     "comboduels": duelsModes.combo,
     "op": duelsModes.op,
     "opduels": duelsModes.op,
-    
-    // Other Games
     "uhcchampions": { apiName: "UHC", displayName: "UHC Champions" },
     "tnt": { apiName: "TNTGames", displayName: "TNT Games" },
     "walls": { apiName: "Walls", displayName: "The Walls" },

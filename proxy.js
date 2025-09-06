@@ -2,6 +2,10 @@ const mc = require("minecraft-protocol");
 const formatter = require("./formatter.js");
 const CommandHandler = require("./modules/commandHandler.js");
 const HypixelHandler = require("./modules/hypixelHandler.js");
+const QueueStatsHandler = require("./modules/queueStatsHandler.js");
+const EntityManager = require("./modules/entityManager.js");
+const TabManager = require("./modules/tabManager.js");
+const TabAlerter = require("./modules/tabAlerter.js");
 
 class JagProx {
     constructor(config, env) {
@@ -12,15 +16,23 @@ class JagProx {
 
         this.hypixel = new HypixelHandler(this);
         this.commands = new CommandHandler(this);
+        this.queueStats = new QueueStatsHandler(this);
+        this.entityManager = new EntityManager(this);
+        this.tabManager = new TabManager(this);
+        this.tabAlerter = new TabAlerter(this);
 
         this.server = mc.createServer({
             "online-mode": true,
             port: this.config.port || 25565,
             version: this.config.version,
-            motd: "A JagProx Server"
+            motd: "§d§lJagProx §8// §7System Interface"
         });
 
         this.server.on("login", (client) => {
+            if (this.client) {
+                client.end('Ein Spieler ist bereits mit diesem Proxy verbunden.');
+                return;
+            }
             this.client = client;
             this.handleLogin();
         });
@@ -31,6 +43,7 @@ class JagProx {
 
     handleLogin() {
         formatter.log(`Client connected to proxy: ${this.client.username}`);
+
         this.target = mc.createClient({
             host: "mc.hypixel.net",
             port: 25565,
@@ -50,33 +63,62 @@ class JagProx {
             if (meta.name === "chat" && data.message && data.message.startsWith("/") && this.commands.handle(data.message)) {
                 return;
             }
-            if (this.target.state === meta.state) {
-                try { this.target.write(meta.name, data); }
-                catch (e) { formatter.log(`Error writing packet to target: ${e.message}`); }
+            if (this.target && this.target.state === meta.state) {
+                try {
+                    this.target.write(meta.name, data);
+                } catch (e) {
+                    formatter.log(`Error writing packet to target: ${e.message}`);
+                }
             }
         });
 
         this.target.on("packet", (data, meta) => {
+            this.queueStats.handlePacket(data, meta);
+            this.entityManager.handlePacket(data, meta);
+            this.tabManager.handlePacket(data, meta);
+            this.tabAlerter.handlePacket(data, meta);
+
             if (meta.name === "custom_payload" && data.channel === "MC|Brand") {
                 data.data = Buffer.from("\x07vanilla");
             }
-            if (this.client.state === meta.state) {
-                try { this.client.write(meta.name, data); }
-                catch (e) { formatter.log(`Error writing packet to client: ${e.message}`); }
+            if (this.client && this.client.state === meta.state) {
+                try {
+                    this.client.write(meta.name, data);
+                } catch (e) {
+                    formatter.log(`Error writing packet to client: ${e.message}`);
+                }
             }
         });
 
-        this.client.on("error", (err) => { formatter.log(`Client error: ${err.message}`); this.target.end(); });
-        this.target.on("error", (err) => { formatter.log(`Target error: ${err.message}`); this.client.end(); });
-        this.client.on("end", () => { formatter.log(`Client disconnected: ${this.client.username}`); this.target.end(); });
-        this.target.on("end", () => { formatter.log(`Disconnected from target: ${this.client.username}`); this.client.end(); });
+        const onEndOrError = (err) => {
+            if (err) {
+                formatter.log(`Connection error: ${err.message}`);
+            }
+            formatter.log(`Client disconnected: ${this.client ? this.client.username : 'Unknown'}`);
+            
+            if (this.target) this.target.end();
+            if (this.client) this.client.end();
+
+            this.queueStats.reset();
+            this.entityManager.reset();
+            this.tabManager.reset();
+            this.tabAlerter.reset();
+            
+            this.client = null;
+            this.target = null;
+        };
+
+        this.client.on("error", onEndOrError);
+        this.client.on("end", onEndOrError);
+        this.target.on("error", onEndOrError);
+        this.target.on("end", onEndOrError);
     }
 
     proxyChat(message) {
         if (!this.client) return;
         this.client.write("chat", {
-            message: JSON.stringify({ text: `${this.config.tag_prefix}${message}` }),
-            position: 1
+            message: JSON.stringify({ text: `§dJagProx §8» §r${message}` }),
+            position: 0
         });
     }
 }

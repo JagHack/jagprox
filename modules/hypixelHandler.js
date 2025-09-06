@@ -211,6 +211,11 @@ class HypixelHandler {
     }
 
     async statcheck(gamemode, username) {
+        if (!gamemode || !username) {
+            this.proxy.proxyChat("§cUsage: /sc <gamemode> <username>");
+            return;
+        }
+
         const gameInfo = gameModeMap[gamemode.toLowerCase()];
         if (!gameInfo) {
             return this.proxy.proxyChat(`§cUnknown game mode: ${gamemode}`);

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const yaml = require('yaml');
+const aliasManager = require('../aliasManager.js');
 
 class CommandHandler {
     constructor(proxy) {
@@ -7,13 +8,21 @@ class CommandHandler {
     }
 
     handle(message) {
+        const aliases = aliasManager.getAliases();
+        const aliasedCommand = aliases[message.toLowerCase()];
+
+        if (aliasedCommand) {
+            this.proxy.proxyChat(`§eAlias executing: §f${aliasedCommand}`);
+            this.proxy.target.write('chat', { message: aliasedCommand });
+            return true;
+        }
+
         const args = message.slice(1).split(' ');
         const command = args.shift().toLowerCase();
 
-        const alias = Object.entries(this.proxy.config.commands || {})
+        const configAlias = Object.entries(this.proxy.config.commands || {})
             .find(([_, alias]) => alias === command);
-
-        const baseCommand = alias ? alias[0] : command;
+        const baseCommand = configAlias ? configAlias[0] : command;
 
         switch (baseCommand) {
             case 'statcheck':
@@ -31,8 +40,64 @@ class CommandHandler {
             case 'psc':
                 this.proxy.hypixel.handlePartyStatCheck();
                 return true;
+
+            case 'alert':
+                this.handleAlertCommand(args);
+                return true;
+            
+            default:
+                return false;
         }
-        return false;
+    }
+
+    handleAlertCommand(args) {
+        const action = args.shift()?.toLowerCase();
+        
+        if (!this.proxy.config.tab_alerts) {
+            this.proxy.config.tab_alerts = [];
+        }
+        const alertList = this.proxy.config.tab_alerts;
+
+        if (action === 'list') {
+            if (alertList.length === 0) {
+                this.proxy.proxyChat("§eYour alert list is empty.");
+            } else {
+                this.proxy.proxyChat("§aPlayers on your alert list:");
+                alertList.forEach(name => this.proxy.proxyChat(`§8- §f${name}`));
+            }
+            return;
+        }
+
+        const username = args.shift();
+        if (!action || !username) {
+            this.proxy.proxyChat("§cUsage: /alert <add|remove|list> [username]");
+            return;
+        }
+
+        const playerIndex = alertList.findIndex(p => p.toLowerCase() === username.toLowerCase());
+
+        switch (action) {
+            case 'add':
+                if (playerIndex !== -1) {
+                    this.proxy.proxyChat(`§cPlayer '${username}' is already on the alert list.`);
+                    return;
+                }
+                alertList.push(username);
+                this.saveConfig();
+                this.proxy.proxyChat(`§aAdded '${username}' to the alert list.`);
+                break;
+            case 'remove':
+                if (playerIndex === -1) {
+                    this.proxy.proxyChat(`§cPlayer '${username}' is not on the alert list.`);
+                    return;
+                }
+                const removedPlayer = alertList.splice(playerIndex, 1);
+                this.saveConfig();
+                this.proxy.proxyChat(`§aRemoved '${removedPlayer[0]}' from the alert list.`);
+                break;
+            default:
+                this.proxy.proxyChat("§cInvalid action. Use 'add', 'remove', or 'list'.");
+        }
     }
 
     async handleSuperFriend(args) {
@@ -90,6 +155,7 @@ class CommandHandler {
         try {
             const fileConfig = yaml.parse(fs.readFileSync('./config.yml', 'utf8'));
             fileConfig.super_friends = this.proxy.config.super_friends;
+            fileConfig.tab_alerts = this.proxy.config.tab_alerts;
             fs.writeFileSync('./config.yml', yaml.stringify(fileConfig), 'utf8');
         } catch (e) {
             this.proxy.proxyChat("§cError saving configuration to file.");

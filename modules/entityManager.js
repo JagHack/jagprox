@@ -3,7 +3,7 @@ const formatter = require('../formatter.js');
 class EntityManager {
     constructor(proxy) {
         this.proxy = proxy;
-        this.entities = new Map(); // Stores entityId -> { uuid, name, x, y, z }
+        this.entities = new Map();
         this.selfPosition = { x: 0, y: 0, z: 0 };
     }
 
@@ -12,7 +12,6 @@ class EntityManager {
     }
 
     handlePacket(data, meta) {
-        // Update self position
         if (meta.name === 'position') {
             this.selfPosition = { x: data.x, y: data.y, z: data.z };
         }
