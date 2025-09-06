@@ -8,6 +8,10 @@ JagProx is a powerful, local Hypixel proxy built with Node.js that enhances your
 
 ---
 
+# Join the [Discord](https://discord.gg/ZQ46u4NhVt)!
+
+---
+
 ## Key Features
 
 - **In-Game Stat Command (`/sc`):**  
