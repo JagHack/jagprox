@@ -252,7 +252,7 @@ class HypixelHandler {
             return null;
         }
     }
-
+c
     async displayFormattedStats(username, uuid, stats, gameInfo) {
         try {
             const image = await Jimp.read(`https://crafatar.com/avatars/${uuid}?size=8&overlay=true`);
@@ -263,7 +263,7 @@ class HypixelHandler {
                     const pixel = Jimp.intToRGBA(image.getPixelColor(x, y));
                     line += (pixel.a > 128) ? findClosestMinecraftColor(pixel.r, pixel.g, pixel.b) + '█' : " ";
                 }
-                asciiLines.push(line);
+                asciiLines.push('§dJagProx §8» §r ' + line);
             }
             const rank = formatter.formatRank(stats.rank);
             const guild = stats.guild ? ` §e[${stats.guild}]` : "";
