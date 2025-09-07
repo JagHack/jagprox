@@ -33,16 +33,6 @@ bypasses:
   lunar: true
   forge: false
 aliases: {}
-super_friends:
-  S11one:
-    - duels
-  uhMcd:
-    - duels
-tab_alerts:
-  - TheHerobrineTime
-  - DESK
-  - RandomPiggy
-nicknames:
-  S11one: Soimon
-  _TheHerobrine: BirneMain
-  TheHerobrineTime: BirneAlt
+super_friends: {}
+tab_alerts: []
+nicknames: {}
