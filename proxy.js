@@ -31,6 +31,7 @@ class JagProx {
         this.env = env;
         this.client = null;
         this.target = null;
+        this.lastPlayCommand = null;
 
         this.hypixel = new HypixelHandler(this);
         this.commands = new CommandHandler(this);
@@ -61,6 +62,7 @@ class JagProx {
 
     handleLogin() {
         formatter.log(`Client connected to proxy: ${this.client.username}`);
+        this.lastPlayCommand = null;
 
         this.target = mc.createClient({
             host: "mc.hypixel.net",
@@ -75,11 +77,17 @@ class JagProx {
         this.target.on("connect", () => formatter.log(`Client connected to target: ${this.target.username}`));
 
         this.client.on("packet", (data, meta) => {
+            if (meta.name === "chat" && data.message && data.message.startsWith("/")) {
+                if (this.commands.handle(data.message)) {
+                    return;
+                }
+                if (data.message.toLowerCase().startsWith('/play ')) {
+                    this.lastPlayCommand = data.message;
+                    formatter.log(`Captured last play command: ${this.lastPlayCommand}`);
+                }
+            }
             if (meta.name === "custom_payload" && data.channel === "MC|Brand") {
                 data.data = Buffer.from("\x07vanilla");
-            }
-            if (meta.name === "chat" && data.message && data.message.startsWith("/") && this.commands.handle(data.message)) {
-                return;
             }
             if (this.target && this.target.state === meta.state) {
                 try {

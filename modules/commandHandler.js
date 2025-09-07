@@ -1,6 +1,7 @@
 const fs = require('fs');
 const yaml = require('yaml');
 const aliasManager = require('../aliasManager.js');
+const formatter = require('../formatter.js');
 
 class CommandHandler {
     constructor(proxy) {
@@ -24,6 +25,10 @@ class CommandHandler {
         const aliasedCommand = aliases[message.toLowerCase()];
 
         if (aliasedCommand) {
+            if (aliasedCommand.toLowerCase().startsWith('/play ')) {
+                this.proxy.lastPlayCommand = aliasedCommand;
+                formatter.log(`Captured last play command (from alias): ${this.proxy.lastPlayCommand}`);
+            }
             this.proxy.proxyChat(`§eAlias executing: §f${aliasedCommand}`);
             this.proxy.target.write('chat', { message: aliasedCommand });
             return true;
@@ -72,6 +77,15 @@ class CommandHandler {
             
             case 'nickname':
                 this.handleNicknameCommand(args);
+                return true;
+
+            case 'rq':
+                if (this.proxy.lastPlayCommand) {
+                    this.proxy.proxyChat(`§eRe-queuing: §f${this.proxy.lastPlayCommand}`);
+                    this.proxy.target.write('chat', { message: this.proxy.lastPlayCommand });
+                } else {
+                    this.proxy.proxyChat("§cNo last game found to re-queue for.");
+                }
                 return true;
 
             default:
@@ -203,22 +217,37 @@ class CommandHandler {
 
     async handleSuperFriend(args) {
         const action = args.shift()?.toLowerCase();
-        const username = args.shift();
-
-        if (!username) {
-            this.proxy.proxyChat("§cUsage: /superf <add|remove> <username> [gamemodes...]");
-            return;
-        }
 
         if (!this.proxy.config.super_friends) {
             this.proxy.config.super_friends = {};
+        }
+
+        if (action === 'list') {
+            const friends = this.proxy.config.super_friends;
+            const keys = Object.keys(friends);
+            if (keys.length === 0) {
+                this.proxy.proxyChat("§eYou have no super friends set.");
+            } else {
+                this.proxy.proxyChat("§aYour super friends:");
+                keys.forEach(name => {
+                    this.proxy.proxyChat(`§8- §f${name} §7(${friends[name].join(', ')})`);
+                });
+            }
+            return;
+        }
+
+        const username = args.shift();
+
+        if (!action || !username) {
+            this.proxy.proxyChat("§cUsage: /superf <add|remove|list> <username> [gamemodes...]");
+            return;
         }
 
         switch(action) {
             case 'add': {
                 const gamemodes = args;
                 if (gamemodes.length === 0) {
-                    this.proxy.proxyChat("§cYou must specify at least one gamemode to track (e.g., bedwars).");
+                    this.proxy.proxyChat("§cYou must specify at least one gamemode (e.g., bedwars).");
                     return;
                 }
 
@@ -243,12 +272,12 @@ class CommandHandler {
                     this.saveConfig();
                     this.proxy.proxyChat(`§aRemoved ${keyToRemove} from tracked friends.`);
                 } else {
-                    this.proxy.proxyChat(`§cPlayer ${username} is not currently being tracked.`);
+                    this.proxy.proxyChat(`§cPlayer '${username}' is not currently being tracked.`);
                 }
                 break;
             }
             default:
-                this.proxy.proxyChat("§cInvalid action. Use 'add' or 'remove'.");
+                this.proxy.proxyChat("§cInvalid action. Use 'add', 'remove', or 'list'.");
         }
     }
 

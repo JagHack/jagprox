@@ -245,17 +245,36 @@ class HypixelHandler {
                 rank: (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || "NONE"),
                 guild: await this.getGuild(uuid),
                 data: gameData || {},
-                achievements: player.achievements || {}
+                achievements: player.achievements || {},
+                properties: player.properties || []
             };
         } catch (err) {
             formatter.log(`getStats Error: ${err.message}`);
             return null;
         }
     }
-c
+
     async displayFormattedStats(username, uuid, stats, gameInfo) {
         try {
-            const image = await Jimp.read(`https://crafatar.com/avatars/${uuid}?size=8&overlay=true`);
+            let image;
+            try {
+                const texturesProp = stats.properties.find(p => p.name === 'textures');
+                if (!texturesProp) throw new Error("No texture property found");
+
+                const texturesJson = Buffer.from(texturesProp.value, 'base64').toString('utf8');
+                const textures = JSON.parse(texturesJson);
+                const skinUrl = textures.textures?.SKIN?.url;
+                if (!skinUrl) throw new Error("No skin URL found");
+
+                const skin = await Jimp.read(skinUrl);
+                image = new Jimp(8, 8);
+                image.blit(skin, 0, 0, 8, 8, 8, 8);
+                image.blit(skin, 0, 0, 40, 8, 8, 8);
+            } catch (err) {
+                formatter.log(`Manual skin processing failed: ${err.message}. Falling back to Crafatar.`);
+                image = await Jimp.read(`https://crafatar.com/avatars/${uuid}?size=8&overlay=true`);
+            }
+
             const asciiLines = [];
             for (let y = 0; y < 8; y++) {
                 let line = "";
@@ -263,8 +282,9 @@ c
                     const pixel = Jimp.intToRGBA(image.getPixelColor(x, y));
                     line += (pixel.a > 128) ? findClosestMinecraftColor(pixel.r, pixel.g, pixel.b) + '█' : " ";
                 }
-                asciiLines.push('§dJagProx §8» §r ' + line);
+                asciiLines.push(line);
             }
+
             const rank = formatter.formatRank(stats.rank);
             const guild = stats.guild ? ` §e[${stats.guild}]` : "";
             this.proxy.proxyChat("§7§m----------------------------------------");
