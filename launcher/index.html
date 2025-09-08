@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>JagProx Launcher</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="sidebar-open">
+
+    <div class="title-bar">
+        <div class="title-bar-text">
+            <i class="fas fa-bolt"></i>
+            JagProx Launcher
+        </div>
+        <div class="window-controls">
+            <button class="window-btn" id="minimize-btn"><i class="fas fa-minus"></i></button>
+            <button class="window-btn" id="maximize-btn"><i class="far fa-square"></i></button>
+            <button class="window-btn close-btn" id="close-btn"><i class="fas fa-times"></i></button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <div class="sidebar" id="sidebar">
+            <nav>
+                <a href="#" class="nav-link active" data-page="home"><i class="fas fa-home"></i><span>Home</span></a>
+                <a href="#" class="nav-link" data-page="logs"><i class="fas fa-terminal"></i><span>Log Monitor</span></a>
+                <a href="#" class="nav-link" data-page="chat"><i class="fas fa-comments"></i><span>In-Game Chat</span></a>
+                <a href="#" class="nav-link" data-page="aliases"><i class="fas fa-list-ul"></i><span>Aliases</span></a>
+                <a href="#" class="nav-link" data-page="stat-search"><i class="fas fa-chart-bar"></i><span>Stat Search</span></a>
+                <a href="#" class="nav-link" data-page="status-check"><i class="fas fa-user-clock"></i><span>Status Check</span></a>
+            </nav>
+        </div>
+
+        <div class="top-bar">
+            <button id="burger-menu-btn"><i class="fas fa-bars"></i></button>
+        </div>
+
+        <div class="main-content">
+            <div class="page active" id="home">
+                <div class="header"><h1>JagProx</h1><p>Your Hypixel Advantage</p></div>
+                <button id="toggle-proxy-btn" data-status="stopped">Launch Proxy</button>
+                <div class="api-key-container">
+                    <div class="api-key-wrapper">
+                        <input type="password" id="api-key-input" placeholder="Enter your Hypixel API Key...">
+                        <i class="fas fa-eye" id="toggle-api-key-btn"></i>
+                    </div>
+                    <button class="action-btn save-btn" id="save-api-key-btn"><i class="fas fa-save"></i> Save Key</button>
+                </div>
+            </div>
+
+            <div class="page" id="stat-search">
+                <div class="settings-container">
+                    <div class="settings-header"><i class="fas fa-chart-bar"></i><span>Player Stat Search</span></div>
+                    <div class="search-form-grid">
+                        <input type="text" id="stat-search-name" placeholder="Enter player name">
+                        <select id="stat-search-gamemode"></select>
+                        <button class="action-btn" id="stat-search-btn"><i class="fas fa-search"></i> Search</button>
+                    </div>
+                    <div class="search-results-container" id="stat-search-results"></div>
+                </div>
+            </div>
+
+            <div class="page" id="status-check">
+                <div class="settings-container" style="max-width: 600px;">
+                    <div class="settings-header"><i class="fas fa-user-clock"></i><span>Player Status Check</span></div>
+                    <div class="search-form-grid">
+                        <input type="text" id="status-check-name" placeholder="Enter player name">
+                        <button class="action-btn" id="status-check-btn"><i class="fas fa-search"></i> Check Status</button>
+                    </div>
+                    <div class="search-results-container" id="status-check-results"></div>
+                </div>
+            </div>
+
+            <div class="page" id="logs">
+                <div id="log-container"><div class="log-header"><i class="fas fa-terminal"></i><span>LIVE LOGS</span></div><div id="log-output"></div></div>
+            </div>
+            <div class="page" id="chat">
+                <div id="chat-container"><div class="chat-header"><i class="fas fa-comments"></i><span>IN-GAME CHAT</span></div><div id="chat-output"></div></div>
+            </div>
+            <div class="page" id="aliases">
+                <div class="settings-container">
+                    <div class="settings-header"><i class="fas fa-list-ul"></i><span>Command Aliases</span></div>
+                    <div class="settings-content" id="aliases-container"></div>
+                    <div class="settings-actions">
+                        <button class="action-btn" id="add-alias-btn"><i class="fas fa-plus"></i> New Alias</button>
+                        <button class="action-btn save-btn" id="save-aliases-btn"><i class="fas fa-save"></i> Save Aliases</button>
+                    </div>
+                     <p class="settings-note">Note: The proxy must be restarted for changes to take effect.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-content">
+            <p>Permanently delete this alias?</p>
+            <div class="modal-actions">
+                <button id="modal-confirm-btn" class="modal-btn danger-btn">Delete</button>
+                <button id="modal-cancel-btn" class="modal-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script src="./renderer.js"></script>
+</body>
+</html>

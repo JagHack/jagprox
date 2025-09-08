@@ -9,17 +9,12 @@ const TabAlerter = require("./modules/tabAlerter.js");
 
 function replaceNamesInComponent(component, nicknames) {
     if (!component) return;
-    
     if (typeof component === 'string') return;
 
-    const realName = Object.keys(nicknames).find(name => {
-        return (component.text && component.text.includes(name));
-    });
-
+    const realName = Object.keys(nicknames).find(name => (component.text && component.text.includes(name)));
     if (realName) {
         component.text = component.text.replace(new RegExp(realName, 'g'), nicknames[realName]);
     }
-
     if (component.extra && Array.isArray(component.extra)) {
         component.extra.forEach(part => replaceNamesInComponent(part, nicknames));
     }
@@ -44,7 +39,7 @@ class JagProx {
             "online-mode": true,
             port: this.config.port || 25565,
             version: this.config.version,
-            motd: ' '.repeat(20) + '§a§lJagProx §c§l[1.8-1.21]\n' + ' '.repeat(8) + '§6§lHypixel Proxy §c§l- made by JagHack'
+            motd: ' '.repeat(20) + '§a§lJagProx §c§l[1.8-1.21]\n' + ' '.repeat(13) + '§6§lHypixel Proxy §c§l- made by JagHack'
         });
 
         this.server.on("login", (client) => {
@@ -102,31 +97,34 @@ class JagProx {
             const nicknames = this.config.nicknames || {};
             const hasNicknames = Object.keys(nicknames).length > 0;
 
-            if (hasNicknames) {
-                if (meta.name === 'chat' && data.message) {
-                    try {
-                        let chatObject = JSON.parse(data.message);
+            if (meta.name === 'chat' && data.message) {
+                try {
+                    let chatObject = JSON.parse(data.message);
+                    if (hasNicknames) {
                         replaceNamesInComponent(chatObject, nicknames);
-                        data.message = JSON.stringify(chatObject);
-                    } catch(e) {}
-                } else if (meta.name === 'player_info' && (data.action === 'add_player' || data.action === 'update_display_name')) {
-                    data.data.forEach(player => {
-                        const nickname = nicknames[player.name];
-                        if (nickname) {
-                            if (player.displayName) {
-                                try {
-                                    let component = JSON.parse(player.displayName);
-                                    replaceNamesInComponent(component, { [player.name]: nickname });
-                                    player.displayName = JSON.stringify(component);
-                                } catch (e) {
-                                    player.displayName = player.displayName.replace(player.name, nickname);
-                                }
-                            } else {
-                                player.displayName = JSON.stringify({ text: nickname });
+                    }
+                    if (data.position === 0 || data.position === 1) {
+                        console.log(`[JAGPROX_CHAT]${formatter.extractText(chatObject)}`);
+                    }
+                    data.message = JSON.stringify(chatObject);
+                } catch(e) {}
+            } else if (hasNicknames && meta.name === 'player_info' && (data.action === 'add_player' || data.action === 'update_display_name')) {
+                data.data.forEach(player => {
+                    const nickname = nicknames[player.name];
+                    if (nickname) {
+                        if (player.displayName) {
+                            try {
+                                let component = JSON.parse(player.displayName);
+                                replaceNamesInComponent(component, { [player.name]: nickname });
+                                player.displayName = JSON.stringify(component);
+                            } catch (e) {
+                                player.displayName = player.displayName.replace(player.name, nickname);
                             }
+                        } else {
+                            player.displayName = JSON.stringify({ text: nickname });
                         }
-                    });
-                }
+                    }
+                });
             }
 
             this.queueStats.handlePacket(data, meta);

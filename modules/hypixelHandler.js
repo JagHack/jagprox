@@ -8,6 +8,20 @@ class HypixelHandler {
         this.proxy = proxy;
     }
 
+    async getStatusForAPI(username) {
+        try {
+            const mojangData = await this.getMojangUUID(username);
+            if (!mojangData) return { error: `Player '${username}' not found.` };
+            const status = await this.getHypixelStatus(mojangData.uuid);
+            if (!status) return { error: `Could not retrieve status for '${mojangData.username}'.` };
+            
+            return { username: mojangData.username, uuid: mojangData.uuid, ...status };
+        } catch (err) {
+            formatter.log(`API Status Check error: ${err.message}`);
+            return { error: 'An internal error occurred.' };
+        }
+    }
+
     async getStatsForAPI(gamemode, username) {
         const gameInfo = gameModeMap[gamemode.toLowerCase()];
         if (!gameInfo) {

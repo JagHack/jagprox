@@ -1,4 +1,13 @@
 {
+  "name": "JagProx",
+  "version": "1.0.0",
+  "description": "A Hypixel Proxy",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "launcher": "electron launcher/launcher.js"
+  },
+  "license": "MIT",
   "dependencies": {
     "body-parser": "^2.2.0",
     "content-type": "^1.0.5",
@@ -10,8 +19,7 @@
     "potrace": "^2.1.8",
     "yaml": "^2.8.1"
   },
-  "name": "JagProx",
-  "version": "1.0.0",
-  "main": "index.js",
-  "license": "MIT"
+  "devDependencies": {
+    "electron": "^31.0.1"
+  }
 }

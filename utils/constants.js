@@ -47,7 +47,7 @@ const duelsModes = {
     classic: { apiName: "Duels", displayName: "Classic Duels", prefix: "classic_duel" },
     bridge: { apiName: "Duels", displayName: "Bridge Duels", prefix: "bridge_duel" },
     uhc: { apiName: "Duels", displayName: "UHC Duels", prefix: "uhc_duel" },
-    skywars: { apiName: "Duels", displayName: "SkyWars Duels", prefix: "skywars_duel" },
+    skywars: { apiName: "Duels", displayName: "SkyWars Duels", prefix: "sw_duel" },
     sumo: { apiName: "Duels", displayName: "Sumo Duels", prefix: "sumo_duel" },
     bow: { apiName: "Duels", displayName: "Bow Duels", prefix: "bow_duel" },
     combo: { apiName: "Duels", displayName: "Combo Duels", prefix: "combo_duel" },
