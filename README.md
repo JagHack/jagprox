@@ -4,7 +4,7 @@
 
 **Disclaimer:** This is a third-party tool and is not affiliated with, endorsed, or supported by Hypixel Inc. Use at your own risk.
 
-JagProx is a powerful, local Hypixel proxy built with Node.js that enhances your gameplay experience by adding custom quality-of-life features, advanced statistical analysis, and powerful automation tools directly to your Minecraft client.
+JagProx is a powerful, local Hypixel proxy built with Node.js that enhances your gameplay experience by adding custom quality-of-life features, advanced statistical analysis, and powerful automation tools directly to your Minecraft client, all managed through a sleek desktop launcher.
 
 ---
 
@@ -23,10 +23,12 @@ JagProx is a powerful, local Hypixel proxy built with Node.js that enhances your
 - **Party Stat Check (`/psc`):**  
   Instantly get a statistical overview (Bedwars stats) of all members in your current party to assess team strength.
 
-- **Web Control Panel:**  
-  A sleek, modern web interface running locally to manage your proxy's settings and use powerful tools without being in-game.
-  - **Player Stat Search:** Look up detailed player stats for any gamemode directly from your browser.
-  - **Command Alias Manager:** Create and manage your own custom command shortcuts (e.g., `/solobw` → `/play bedwars_eight_one`).
+- **Modern Desktop Launcher:**  
+  A sleek, standalone launcher to manage the proxy, view logs, and access tools without cluttering your game.
+  - **Start & Stop Control:** Easily launch and stop the proxy with a single click.
+  - **Live Log & Chat Monitor:** Keep an eye on system logs and the in-game chat in real-time.
+  - **Integrated Settings:** Manage your API key, command aliases, and other settings directly within the launcher.
+  - **Player Search Tools:** Look up detailed player stats and online status for any player on Hypixel.
 
 - **Secure & Local:**  
   The proxy runs entirely on your own machine. Your Minecraft account details are handled by the official `minecraft-protocol` library for authentication and are never sent to a third party.
@@ -45,18 +47,19 @@ Before you begin, ensure you have the following installed:
 - **Git:** Required to clone the repository. [Download here](https://git-scm.com/).
 - **A valid Minecraft: Java Edition account.**
 - **A Hypixel API Key:**
-  1. Go to [Hypixel Developer Dashboard](https://developer.hypixel.net/)
-  2. Register or login to your Hypixel Forums Account
-  3. Copy the new API key securely.
+  1. Go to the [Hypixel Developer Dashboard](https://developer.hypixel.net/).
+  2. Log in with your Minecraft account.
+  3. Click on "Create a new API key" and copy the key securely.
 
 ### 2. Cloning the Repository
 
 ```bash
 git clone https://github.com/JagHack/jagprox.git
-````
+```
 
 ### 3. Installing Dependencies
 
+Navigate into the newly cloned folder and install the required packages.
 ```bash
 cd jagprox
 npm install
@@ -66,8 +69,14 @@ npm install
 
 You need to create two configuration files in the root of the `jagprox` folder:
 
-**`.env` file (for secrets)**
-Create a file named `.env` and add your Hypixel API key like this:
+**a) `config.yml` (for general settings)**
+- Find the `config.default.yml` file in the project.
+- **Copy and rename it** to `config.yml`.
+- You can customize settings like command aliases inside this file later.
+
+**b) `.env` file (for secrets)**
+- Create a new file named `.env`.
+- Add your Hypixel API key to this file like so:
 
 ```env
 HYPIXEL_API_KEY=your_api_key_here
@@ -77,43 +86,36 @@ HYPIXEL_API_KEY=your_api_key_here
 
 ## How to Use
 
-### 1. Starting the Proxy
+### 1. Starting JagProx
+
+You have two ways to run the application:
+
+**A) Using the Desktop Launcher (Recommended)**
+This provides a full user interface to control the proxy and access all features.
 
 ```bash
-npm start launcher
+npm run launcher
 ```
 
-You should see messages indicating that the launcher has started.
+**B) Running the Proxy Only (Headless)**
+This will start the proxy in your terminal without the user interface.
+
+```bash
+npm start
+```
 
 ### 2. Connecting in Minecraft
 
 1. Launch Minecraft (**1.8.9 recommended**).
-
 2. Go to `Multiplayer` → `Add Server`.
-
 3. For the **Server Address**, enter:
-
    ```
    localhost:2107
    ```
+   (or whichever port you configured in `config.yml`)
+4. Save the server and connect to it. You will be automatically logged into Hypixel through the proxy.
 
-   (or whichever port you changed it to in the `config.yml` file)
-
-4. Save the server and connect to it.
-   You might need to authorize it. Don’t worry, everything is locally hosted.
-   In the future you will be automatically logged into Hypixel through the proxy.
-
-### 3. Using the Web Panel
-
-While the proxy is running, open your browser and go to:
-
-```
-http://localhost:2108
-```
-
-Here you can manage your command aliases, set your API key, and use the player stat search tool.
-
-### 4. In-Game Commands
+### 3. In-Game Commands
 
 * `/sc <gamemode> <player>`
   Check stats for a player.
@@ -123,22 +125,30 @@ Here you can manage your command aliases, set your API key, and use the player s
   Check if a player is online and what game they are playing.
   *Example:* `/status Notch`
 
-* `/superf add <player> <gamemode1> [gamemode2...]`
+* `/superf <add|remove|list> [player] [gamemodes...]`
   Track a friend and their stats for specific games.
   *Example:* `/superf add Steve bedwars skywars duels`
 
-* `/superf remove <player>`
-  Stop tracking a friend.
-  *Example:* `/superf remove Steve`
-
 * `/psc`
   Fetch and display Bedwars stats for everyone in your current party.
+
+* `/rq`
+  Re-queues the last `/play` command you used.
+
+* `/alert <add|remove|list> [player]`
+  Get a notification when a specific player appears in your lobby.
+
+* `/nickname <add|remove|list> [player] [nickname]`
+  Set a local, client-side nickname for a player that appears in chat and the tab list.
+
+* `/jagprox`
+  Displays the list of available custom commands.
 
 ---
 
 ## Contributing
 
-Contributions are welcome and already made! Huge shoutout to Yanice and TheMackabu for helping me with some stuff. If you have ideas for new features or find bugs, feel free to open an issue or submit a pull request on the GitHub repository.
+Contributions are welcome and have already been made! Huge shoutout to Yanice and TheMackabu for helping me with some stuff. If you have ideas for new features or find bugs, feel free to open an issue or submit a pull request on the GitHub repository.
 
 ---
 
