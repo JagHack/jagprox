@@ -2,13 +2,21 @@ require("dotenv").config();
 const fs = require("fs");
 const yaml = require("yaml");
 const JagProx = require("./proxy.js");
-const { startWebPanel } = require("./web-panel.js");
 
 let config, env;
+const configPath = "./config.yml";
+const defaultConfigPath = "./config.default.yml";
+
+if (!fs.existsSync(configPath)) {
+    console.error(`\n❌ FATAL ERROR: Configuration file not found!`);
+    console.error(`   Please create '${configPath}' by copying '${defaultConfigPath}'`);
+    console.error(`   and fill in your personal settings (like HYPIXEL_API_KEY in .env).`);
+    process.exit(1);
+}
 
 try {
     console.log("Attempting to read config.yml...");
-    const configFile = fs.readFileSync("./config.yml", "utf8");
+    const configFile = fs.readFileSync(configPath, "utf8");
     config = yaml.parse(configFile);
     if (typeof config !== 'object' || config === null) {
         throw new Error("Parsed config is not a valid object.");
@@ -36,9 +44,6 @@ try {
     console.log("Initializing JagProx Minecraft proxy on port " + (config.port || 2107) + "...");
     const proxy = new JagProx(config, env);
     console.log("✓ Minecraft proxy initialized.");
-
-    console.log("Starting web panel...");
-    startWebPanel(2108, config, env, proxy);
 
 } catch (err) {
     console.error("\n❌ FATAL ERROR: An error occurred during server startup.");
