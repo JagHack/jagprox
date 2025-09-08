@@ -87,10 +87,49 @@ class CommandHandler {
                     this.proxy.proxyChat("§cNo last game found to re-queue for.");
                 }
                 return true;
+            
+            case 'jagprox':
+                this.handleHelpCommand();
+                return true;
 
             default:
                 return false;
         }
+    }
+
+    handleHelpCommand() {
+        const configCmds = this.proxy.config.commands || {};
+        const scAlias = configCmds.statcheck || 'sc';
+        const statusAlias = configCmds.status || 'status';
+    
+        const commandList = [
+            { syntax: `/${scAlias} <game> <player>`, desc: 'Checks Hypixel stats for a player.' },
+            { syntax: `/${statusAlias} <player>`, desc: "Shows a player's online status." },
+            { syntax: '/psc', desc: 'Runs a stat check for all party members.' },
+            { syntax: '/rq', desc: 'Re-queues your last played game.' },
+            { syntax: '/alert <add|rem|list> [player]', desc: 'Manages in-game alerts for players.' },
+            { syntax: '/nickname <add|rem|list> [args]', desc: 'Sets local nicknames for players.' },
+            { syntax: '/superf <add|rem|list> [args]', desc: "Tracks friends' game activity." },
+            { syntax: '/jagprox', desc: 'Displays this help message.' }
+        ];
+    
+        let helpMessage = "§d§m----------------------------------------------------\n";
+        helpMessage += "§r  §d§lJagProx §8- §7Available Commands\n \n";
+    
+        commandList.forEach(c => {
+            const parts = c.syntax.split(' ');
+            const cmd = parts.shift();
+            const args = parts.join(' ');
+            const coloredSyntax = `§d${cmd} §e${args}`;
+            
+            helpMessage += `§r  ${coloredSyntax}\n`;
+            helpMessage += `§r    §8- §7${c.desc}\n \n`;
+        });
+    
+        helpMessage = helpMessage.trimEnd();
+        helpMessage += "\n§r\n§d§m----------------------------------------------------";
+        
+        this.proxy.proxyChat(helpMessage);
     }
 
     handleNicknameCommand(args) {

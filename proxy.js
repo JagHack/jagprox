@@ -44,7 +44,7 @@ class JagProx {
             "online-mode": true,
             port: this.config.port || 25565,
             version: this.config.version,
-            motd: "§d§lJagProx §8// §7System Interface"
+            motd: ' '.repeat(20) + '§a§lJagProx §c§l[1.8-1.21]\n' + ' '.repeat(8) + '§6§lHypixel Proxy §c§l- made by JagHack'
         });
 
         this.server.on("login", (client) => {

@@ -19,6 +19,15 @@ class QueueStatsHandler {
         }
     }
 
+    reset() {
+        formatter.log('Queue Stats Handler reset.');
+        this.currentGameKey = null;
+        this.hasTriggeredForGame = false;
+        this.awaitingTeleportForWho = false;
+        this.isCapturingWho = false;
+        this.whoPlayers = [];
+    }
+
     resetTrigger() {
         if (this.hasTriggeredForGame) {
             formatter.log(`Game over detected. Re-arming queue stats trigger for the next game.`);
