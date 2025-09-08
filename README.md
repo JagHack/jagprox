@@ -80,10 +80,10 @@ HYPIXEL_API_KEY=your_api_key_here
 ### 1. Starting the Proxy
 
 ```bash
-node main.js
+npm start launcher
 ```
 
-You should see messages indicating that the proxy server and web panel have started.
+You should see messages indicating that the launcher has started.
 
 ### 2. Connecting in Minecraft
 
