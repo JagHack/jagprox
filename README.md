@@ -67,20 +67,11 @@ npm install
 
 ### 4. Configuration
 
-You need to create two configuration files in the root of the `jagprox` folder:
+You have two configuration files in the root of the `jagprox` folder:
 
 **a) `config.yml` (for general settings)**
-- Find the `config.default.yml` file in the project.
-- **Copy and rename it** to `config.yml`.
-- You can customize settings like command aliases inside this file later.
 
-**b) `.env` file (for secrets)**
-- Create a new file named `.env`.
-- Add your Hypixel API key to this file like so:
-
-```env
-HYPIXEL_API_KEY=your_api_key_here
-```
+**b) `.env` file (for secrets)** (maybe create this one)
 
 ---
 
