@@ -27,6 +27,10 @@ const statusCheckResults = document.getElementById('status-check-results');
 const minimizeBtn = document.getElementById('minimize-btn');
 const maximizeBtn = document.getElementById('maximize-btn');
 const closeBtn = document.getElementById('close-btn');
+const saveSettingsBtn = document.getElementById('save-settings-btn');
+const autoggEnabledCheckbox = document.getElementById('autogg-enabled');
+const autoggMessageInput = document.getElementById('autogg-message');
+const autoggDelayInput = document.getElementById('autogg-delay');
 
 minimizeBtn.addEventListener('click', () => ipcRenderer.send('minimize-window'));
 maximizeBtn.addEventListener('click', () => ipcRenderer.send('maximize-window'));
@@ -47,6 +51,7 @@ function switchPage(pageId) {
         if (link.dataset.page === pageId) link.classList.add('active');
     });
     if (pageId === 'aliases') ipcRenderer.send('get-aliases');
+    if (pageId === 'settings') ipcRenderer.send('get-config');
 }
 
 navLinks.forEach(link => { link.addEventListener('click', (e) => { e.preventDefault(); switchPage(link.dataset.page); }); });
@@ -71,6 +76,25 @@ statusCheckBtn.addEventListener('click', () => {
     ipcRenderer.send('get-player-status', name);
 });
 
+saveSettingsBtn.addEventListener('click', () => {
+    const settings = {
+        auto_gg: {
+            enabled: autoggEnabledCheckbox.checked,
+            message: autoggMessageInput.value || "gg",
+            delay: parseInt(autoggDelayInput.value) || 1500
+        }
+    };
+    ipcRenderer.send('save-settings', settings);
+});
+
+ipcRenderer.on('config-loaded', (event, config) => {
+    if (config && config.auto_gg) {
+        autoggEnabledCheckbox.checked = config.auto_gg.enabled || false;
+        autoggMessageInput.value = config.auto_gg.message || "gg";
+        autoggDelayInput.value = config.auto_gg.delay || 1500;
+    }
+});
+
 ipcRenderer.on('proxy-status', (event, status) => {
     toggleBtn.dataset.status = status;
     toggleBtn.textContent = status === 'running' ? 'Stop Proxy' : 'Launch Proxy';
@@ -93,39 +117,28 @@ ipcRenderer.on('player-stats-result', (event, result) => {
             statsHtml += `<span>Level:</span><span>${(a.bedwars_level || 0).toLocaleString()}✫</span>`;
             statsHtml += `<span>Wins:</span><span>${(d.wins_bedwars || 0).toLocaleString()}</span>`;
             statsHtml += `<span>WLR:</span><span>${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}</span>`;
-            statsHtml += `<span>Kills:</span><span>${(d.kills_bedwars || 0).toLocaleString()}</span>`;
-            statsHtml += `<span>Deaths:</span><span>${(d.deaths_bedwars || 1).toLocaleString()}</span>`;
             statsHtml += `<span>Final Kills:</span><span>${(d.final_kills_bedwars || 0).toLocaleString()}</span>`;
             statsHtml += `<span>Final Deaths:</span><span>${(d.final_deaths_bedwars || 1).toLocaleString()}</span>`;
             statsHtml += `<span>FKDR:</span><span>${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)}</span>`;
-            statsHtml += `<span>Beds Broken:</span><span>${(d.beds_broken_bedwars || 0).toLocaleString()}</span>`;
             break;
         case 'SkyWars':
             statsHtml += `<span>Level:</span><span>${d.levelFormatted || 'N/A'}</span>`;
             statsHtml += `<span>Wins:</span><span>${(d.wins || 0).toLocaleString()}</span>`;
-            statsHtml += `<span>Losses:</span><span>${(d.losses || 0).toLocaleString()}</span>`;
             statsHtml += `<span>Kills:</span><span>${(d.kills || 0).toLocaleString()}</span>`;
             statsHtml += `<span>Deaths:</span><span>${(d.deaths || 1).toLocaleString()}</span>`;
             statsHtml += `<span>KDR:</span><span>${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}</span>`;
-            statsHtml += `<span>WLR:</span><span>${((d.wins || 0) / (d.losses || 1)).toFixed(2)}</span>`;
             break;
         case 'Duels':
             const prefix = result.game.prefix ? `${result.game.prefix}_duel_` : '';
             const wins = d[`${prefix}wins`] || 0;
             const losses = d[`${prefix}losses`] || 1;
-            const kills = d[`${prefix}kills`] || 0;
-            const deaths = d[`${prefix}deaths`] || 1;
             statsHtml += `<span>Wins:</span><span>${wins.toLocaleString()}</span>`;
-            statsHtml += `<span>Losses:</span><span>${losses.toLocaleString()}</span>`;
-            statsHtml += `<span>WLR:</span><span>${(wins / losses).toFixed(2)}</span>`;
-            statsHtml += `<span>Kills:</span><span>${kills.toLocaleString()}</span>`;
-            statsHtml += `<span>Deaths:</span><span>${deaths.toLocaleString()}</span>`;
-            statsHtml += `<span>KDR:</span><span>${(kills / deaths).toFixed(2)}</span>`;
+            statsHtml += `<span>WLR:</span><span>${(wins / (losses || 1)).toFixed(2)}</span>`;
             break;
         default: statsHtml += `<span>Wins:</span><span>${(d.wins || 'N/A').toLocaleString()}</span>`;
     }
     statsHtml += `</div>`;
-    
+
     const skinSrc = result.skinUrl ? result.skinUrl.replace("http://", "https://") : `https://crafatar.com/avatars/${result.uuid}?size=512&overlay=true`;
 
     statSearchResults.innerHTML = `
@@ -191,7 +204,7 @@ function minecraftColorParser(text) {
 
         const code = segment.charAt(0).toLowerCase();
         const content = segment.substring(1);
-        
+
         if ('0123456789abcdef'.includes(code)) {
             activeClasses = activeClasses.filter(c => !c.startsWith('mc-color-'));
             activeClasses.push(`mc-color-${code}`);
@@ -203,7 +216,7 @@ function minecraftColorParser(text) {
                 activeClasses.push(`mc-format-${code}`);
             }
         }
-        
+
         if (content) {
             html += `<span class="${activeClasses.join(' ')}">${content}</span>`;
         }
@@ -262,6 +275,7 @@ function showSaveFeedback(button, success) {
     }, 2000);
 }
 
+ipcRenderer.on('settings-saved-reply', (event, success) => showSaveFeedback(saveSettingsBtn, success));
 ipcRenderer.on('aliases-saved-reply', (event, success) => showSaveFeedback(saveAliasesBtn, success));
 ipcRenderer.on('api-key-saved-reply', (event, success) => showSaveFeedback(saveApiKeyBtn, success));
 

@@ -29,6 +29,7 @@ class JagProx {
         this.client = null;
         this.target = null;
         this.lastPlayCommand = null;
+        this.ggSentInGame = false;
 
         this.hypixel = new HypixelHandler(this);
         this.commands = new CommandHandler(this);
@@ -60,6 +61,7 @@ class JagProx {
     handleLogin() {
         formatter.log(`Client connected to proxy: ${this.client.username}`);
         this.lastPlayCommand = null;
+        this.ggSentInGame = false;
 
         const userDataPath = process.env.USER_DATA_PATH || '.';
         const cachePath = path.isAbsolute(this.config.cache_folder)
@@ -116,6 +118,7 @@ class JagProx {
                     }
                     if (data.position === 0 || data.position === 1) {
                         console.log(`[JAGPROX_CHAT]${formatter.reconstructLegacyText(chatObject)}`);
+                        this.handleAutoGG(formatter.extractText(chatObject));
                     }
                     data.message = JSON.stringify(chatObject);
                 } catch(e) {}
@@ -177,6 +180,42 @@ class JagProx {
         this.client.on("end", onEndOrError);
         this.target.on("error", onEndOrError);
         this.target.on("end", onEndOrError);
+    }
+
+    handleAutoGG(cleanMessage) {
+        if (!this.config.auto_gg || !this.config.auto_gg.enabled) {
+            return;
+        }
+
+        const gameStartKeywords = [
+            'Protect your bed and destroy the enemy beds.',
+            'Eliminate your opponents!',
+            'Gather resources and equipment on your'
+        ];
+
+        if (gameStartKeywords.some(keyword => cleanMessage.includes(keyword))) {
+            this.ggSentInGame = false;
+            return;
+        }
+
+        const gameOverKeywords = [
+            'VICTORY!', 'GAME END',
+            'You won!', 'Draw!', '1st Place', 'Winner:',
+            'Winners:', 'won the game!'
+        ];
+
+        if (!this.ggSentInGame && gameOverKeywords.some(keyword => cleanMessage.includes(keyword))) {
+            this.ggSentInGame = true;
+            const delay = this.config.auto_gg.delay || 1500;
+            const message = this.config.auto_gg.message || "gg";
+
+            setTimeout(() => {
+                if (this.target) {
+                    this.target.write('chat', { message: message });
+                    formatter.log(`AutoGG sent: "${message}"`);
+                }
+            }, delay);
+        }
     }
 
     proxyChat(message) {

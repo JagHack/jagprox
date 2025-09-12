@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
-/* === 1. Globale Stile & Setup === */
+/* === 1. Global Styles and Setup === */
 :root {
     --purple-primary: #8A2BE2;
     --purple-hover: #9932CC;
@@ -29,7 +29,7 @@ body {
     overflow: hidden;
 }
 
-/* === 2. Haupt-Layout === */
+/* === 2. Main Layout === */
 .title-bar {
     display: flex;
     justify-content: space-between;
@@ -78,7 +78,7 @@ body.sidebar-collapsed .sidebar {
     overflow: hidden;
 }
 
-/* === 3. Seiten-Navigation === */
+/* === 3. Page Navigation === */
 .sidebar nav {
     display: flex;
     flex-direction: column;
@@ -141,7 +141,7 @@ body.sidebar-collapsed .sidebar {
     transform: translateX(-20px);
 }
 
-/* === 4. Seiten-spezifische Container & Header === */
+/* === 4. Containers & Headers === */
 .header {
     text-align: center;
 }
@@ -202,6 +202,22 @@ body.sidebar-collapsed .sidebar {
     flex-direction: column;
     gap: 15px;
     font-family: 'Inter', sans-serif;
+}
+
+.settings-group {
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-group:last-child {
+    border-bottom: none;
+}
+
+.settings-group-header {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--purple-primary);
+    margin-bottom: 15px;
 }
 
 .search-results-container {
@@ -272,7 +288,7 @@ body.sidebar-collapsed .sidebar {
 }
 
 
-/* === 5. Interaktive Elemente === */
+/* === 5. Interactive Elements === */
 .title-bar-text {
     display: flex;
     align-items: center;
@@ -377,6 +393,16 @@ body.sidebar-collapsed #burger-menu-btn {
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+#api-key-input:focus,
+.search-form-grid input:focus,
+.alias-group input:focus,
+.settings-item input[type="text"]:focus,
+.settings-item input[type="number"]:focus {
+    outline: none;
+    border-color: var(--purple-primary);
+    box-shadow: 0 0 8px rgba(138, 43, 226, 0.5);
+}
+
 #toggle-api-key-btn {
     position: absolute;
     right: 15px;
@@ -411,14 +437,6 @@ body.sidebar-collapsed #burger-menu-btn {
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-#api-key-input:focus,
-.search-form-grid input:focus,
-.alias-group input:focus {
-    outline: none;
-    border-color: var(--purple-primary);
-    box-shadow: 0 0 8px rgba(138, 43, 226, 0.5);
-}
-
 .alias-group {
     display: flex;
     align-items: center;
@@ -441,6 +459,65 @@ body.sidebar-collapsed #burger-menu-btn {
     color: var(--purple-primary);
     font-size: 1.5rem;
     font-weight: 700;
+}
+
+.settings-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.settings-item label {
+    color: var(--text-secondary);
+    font-weight: 700;
+}
+
+.settings-item input[type="text"],
+.settings-item input[type="number"] {
+    width: 250px;
+    background-color: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.settings-item input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 48px;
+    height: 24px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.settings-item input[type="checkbox"]::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    top: 2px;
+    left: 3px;
+    transition: transform 0.2s, background-color 0.2s;
+}
+
+.settings-item input[type="checkbox"]:checked {
+    background-color: var(--purple-primary);
+}
+
+.settings-item input[type="checkbox"]:checked::before {
+    background-color: white;
+    transform: translateX(23px);
 }
 
 .remove-alias-btn {
@@ -503,7 +580,7 @@ body.sidebar-collapsed #burger-menu-btn {
     text-align: right;
 }
 
-/* === 6. Komponenten === */
+/* === 6. Components === */
 .modal-overlay {
     position: fixed;
     top: 0;

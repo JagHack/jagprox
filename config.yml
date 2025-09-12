@@ -1,7 +1,7 @@
 version: 1.8.9
 port: 2107
 debug_mode: true
-cache_folder: ./profile_cache
+cache_folder: ./cache/profiles
 commands:
   statcheck: sc
   stat_filter: scfilter
@@ -36,3 +36,7 @@ aliases: {}
 super_friends: {}
 tab_alerts: []
 nicknames: {}
+auto_gg:
+  enabled: false
+  message: "gg"
+  delay: 1500

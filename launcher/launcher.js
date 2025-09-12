@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const yaml = require('yaml');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const HypixelHandler = require('../modules/hypixelHandler.js');
@@ -13,6 +14,7 @@ let statsHandler;
 const userDataPath = app.getPath('userData');
 const aliasesPath = path.join(userDataPath, 'aliases.json');
 const envPath = path.join(userDataPath, '.env');
+const configPath = path.join(userDataPath, 'config.yml');
 
 function initializeFile(filePath, defaultContent) {
     if (!fs.existsSync(filePath)) {
@@ -85,6 +87,32 @@ ipcMain.on('maximize-window', () => {
     }
 });
 ipcMain.on('close-window', () => app.quit());
+
+ipcMain.on('get-config', (event) => {
+    try {
+        if (fs.existsSync(configPath)) {
+            const config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
+            event.reply('config-loaded', config);
+        }
+    } catch (e) {
+        console.error('Failed to load config.yml:', e);
+    }
+});
+
+ipcMain.on('save-settings', (event, settings) => {
+    try {
+        let config = {};
+        if (fs.existsSync(configPath)) {
+            config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
+        }
+        config.auto_gg = settings.auto_gg;
+        fs.writeFileSync(configPath, yaml.stringify(config));
+        event.reply('settings-saved-reply', true);
+    } catch (e) {
+        console.error('Failed to save settings to config.yml:', e);
+        event.reply('settings-saved-reply', false);
+    }
+});
 
 ipcMain.on('get-api-key', (event) => { event.reply('api-key-loaded', getApiKeyFromEnv()); });
 ipcMain.on('save-api-key', (event, apiKey) => {
