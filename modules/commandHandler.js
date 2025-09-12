@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const yaml = require('yaml');
 const aliasManager = require('../aliasManager.js');
 const formatter = require('../formatter.js');
@@ -74,7 +75,7 @@ class CommandHandler {
             case 'alert':
                 this.handleAlertCommand(args);
                 return true;
-            
+
             case 'nickname':
                 this.handleNicknameCommand(args);
                 return true;
@@ -87,7 +88,7 @@ class CommandHandler {
                     this.proxy.proxyChat("§cNo last game found to re-queue for.");
                 }
                 return true;
-            
+
             case 'jagprox':
                 this.handleHelpCommand();
                 return true;
@@ -101,7 +102,7 @@ class CommandHandler {
         const configCmds = this.proxy.config.commands || {};
         const scAlias = configCmds.statcheck || 'sc';
         const statusAlias = configCmds.status || 'status';
-    
+
         const commandList = [
             { syntax: `/${scAlias} <game> <player>`, desc: 'Checks Hypixel stats for a player.' },
             { syntax: `/${statusAlias} <player>`, desc: "Shows a player's online status." },
@@ -112,29 +113,29 @@ class CommandHandler {
             { syntax: '/superf <add|rem|list> [args]', desc: "Tracks friends' game activity." },
             { syntax: '/jagprox', desc: 'Displays this help message.' }
         ];
-    
+
         let helpMessage = "§d§m----------------------------------------------------\n";
         helpMessage += "§r  §d§lJagProx §8- §7Available Commands\n \n";
-    
+
         commandList.forEach(c => {
             const parts = c.syntax.split(' ');
             const cmd = parts.shift();
             const args = parts.join(' ');
             const coloredSyntax = `§d${cmd} §e${args}`;
-            
+
             helpMessage += `§r  ${coloredSyntax}\n`;
             helpMessage += `§r    §8- §7${c.desc}\n \n`;
         });
-    
+
         helpMessage = helpMessage.trimEnd();
         helpMessage += "\n§r\n§d§m----------------------------------------------------";
-        
+
         this.proxy.proxyChat(helpMessage);
     }
 
     handleNicknameCommand(args) {
         const action = args.shift()?.toLowerCase();
-        
+
         if (!this.proxy.config.nicknames) {
             this.proxy.config.nicknames = {};
         }
@@ -165,7 +166,7 @@ class CommandHandler {
                     this.proxy.proxyChat("§cUsage: /nickname remove <real_name_or_nickname>");
                     return;
                 }
-                
+
                 let found = false;
                 const lowerNameToRemove = nameToRemove.toLowerCase();
 
@@ -206,7 +207,7 @@ class CommandHandler {
 
     handleAlertCommand(args) {
         const action = args.shift()?.toLowerCase();
-        
+
         if (!this.proxy.config.tab_alerts) {
             this.proxy.config.tab_alerts = [];
         }
@@ -321,12 +322,14 @@ class CommandHandler {
     }
 
     saveConfig() {
+        const userDataPath = process.env.USER_DATA_PATH || '.';
+        const configPath = path.join(userDataPath, 'config.yml');
         try {
-            const fileConfig = yaml.parse(fs.readFileSync('./config.yml', 'utf8'));
+            const fileConfig = yaml.parse(fs.readFileSync(configPath, 'utf8'));
             fileConfig.super_friends = this.proxy.config.super_friends;
             fileConfig.tab_alerts = this.proxy.config.tab_alerts;
             fileConfig.nicknames = this.proxy.config.nicknames;
-            fs.writeFileSync('./config.yml', yaml.stringify(fileConfig), 'utf8');
+            fs.writeFileSync(configPath, yaml.stringify(fileConfig), 'utf8');
         } catch (e) {
             this.proxy.proxyChat("§cError saving configuration to file.");
             console.error("Config save error:", e);

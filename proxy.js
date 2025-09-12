@@ -6,6 +6,8 @@ const QueueStatsHandler = require("./modules/queueStatsHandler.js");
 const EntityManager = require("./modules/entityManager.js");
 const TabManager = require("./modules/tabManager.js");
 const TabAlerter = require("./modules/tabAlerter.js");
+const path = require("path");
+const fs = require("fs");
 
 function replaceNamesInComponent(component, nicknames) {
     if (!component) return;
@@ -59,6 +61,15 @@ class JagProx {
         formatter.log(`Client connected to proxy: ${this.client.username}`);
         this.lastPlayCommand = null;
 
+        const userDataPath = process.env.USER_DATA_PATH || '.';
+        const cachePath = path.isAbsolute(this.config.cache_folder)
+            ? this.config.cache_folder
+            : path.join(userDataPath, this.config.cache_folder);
+
+        if (!fs.existsSync(cachePath)) {
+            fs.mkdirSync(cachePath, { recursive: true });
+        }
+
         this.target = mc.createClient({
             host: "mc.hypixel.net",
             port: 25565,
@@ -66,7 +77,7 @@ class JagProx {
             auth: "microsoft",
             version: this.config.version,
             profile: this.client.profile,
-            profilesFolder: this.config.cache_folder
+            profilesFolder: cachePath
         });
 
         this.target.on("connect", () => formatter.log(`Client connected to target: ${this.target.username}`));
@@ -104,7 +115,7 @@ class JagProx {
                         replaceNamesInComponent(chatObject, nicknames);
                     }
                     if (data.position === 0 || data.position === 1) {
-                        console.log(`[JAGPROX_CHAT]${formatter.extractText(chatObject)}`);
+                        console.log(`[JAGPROX_CHAT]${formatter.reconstructLegacyText(chatObject)}`);
                     }
                     data.message = JSON.stringify(chatObject);
                 } catch(e) {}
@@ -149,7 +160,7 @@ class JagProx {
                 formatter.log(`Connection error: ${err.message}`);
             }
             formatter.log(`Client disconnected: ${this.client ? this.client.username : 'Unknown'}`);
-            
+
             if (this.target) this.target.end();
             if (this.client) this.client.end();
 
@@ -157,7 +168,7 @@ class JagProx {
             this.entityManager.reset();
             this.tabManager.reset();
             this.tabAlerter.reset();
-            
+
             this.client = null;
             this.target = null;
         };

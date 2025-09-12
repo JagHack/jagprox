@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 const HypixelHandler = require('../modules/hypixelHandler.js');
 const { gameModeMap } = require('../utils/constants.js');
 
@@ -9,9 +10,18 @@ let mainWindow;
 let proxyProcess;
 let statsHandler;
 
-const projectRoot = path.join(__dirname, '..');
-const aliasesPath = path.join(projectRoot, 'aliases.json');
-const envPath = path.join(projectRoot, '.env');
+const userDataPath = app.getPath('userData');
+const aliasesPath = path.join(userDataPath, 'aliases.json');
+const envPath = path.join(userDataPath, '.env');
+
+function initializeFile(filePath, defaultContent) {
+    if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, defaultContent, 'utf8');
+    }
+}
+
+initializeFile(aliasesPath, '{}');
+initializeFile(envPath, 'HYPIXEL_API_KEY=');
 
 function getApiKeyFromEnv() {
     if (!fs.existsSync(envPath)) return null;
@@ -34,9 +44,9 @@ function extractSkinUrl(properties) {
 
 function createHypixelHandler() {
     const apiKey = getApiKeyFromEnv();
-    const mockProxy = { 
+    const mockProxy = {
         env: { apiKey: apiKey },
-        proxyChat: (msg) => console.log(`[MOCK_PROXY_CHAT] ${msg}`) 
+        proxyChat: (msg) => console.log(`[MOCK_PROXY_CHAT] ${msg}`)
     };
     statsHandler = new HypixelHandler(mockProxy);
 }
@@ -56,6 +66,10 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     createHypixelHandler();
+
+    mainWindow.once('ready-to-show', () => {
+        autoUpdater.checkForUpdatesAndNotify();
+    });
 }
 
 app.whenReady().then(createWindow);
@@ -71,7 +85,6 @@ ipcMain.on('maximize-window', () => {
     }
 });
 ipcMain.on('close-window', () => app.quit());
-
 
 ipcMain.on('get-api-key', (event) => { event.reply('api-key-loaded', getApiKeyFromEnv()); });
 ipcMain.on('save-api-key', (event, apiKey) => {
@@ -94,12 +107,8 @@ ipcMain.on('save-api-key', (event, apiKey) => {
 
 ipcMain.on('get-aliases', (event) => {
     try {
-        if (fs.existsSync(aliasesPath)) {
-            const data = fs.readFileSync(aliasesPath, 'utf8');
-            event.reply('aliases-loaded', JSON.parse(data));
-        } else {
-            event.reply('aliases-loaded', {});
-        }
+        const data = fs.readFileSync(aliasesPath, 'utf8');
+        event.reply('aliases-loaded', JSON.parse(data));
     } catch (e) {
         console.error('Failed to load aliases:', e);
         event.reply('aliases-loaded', {});
@@ -149,7 +158,20 @@ ipcMain.on('get-player-status', async (event, name) => {
 
 ipcMain.on('toggle-proxy', (event, start) => {
     if (start && !proxyProcess) {
-        proxyProcess = spawn('node', ['main.js'], { cwd: projectRoot });
+        const electronExecutable = process.execPath;
+        const appPath = app.getAppPath();
+        const mainScriptPath = path.join(appPath, 'main.js');
+
+        const childEnv = {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: '1',
+            USER_DATA_PATH: userDataPath
+        };
+
+        proxyProcess = spawn(electronExecutable, [mainScriptPath], {
+            env: childEnv
+        });
+
         mainWindow.webContents.send('proxy-status', 'running');
         const handleData = (data) => {
             const lines = data.toString().split('\n').filter(line => line.length > 0);

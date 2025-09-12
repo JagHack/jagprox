@@ -1,21 +1,31 @@
-require("dotenv").config();
 const fs = require("fs");
+const path = require("path");
 const yaml = require("yaml");
 const JagProx = require("./proxy.js");
 
+const userDataPath = process.env.USER_DATA_PATH || '.';
+require("dotenv").config({ path: path.join(userDataPath, '.env') });
+
 let config, env;
-const configPath = "./config.yml";
-const defaultConfigPath = "./config.default.yml";
+const configPath = path.join(userDataPath, "config.yml");
+const defaultConfigPath = path.join(__dirname, "config.yml"); 
 
 if (!fs.existsSync(configPath)) {
-    console.error(`\n❌ FATAL ERROR: Configuration file not found!`);
-    console.error(`   Please create '${configPath}' by copying '${defaultConfigPath}'`);
-    console.error(`   and fill in your personal settings (like HYPIXEL_API_KEY in .env).`);
-    process.exit(1);
+    console.log(`Configuration file not found in user data. Copying default config...`);
+    try {
+        fs.copyFileSync(defaultConfigPath, configPath);
+        console.log(`Successfully copied default config to ${configPath}`);
+    } catch (e) {
+        console.error(`\n❌ FATAL ERROR: Could not copy default configuration file.`);
+        console.error(`   Source: ${defaultConfigPath}`);
+        console.error(`   Destination: ${configPath}`);
+        console.error(`   Details: ${e.message}`);
+        process.exit(1);
+    }
 }
 
 try {
-    console.log("Attempting to read config.yml...");
+    console.log(`Attempting to read config from ${configPath}...`);
     const configFile = fs.readFileSync(configPath, "utf8");
     config = yaml.parse(configFile);
     if (typeof config !== 'object' || config === null) {
@@ -31,10 +41,8 @@ try {
 
 env = { apiKey: process.env.HYPIXEL_API_KEY };
 if (!env.apiKey || env.apiKey.trim() === "") {
-    console.error("\n❌ FATAL ERROR: HYPIXEL_API_KEY not found in your .env file.");
-    console.error("   Please create a file named '.env' in the project directory.");
-    console.error("   Inside the .env file, add this line:");
-    console.error("   HYPIXEL_API_KEY=your_actual_api_key_here");
+    console.error(`\n❌ FATAL ERROR: HYPIXEL_API_KEY not found in your .env file in ${userDataPath}.`);
+    console.error("   Please set it using the launcher UI.");
     process.exit(1);
 } else {
     console.log("✓ Hypixel API key loaded successfully.");

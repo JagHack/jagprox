@@ -1,22 +1,47 @@
 {
-  "name": "JagProx",
-  "version": "1.0.0",
-  "description": "A Hypixel Proxy",
-  "main": "main.js",
+  "name": "jagprox-launcher",
+  "version": "1.1.0",
+  "description": "Launcher for JagProx",
+  "main": "launcher/launcher.js",
   "scripts": {
-    "start": "node main.js",
-    "launcher": "electron launcher/launcher.js"
+    "start": "electron .",
+    "launcher": "electron .",
+    "build": "electron-builder"
   },
-  "license": "MIT",
-  "dependencies": {
-    "dotenv": "^17.2.1",
-    "jimp": "^0.16.13",
-    "minecraft-protocol": "^1.61.0",
-    "node-fetch": "^2.7.0",
-    "potrace": "^2.1.8",
-    "yaml": "^2.8.1"
-  },
+  "author": "JagHack",
   "devDependencies": {
-    "electron": "^31.0.1"
+    "electron": "^29.1.5",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "electron-updater": "^6.1.8",
+    "jimp": "^0.22.12",
+    "minecraft-protocol": "^1.47.0",
+    "node-fetch": "^2.7.0",
+    "yaml": "^2.4.1"
+  },
+  "build": {
+    "appId": "com.jaghack.jagprox",
+    "productName": "JagProx",
+    "files": [
+      "**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "launcher/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "jaghack",
+      "repo": "jagprox"
+    }
   }
 }
