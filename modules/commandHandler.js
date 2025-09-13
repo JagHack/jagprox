@@ -3,6 +3,7 @@ const path = require('path');
 const yaml = require('yaml');
 const aliasManager = require('../aliasManager.js');
 const formatter = require('../formatter.js');
+const { gameModeMap } = require('../utils/constants.js');
 
 class CommandHandler {
     constructor(proxy) {
@@ -45,9 +46,14 @@ class CommandHandler {
         switch (baseCommand) {
             case 'statcheck': {
                 const gamemode = args[0];
+                if (gamemode === '?') {
+                    this.handleShowModes();
+                    return true;
+                }
                 const username = args.slice(1).join(' ');
                 if (!gamemode || !username) {
                     this.proxy.proxyChat("§cUsage: /sc <gamemode> <username>");
+                    this.proxy.proxyChat("§eUse /sc ? to see all available gamemodes.");
                     return true;
                 }
                 const realName = this.resolveNickname(username);
@@ -96,6 +102,30 @@ class CommandHandler {
             default:
                 return false;
         }
+    }
+
+    handleShowModes() {
+        const modesByCategory = {};
+        for (const alias in gameModeMap) {
+            const modeInfo = gameModeMap[alias];
+            if (!modesByCategory[modeInfo.displayName]) {
+                modesByCategory[modeInfo.displayName] = [];
+            }
+            modesByCategory[modeInfo.displayName].push(alias);
+        }
+
+        let helpMessage = "§d§m----------------------------------------------------\n";
+        helpMessage += "§r  §d§lAvailable Statcheck Gamemodes\n \n";
+
+        const sortedCategories = Object.keys(modesByCategory).sort();
+
+        for (const category of sortedCategories) {
+            const aliases = modesByCategory[category].join(', ');
+            helpMessage += `§r  §e${category}: §b${aliases}\n`;
+        }
+        
+        helpMessage += "\n§d§m----------------------------------------------------";
+        this.proxy.proxyChat(helpMessage);
     }
 
     handleHelpCommand() {
