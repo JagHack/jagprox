@@ -57,7 +57,7 @@ class HypixelHandler {
             let chatMessage = '';
             try {
                 const chatData = JSON.parse(data.message);
-                chatMessage = (chatData.extra || []).map(part => part.text).join('');
+                chatMessage = formatter.extractText(chatData);
             } catch(e) { return; }
 
             const cleanMessage = chatMessage.replace(/§[0-9a-fk-or]/g, '').trim();
@@ -68,19 +68,28 @@ class HypixelHandler {
                 return;
             }
 
-            if (cleanMessage.startsWith('Party Members:')) {
+            if (cleanMessage.startsWith('Party Members (') || cleanMessage.startsWith('Party Leader:')) {
                 capturing = true;
             }
-
+            
             if (capturing && (cleanMessage.startsWith('Party Leader:') || cleanMessage.startsWith('Party Moderators:') || cleanMessage.startsWith('Party Members:'))) {
-                 const players = cleanMessage.split(':')[1].split(',').map(p => p.trim());
-                 players.forEach(p => partyMembers.add(p));
+                 const playersString = cleanMessage.split(':')[1];
+                 if (playersString) {
+                     const players = playersString.split(',').map(p => {
+                         const cleaned = p.replace('●', '').trim();
+                         const parts = cleaned.split(' ');
+                         return parts[parts.length - 1];
+                     });
+                     players.forEach(p => p && partyMembers.add(p));
+                 }
             }
 
-            if (capturing && cleanMessage.startsWith('Total Members:')) {
-                capturing = false;
-                this.proxy.target.removeListener('packet', partyListener);
-                this.processPartyMembers(Array.from(partyMembers));
+            if (capturing && cleanMessage.startsWith('--------------------------------')) {
+                if (partyMembers.size > 0) {
+                    capturing = false;
+                    this.proxy.target.removeListener('packet', partyListener);
+                    this.processPartyMembers(Array.from(partyMembers));
+                }
             }
         };
 
@@ -88,7 +97,12 @@ class HypixelHandler {
         this.proxy.target.write('chat', { message: '/party list' });
 
         setTimeout(() => {
-            this.proxy.target.removeListener('packet', partyListener);
+            if (capturing) {
+                this.proxy.target.removeListener('packet', partyListener);
+                if (partyMembers.size > 0) {
+                    this.processPartyMembers(Array.from(partyMembers));
+                }
+            }
         }, 5000);
     }
 
@@ -98,53 +112,78 @@ class HypixelHandler {
             return;
         }
 
-        this.proxy.proxyChat(`§aFound ${partyMembers.length} members. Fetching Bedwars stats...`);
-        this.proxy.proxyChat("§7§m----------------------------------------");
+        const currentGameKey = this.proxy.queueStats.currentGameKey;
+        let gameInfo = gameModeMap.bedwars;
+        if (currentGameKey && gameModeMap[currentGameKey]) {
+            gameInfo = gameModeMap[currentGameKey];
+        }
+
+        this.proxy.proxyChat(`§aFound ${partyMembers.length} members. Fetching stats for §e${gameInfo.displayName}§a...`);
 
         const statPromises = partyMembers.map(username =>
-            this.getAndFormatPlayerStats(username.replace(/\[.*?\]\s/g, ''), gameModeMap.bedwars)
+            this.getAndFormatPartyPlayerStats(username.replace(/\[.*?\]\s/g, ''), gameInfo)
         );
-        const statLines = await Promise.all(statPromises);
+        const statBlocks = await Promise.all(statPromises);
 
-        statLines.forEach(line => {
-            if (line) this.proxy.proxyChat(line);
-        });
-        this.proxy.proxyChat("§7§m----------------------------------------");
+        let finalMessage = `§d§m----------------------------------------------------\n`;
+        finalMessage += `  §d§lParty Stats for ${gameInfo.displayName}\n \n`;
+        finalMessage += statBlocks.filter(block => block).join('\n \n');
+        finalMessage += `\n§d§m----------------------------------------------------`;
+        this.proxy.proxyChat(finalMessage);
     }
 
-    async getAndFormatPlayerStats(username, gameInfo) {
+    async getAndFormatPartyPlayerStats(username, gameInfo) {
         try {
             const cleanUsername = username.replace(/§[0-9a-fk-or]/g, '').replace(/\[.*?\]\s/g, '');
+            if (!cleanUsername) return null;
+
             const mojangData = await this.getMojangUUID(cleanUsername);
-            if (!mojangData) return `§c§o'${cleanUsername}' not found.`;
+            if (!mojangData) return `  §c§o'${cleanUsername}' not found.`;
+            
             const stats = await this.getStats(mojangData.uuid);
             if (!stats || !stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
-                return `§7No ${gameInfo.displayName} stats for ${formatter.formatRank(null)} ${mojangData.username}§7.`;
+                return `  ${formatter.formatRank(stats.rank)} ${mojangData.username} §7- No stats found.`;
             }
-            return this.formatSinglePlayerQueueStats(mojangData.username, stats, gameInfo);
-        } catch (err) {
-            formatter.log(`Queue stat check error for ${username}: ${err.message}`);
-            return `§cError for ${username}.`;
-        }
-    }
+            
+            const p = stats.player;
+            const d = p.stats[gameInfo.apiName] || {};
+            const a = p.achievements || {};
+            const rank = formatter.formatRank(stats.rank);
 
-    formatSinglePlayerQueueStats(username, stats, gameInfo) {
-        const p = stats.player;
-        const d = p.stats[gameInfo.apiName] || {};
-        const a = p.achievements || {};
-        let statLine = "";
-        const rank = formatter.formatRank(stats.rank);
-        switch (gameInfo.apiName) {
-            case "Bedwars":
-                const fkdr = ((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2);
-                const wlrBw = ((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2);
-                statLine = `§7[§f${a.bedwars_level || 0}✫§7] ${rank} ${username} §8- §fFKDR: §6${fkdr} §8| §fWLR: §6${wlrBw}`;
-                break;
-            default:
-                const wins = d.wins || 0;
-                statLine = `${rank} ${username} §8- §fWins: §a${wins.toLocaleString()}`;
+            let statLines = [];
+            let header = `  ${rank} ${mojangData.username}`;
+
+            switch (gameInfo.apiName) {
+                case "Bedwars":
+                    header += ` §7[§f${a.bedwars_level || 0}✫§7]`;
+                    statLines.push(`    §fFKDR: §6${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}`);
+                    break;
+                case "SkyWars":
+                    header += ` §7[§f${p.stats.SkyWars.levelFormatted || '0✫'}§7]`;
+                    statLines.push(`    §fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
+                    break;
+                case "Walls3":
+                    statLines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fFKDR: §6${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)}`);
+                    break;
+                case "Duels":
+                     const wins = d.wins || 0; const losses = d.losses || 1;
+                     const kills = d.kills || 0; const deaths = d.deaths || 1;
+                     statLines.push(`    §fWLR: §6${(wins/losses).toFixed(2)} §8| §fKDR: §6${(kills/deaths).toFixed(2)}`);
+                     break;
+                case "UHC":
+                    header += ` §7[§f${(a.uhc_champion || 0)}✫§7]`;
+                    statLines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
+                    break;
+                default:
+                    statLines.push(`    §fWins: §a${(d.wins || 'N/A').toLocaleString()} §8| §fKills: §a${(d.kills || 'N/A').toLocaleString()}`);
+            }
+            
+            return `${header}\n${statLines.join('\n')}`;
+
+        } catch (err) {
+            formatter.log(`Party stat check error for ${username}: ${err.message}`);
+            return `  §cError fetching stats for ${username}.`;
         }
-        return statLine;
     }
 
     async getMojangUUID(username) {
