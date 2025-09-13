@@ -343,6 +343,12 @@ class HypixelHandler {
                     lines.push(`§fFinal Kills: §a${(d.final_kills || 0).toLocaleString()} §8| §fFinal Deaths: §c${(d.final_deaths || 1).toLocaleString()}`);
                     lines.push(`§fFKDR: §6${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
                     break;
+                case "Quake":
+                    lines.push(`${rank} ${username}${guild}`);
+                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fHeadshots: §e${(d.headshots || 0).toLocaleString()}`);
+                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
+                    lines.push(`§fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
+                    break;
                 case "HungerGames":
                     lines.push(`${rank} ${username}${guild}`);
                     lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()}`);

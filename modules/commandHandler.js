@@ -4,6 +4,7 @@ const yaml = require('yaml');
 const aliasManager = require('../aliasManager.js');
 const formatter = require('../formatter.js');
 const { gameModeMap } = require('../utils/constants.js');
+const { getStatValue, statAliases } = require('../utils/stat-helper.js');
 
 class CommandHandler {
     constructor(proxy) {
@@ -70,22 +71,21 @@ class CommandHandler {
                 this.proxy.hypixel.getPlayerStatus(realName);
                 return true;
             }
+            case 'goal':
+                this.handleGoalCommand(args);
+                return true;
             case 'superf':
                 this.handleSuperFriend(args);
                 return true;
-
             case 'psc':
                 this.proxy.hypixel.handlePartyStatCheck();
                 return true;
-
             case 'alert':
                 this.handleAlertCommand(args);
                 return true;
-
             case 'nickname':
                 this.handleNicknameCommand(args);
                 return true;
-
             case 'rq':
                 if (this.proxy.lastPlayCommand) {
                     this.proxy.proxyChat(`§eRe-queuing: §f${this.proxy.lastPlayCommand}`);
@@ -94,13 +94,102 @@ class CommandHandler {
                     this.proxy.proxyChat("§cNo last game found to re-queue for.");
                 }
                 return true;
-
             case 'jagprox':
                 this.handleHelpCommand();
                 return true;
-
             default:
                 return false;
+        }
+    }
+
+    async handleGoalCommand(args) {
+        const action = args.shift()?.toLowerCase();
+        const userDataPath = process.env.USER_DATA_PATH || '.';
+        const goalPath = path.join(userDataPath, 'goal.json');
+    
+        const readGoal = () => fs.existsSync(goalPath) ? JSON.parse(fs.readFileSync(goalPath, 'utf8')) : null;
+        const saveGoal = (goal) => fs.writeFileSync(goalPath, JSON.stringify(goal, null, 4), 'utf8');
+        const cancelGoal = () => fs.existsSync(goalPath) && fs.unlinkSync(goalPath);
+    
+        switch (action) {
+            case 'set': {
+                const gamemode = args.shift()?.toLowerCase();
+                const statAlias = args.shift()?.toLowerCase();
+                const target = parseFloat(args.shift());
+    
+                if (!gamemode || !statAlias || isNaN(target)) {
+                    this.proxy.proxyChat("§cUsage: /goal set <game> <stat> <target>");
+                    this.proxy.proxyChat("§eExample: /goal set bedwars fkdr 5");
+                    return;
+                }
+    
+                if (!statAliases[gamemode] || !statAliases[gamemode][statAlias]) {
+                    this.proxy.proxyChat(`§cInvalid stat. Available for ${gamemode}: §e${Object.keys(statAliases[gamemode]).join(', ')}`);
+                    return;
+                }
+    
+                this.proxy.proxyChat("§eFetching your current stats to set the goal...");
+                const uuid = this.proxy.client.uuid;
+                if (!uuid) return this.proxy.proxyChat("§cCould not identify your UUID. Please relog.");
+    
+                const stats = await this.proxy.hypixel.getStats(uuid);
+                if (!stats || !stats.player) return this.proxy.proxyChat("§cCould not fetch your Hypixel stats.");
+    
+                const statResult = getStatValue(stats.player, gamemode, statAlias);
+                if (statResult === null) return this.proxy.proxyChat("§cAn error occurred while retrieving the specific stat.");
+    
+                const initialValue = statResult.value;
+                if (target <= initialValue) return this.proxy.proxyChat(`§cYour target of ${target.toLocaleString()} is not higher than your current ${statResult.name} of ${initialValue.toLocaleString()}!`);
+    
+                const goal = { gamemode, statAlias, target, initial: initialValue, name: statResult.name, setAt: Date.now() };
+                saveGoal(goal);
+                this.proxy.proxyChat(`§aGoal set! Track your progress for §e${statResult.name} in ${gamemode}§a to reach §6${target.toLocaleString()}§a.`);
+                break;
+            }
+    
+            case 'view': {
+                const goal = readGoal();
+                if (!goal) return this.proxy.proxyChat("§eYou do not have an active goal. Use /goal set <game> <stat> <target>.");
+    
+                this.proxy.proxyChat("§eChecking your goal progress...");
+                const uuid = this.proxy.client.uuid;
+                if (!uuid) return this.proxy.proxyChat("§cCould not identify your UUID. Please relog.");
+                
+                const stats = await this.proxy.hypixel.getStats(uuid);
+                if (!stats || !stats.player) return this.proxy.proxyChat("§cCould not fetch your Hypixel stats.");
+    
+                const statResult = getStatValue(stats.player, goal.gamemode, goal.statAlias);
+                const currentValue = statResult.value;
+    
+                const progress = currentValue - goal.initial;
+                const totalNeeded = goal.target - goal.initial;
+                const percentage = Math.max(0, Math.min(100, (progress / totalNeeded) * 100));
+                const remaining = Math.max(0, goal.target - currentValue);
+                
+                const progressBarLength = 20;
+                const filledLength = Math.round((progressBarLength * percentage) / 100);
+                const bar = `§a${'█'.repeat(filledLength)}§7${'█'.repeat(progressBarLength - filledLength)}`;
+    
+                this.proxy.proxyChat(`§d§m----------------------------------------------------`);
+                this.proxy.proxyChat(`  §d§lGoal: ${goal.name} in ${goal.gamemode}`);
+                this.proxy.proxyChat(`  §7${goal.initial.toLocaleString()} §f-> §6${goal.target.toLocaleString()}`);
+                this.proxy.proxyChat(` `);
+                this.proxy.proxyChat(`  §fProgress: ${bar} §e${percentage.toFixed(2)}%`);
+                this.proxy.proxyChat(`  §aCurrent: ${currentValue.toLocaleString()} §c(Remaining: ${remaining.toLocaleString()})`);
+                this.proxy.proxyChat(`§d§m----------------------------------------------------`);
+                break;
+            }
+            
+            case 'cancel': {
+                if (!readGoal()) return this.proxy.proxyChat("§eYou do not have an active goal to cancel.");
+                cancelGoal();
+                this.proxy.proxyChat("§aYour active goal has been cancelled.");
+                break;
+            }
+            
+            default:
+                this.proxy.proxyChat("§cInvalid subcommand. Use /goal <set|view|cancel>.");
+                break;
         }
     }
 
@@ -136,6 +225,7 @@ class CommandHandler {
         const commandList = [
             { syntax: `/${scAlias} <game> <player>`, desc: 'Checks Hypixel stats for a player.' },
             { syntax: `/${statusAlias} <player>`, desc: "Shows a player's online status." },
+            { syntax: '/goal <set|view|cancel> [args]', desc: 'Manages your personal stat goals.' },
             { syntax: '/psc', desc: 'Runs a stat check for all party members.' },
             { syntax: '/rq', desc: 'Re-queues your last played game.' },
             { syntax: '/alert <add|rem|list> [player]', desc: 'Manages in-game alerts for players.' },
