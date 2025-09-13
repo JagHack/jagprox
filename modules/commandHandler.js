@@ -3,7 +3,7 @@ const path = require('path');
 const yaml = require('yaml');
 const aliasManager = require('../aliasManager.js');
 const formatter = require('../formatter.js');
-const { gameModeMap } = require('../utils/constants.js');
+const { gameModeMap, quickQueueMap } = require('../utils/constants.js');
 const { getStatValue, statAliases } = require('../utils/stat-helper.js');
 
 class CommandHandler {
@@ -71,6 +71,9 @@ class CommandHandler {
                 this.proxy.hypixel.getPlayerStatus(realName);
                 return true;
             }
+            case 'q':
+                this.handleQuickQueue(args);
+                return true;
             case 'goal':
                 this.handleGoalCommand(args);
                 return true;
@@ -99,6 +102,38 @@ class CommandHandler {
                 return true;
             default:
                 return false;
+        }
+    }
+
+    handleQuickQueue(args) {
+        const mode = args[0]?.toLowerCase();
+        if (!mode) {
+            this.proxy.proxyChat("§cUsage: /q <mode>");
+            this.proxy.proxyChat("§eUse /q ? to see all available modes.");
+            return;
+        }
+
+        if (mode === '?') {
+            let helpMessage = "§d§m----------------------------------------------------\n";
+            helpMessage += "§r  §d§lAvailable Quick Queue Commands (/q)\n \n";
+            for (const alias in quickQueueMap) {
+                const modeInfo = quickQueueMap[alias];
+                helpMessage += `§r  §e${alias} §8- §b${modeInfo.name}\n`;
+            }
+            helpMessage += "\n§d§m----------------------------------------------------";
+            this.proxy.proxyChat(helpMessage);
+            return;
+        }
+
+        const queue = quickQueueMap[mode];
+        if (queue) {
+            this.proxy.proxyChat(`§eJoining ${queue.name}...`);
+            this.proxy.target.write('chat', { message: queue.command });
+            if (queue.command.toLowerCase().startsWith('/play ')) {
+                this.proxy.lastPlayCommand = queue.command;
+            }
+        } else {
+            this.proxy.proxyChat(`§cUnknown mode '${mode}'. Use /q ? to see available modes.`);
         }
     }
 
@@ -226,6 +261,7 @@ class CommandHandler {
             { syntax: `/${scAlias} <game> <player>`, desc: 'Checks Hypixel stats for a player.' },
             { syntax: `/${statusAlias} <player>`, desc: "Shows a player's online status." },
             { syntax: '/goal <set|view|cancel> [args]', desc: 'Manages your personal stat goals.' },
+            { syntax: '/q <mode>', desc: 'Quickly joins a game mode. Use /q ? for a list.' },
             { syntax: '/psc', desc: 'Runs a stat check for all party members.' },
             { syntax: '/rq', desc: 'Re-queues your last played game.' },
             { syntax: '/alert <add|rem|list> [player]', desc: 'Manages in-game alerts for players.' },
@@ -237,7 +273,7 @@ class CommandHandler {
         let helpMessage = "§d§m----------------------------------------------------\n";
         helpMessage += "§r  §d§lJagProx §8- §7Available Commands\n \n";
 
-        commandList.forEach(c => {
+        commandList.sort((a,b) => a.syntax.localeCompare(b.syntax)).forEach(c => {
             const parts = c.syntax.split(' ');
             const cmd = parts.shift();
             const args = parts.join(' ');
