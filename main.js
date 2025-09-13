@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const yaml = require("yaml");
-const JagProx = require("./proxy.js");
+const JagProx = require(path.join(__dirname, 'proxy.js'));
 
 const userDataPath = process.env.USER_DATA_PATH || '.';
 require("dotenv").config({ path: path.join(userDataPath, '.env') });

@@ -1,6 +1,6 @@
 {
   "name": "jagprox-launcher",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "description": "Launcher for JagProx",
   "main": "launcher/launcher.js",
   "scripts": {
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "dotenv": "^16.4.5",
+    "electron-log": "^5.4.3",
     "electron-updater": "^6.1.8",
     "jimp": "^0.22.12",
     "minecraft-protocol": "^1.47.0",

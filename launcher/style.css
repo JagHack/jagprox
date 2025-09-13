@@ -681,3 +681,15 @@ body.sidebar-collapsed #burger-menu-btn {
 .mc-format-o { font-style: italic; }
 .mc-format-n { text-decoration: underline; }
 .mc-format-m { text-decoration: line-through; }
+
+.update-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+}
+
+#update-info {
+    color: var(--text-secondary);
+    font-family: 'Courier New', Courier, monospace;
+}

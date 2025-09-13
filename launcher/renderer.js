@@ -31,6 +31,8 @@ const saveSettingsBtn = document.getElementById('save-settings-btn');
 const autoggEnabledCheckbox = document.getElementById('autogg-enabled');
 const autoggMessageInput = document.getElementById('autogg-message');
 const autoggDelayInput = document.getElementById('autogg-delay');
+const checkForUpdatesBtn = document.getElementById('check-for-updates-btn');
+const updateInfo = document.getElementById('update-info');
 
 minimizeBtn.addEventListener('click', () => ipcRenderer.send('minimize-window'));
 maximizeBtn.addEventListener('click', () => ipcRenderer.send('maximize-window'));
@@ -51,7 +53,10 @@ function switchPage(pageId) {
         if (link.dataset.page === pageId) link.classList.add('active');
     });
     if (pageId === 'aliases') ipcRenderer.send('get-aliases');
-    if (pageId === 'settings') ipcRenderer.send('get-config');
+    if (pageId === 'settings') {
+        ipcRenderer.send('get-config');
+        ipcRenderer.send('get-app-version');
+    }
 }
 
 navLinks.forEach(link => { link.addEventListener('click', (e) => { e.preventDefault(); switchPage(link.dataset.page); }); });
@@ -85,6 +90,18 @@ saveSettingsBtn.addEventListener('click', () => {
         }
     };
     ipcRenderer.send('save-settings', settings);
+});
+
+checkForUpdatesBtn.addEventListener('click', () => {
+    ipcRenderer.send('check-for-updates');
+});
+
+ipcRenderer.on('app-version', (event, version) => {
+    updateInfo.innerText = `Current Version: v${version}`;
+});
+
+ipcRenderer.on('update-status', (event, message) => {
+    updateInfo.innerText = message;
 });
 
 ipcRenderer.on('config-loaded', (event, config) => {

@@ -1,29 +1,69 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const yaml = require('yaml');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const log = require('electron-log');
 const HypixelHandler = require('../modules/hypixelHandler.js');
 const { gameModeMap } = require('../utils/constants.js');
 
 let mainWindow;
 let proxyProcess;
 let statsHandler;
+let userDataPath;
+let aliasesPath;
+let envPath;
+let configPath;
 
-const userDataPath = app.getPath('userData');
-const aliasesPath = path.join(userDataPath, 'aliases.json');
-const envPath = path.join(userDataPath, '.env');
-const configPath = path.join(userDataPath, 'config.yml');
+function createWindow() {
+    log.info('Creating main window...');
+    mainWindow = new BrowserWindow({
+        width: 1000,
+        height: 650,
+        frame: false,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+        },
+        autoHideMenuBar: true,
+        icon: path.join(__dirname, 'icon.ico')
+    });
 
-function initializeFile(filePath, defaultContent) {
-    if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, defaultContent, 'utf8');
-    }
+    mainWindow.loadFile(path.join(__dirname, 'index.html'));
+    createHypixelHandler();
 }
 
-initializeFile(aliasesPath, '{}');
-initializeFile(envPath, 'HYPIXEL_API_KEY=');
+app.whenReady().then(() => {
+    userDataPath = app.getPath('userData');
+    aliasesPath = path.join(userDataPath, 'aliases.json');
+    envPath = path.join(userDataPath, '.env');
+    configPath = path.join(userDataPath, 'config.yml');
+    
+    log.transports.file.resolvePath = () => path.join(userDataPath, 'logs/main.log');
+    autoUpdater.logger = log;
+    autoUpdater.logger.transports.file.level = "info";
+    autoUpdater.autoDownload = false;
+
+    log.info('App is ready.');
+
+    initializeFile(aliasesPath, '{}');
+    initializeFile(envPath, 'HYPIXEL_API_KEY=');
+
+    createWindow();
+});
+
+
+function initializeFile(filePath, defaultContent) {
+    try {
+        if (!fs.existsSync(filePath)) {
+            log.info(`Initializing file: ${filePath}`);
+            fs.writeFileSync(filePath, defaultContent, 'utf8');
+        }
+    } catch (e) {
+        log.error(`Failed to initialize file ${filePath}:`, e);
+    }
+}
 
 function getApiKeyFromEnv() {
     if (!fs.existsSync(envPath)) return null;
@@ -53,28 +93,6 @@ function createHypixelHandler() {
     statsHandler = new HypixelHandler(mockProxy);
 }
 
-function createWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1000,
-        height: 650,
-        frame: false,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-        },
-        autoHideMenuBar: true,
-        icon: path.join(__dirname, 'icon.ico')
-    });
-
-    mainWindow.loadFile(path.join(__dirname, 'index.html'));
-    createHypixelHandler();
-
-    mainWindow.once('ready-to-show', () => {
-        autoUpdater.checkForUpdatesAndNotify();
-    });
-}
-
-app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('will-quit', () => { if (proxyProcess) proxyProcess.kill(); });
 
@@ -88,6 +106,78 @@ ipcMain.on('maximize-window', () => {
 });
 ipcMain.on('close-window', () => app.quit());
 
+ipcMain.on('get-app-version', (event) => {
+    event.reply('app-version', app.getVersion());
+});
+
+ipcMain.on('check-for-updates', () => {
+    log.info('User triggered update check.');
+    mainWindow.webContents.send('update-status', 'Checking for updates...');
+    autoUpdater.checkForUpdates();
+});
+
+autoUpdater.on('update-not-available', () => {
+    log.info('Update not available.');
+    mainWindow.webContents.send('update-status', `You are on the latest version: v${app.getVersion()}`);
+    new Notification({
+        title: 'JagProx Updater',
+        body: 'You are already running the latest version.'
+    }).show();
+});
+
+autoUpdater.on('update-available', (info) => {
+    log.info(`Update available: ${info.version}`);
+    mainWindow.webContents.send('update-status', `Update v${info.version} found!`);
+    const notification = new Notification({
+        title: 'Update available!',
+        body: `JagProx v${info.version} is available. Click to download.`,
+        actions: [{ type: 'button', text: 'Download' }]
+    });
+    
+    notification.on('click', () => {
+        log.info('User clicked notification to download update.');
+        mainWindow.webContents.send('update-status', 'Downloading update...');
+        autoUpdater.downloadUpdate();
+    });
+    
+    notification.show();
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    const percent = progressObj.percent.toFixed(2);
+    const transferred = (progressObj.transferred / 1024 / 1024).toFixed(2);
+    const total = (progressObj.total / 1024 / 1024).toFixed(2);
+    log.info(`Download progress: ${percent}%`);
+    mainWindow.webContents.send('update-status', `Downloading... ${percent}% (${transferred}MB / ${total}MB)`);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+    log.info(`Update downloaded: ${info.version}`);
+    mainWindow.webContents.send('update-status', `Update v${info.version} downloaded. Ready to install.`);
+    const notification = new Notification({
+        title: 'Download complete!',
+        body: 'Click to install the update now. The application will restart.',
+        actions: [{ type: 'button', text: 'Install & Restart' }]
+    });
+
+    notification.on('click', () => {
+        log.info('User clicked notification to install update.');
+        autoUpdater.quitAndInstall();
+    });
+
+    notification.show();
+});
+
+autoUpdater.on('error', (err) => {
+    log.error('Error in auto-updater.', err);
+    mainWindow.webContents.send('update-status', 'Error checking for updates.');
+    new Notification({
+        title: 'Update Error',
+        body: `An error occurred: ${err.message}`
+    }).show();
+});
+
+
 ipcMain.on('get-config', (event) => {
     try {
         if (fs.existsSync(configPath)) {
@@ -95,7 +185,7 @@ ipcMain.on('get-config', (event) => {
             event.reply('config-loaded', config);
         }
     } catch (e) {
-        console.error('Failed to load config.yml:', e);
+        log.error('Failed to load config.yml:', e);
     }
 });
 
@@ -109,7 +199,7 @@ ipcMain.on('save-settings', (event, settings) => {
         fs.writeFileSync(configPath, yaml.stringify(config));
         event.reply('settings-saved-reply', true);
     } catch (e) {
-        console.error('Failed to save settings to config.yml:', e);
+        log.error('Failed to save settings to config.yml:', e);
         event.reply('settings-saved-reply', false);
     }
 });
@@ -128,7 +218,7 @@ ipcMain.on('save-api-key', (event, apiKey) => {
         createHypixelHandler();
         event.reply('api-key-saved-reply', true);
     } catch (e) {
-        console.error('Failed to save API key:', e);
+        log.error('Failed to save API key:', e);
         event.reply('api-key-saved-reply', false);
     }
 });
@@ -138,7 +228,7 @@ ipcMain.on('get-aliases', (event) => {
         const data = fs.readFileSync(aliasesPath, 'utf8');
         event.reply('aliases-loaded', JSON.parse(data));
     } catch (e) {
-        console.error('Failed to load aliases:', e);
+        log.error('Failed to load aliases:', e);
         event.reply('aliases-loaded', {});
     }
 });
@@ -148,7 +238,7 @@ ipcMain.on('save-aliases', (event, aliases) => {
         fs.writeFileSync(aliasesPath, JSON.stringify(aliases, null, 4));
         event.reply('aliases-saved-reply', true);
     } catch (e) {
-        console.error('Failed to save aliases:', e);
+        log.error('Failed to save aliases:', e);
         event.reply('aliases-saved-reply', false);
     }
 });
