@@ -1,6 +1,6 @@
 # JagProx - A Powerful Hypixel Proxy
 
-![GitHub repo size](https://img.shields.io/github/repo-size/JagHack/jagprox?style=for-the-badge&color=B33BFF) ![License](https://img.shields.io/github/license/JagHack/jagprox?style=for-the-badge&color=B33BFF) ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/JagHack/jagprox?utm_source=oss&utm_medium=github&utm_campaign=JagHack%2Fjagprox&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+![GitHub repo size](https://img.shields.io/github/repo-size/JagHack/jagprox?style=for-the-badge&color=B33BFF) ![License](https://img.shields.io/github/license/JagHack/jagprox?style=for-the-badge&color=B33BFF) ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/JagHack/jagprox?utm_source=oss&utm_medium=github&utm_campaign=JagHack%2Fjagprox&labelColor=171717&color=B33BFF&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 **Disclaimer:** This is a third-party tool and is not affiliated with, endorsed, or supported by Hypixel Inc. Use at your own risk.
 
