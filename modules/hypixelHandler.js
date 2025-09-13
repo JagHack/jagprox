@@ -14,7 +14,7 @@ class HypixelHandler {
             if (!mojangData) return { error: `Player '${username}' not found.` };
             const status = await this.getHypixelStatus(mojangData.uuid);
             if (!status) return { error: `Could not retrieve status for '${mojangData.username}'.` };
-            
+
             return { username: mojangData.username, uuid: mojangData.uuid, ...status };
         } catch (err) {
             formatter.log(`API Status Check error: ${err.message}`);
@@ -31,8 +31,8 @@ class HypixelHandler {
             const mojangData = await this.getMojangUUID(username);
             if (!mojangData) return { error: `Player '${username}' not found.` };
 
-            const stats = await this.getStats(mojangData.uuid, gameInfo.apiName);
-            if (!stats) return { error: `No ${gameInfo.displayName} stats found for '${mojangData.username}'.` };
+            const stats = await this.getStats(mojangData.uuid);
+            if (!stats) return { error: `Could not retrieve player data for '${mojangData.username}'.` };
 
             return {
                 username: mojangData.username,
@@ -117,8 +117,8 @@ class HypixelHandler {
             const cleanUsername = username.replace(/§[0-9a-fk-or]/g, '').replace(/\[.*?\]\s/g, '');
             const mojangData = await this.getMojangUUID(cleanUsername);
             if (!mojangData) return `§c§o'${cleanUsername}' not found.`;
-            const stats = await this.getStats(mojangData.uuid, gameInfo.apiName);
-            if (!stats || !stats.data) {
+            const stats = await this.getStats(mojangData.uuid);
+            if (!stats || !stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
                 return `§7No ${gameInfo.displayName} stats for ${formatter.formatRank(null)} ${mojangData.username}§7.`;
             }
             return this.formatSinglePlayerQueueStats(mojangData.username, stats, gameInfo);
@@ -129,8 +129,9 @@ class HypixelHandler {
     }
 
     formatSinglePlayerQueueStats(username, stats, gameInfo) {
-        const d = stats.data;
-        const a = stats.achievements;
+        const p = stats.player;
+        const d = p.stats[gameInfo.apiName] || {};
+        const a = p.achievements || {};
         let statLine = "";
         const rank = formatter.formatRank(stats.rank);
         switch (gameInfo.apiName) {
@@ -238,8 +239,11 @@ class HypixelHandler {
         try {
             const mojangData = await this.getMojangUUID(username);
             if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${username}' not found.`);
-            const stats = await this.getStats(mojangData.uuid, gameInfo.apiName);
-            if (!stats) return this.proxy.proxyChat(`§cNo ${gameInfo.displayName} stats found for '${mojangData.username}'.`);
+            const stats = await this.getStats(mojangData.uuid);
+            if (!stats) return this.proxy.proxyChat(`§cCould not retrieve data for '${mojangData.username}'.`);
+            if (!stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
+                return this.proxy.proxyChat(`§cNo ${gameInfo.displayName} stats found for '${mojangData.username}'.`);
+            }
             this.displayFormattedStats(mojangData.username, mojangData.uuid, stats, gameInfo);
         } catch (err) {
             formatter.log(`Statcheck error: ${err.message}`);
@@ -247,19 +251,17 @@ class HypixelHandler {
         }
     }
 
-    async getStats(uuid, gameApiName) {
+    async getStats(uuid) {
         try {
             const response = await fetch(`https://api.hypixel.net/v2/player?key=${this.proxy.env.apiKey}&uuid=${uuid}`);
             if (!response.ok) return null;
             const data = await response.json();
             if (!data.success || !data.player) return null;
             const player = data.player;
-            const gameData = player.stats ? player.stats[gameApiName] : {};
             return {
+                player: player,
                 rank: (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || "NONE"),
                 guild: await this.getGuild(uuid),
-                data: gameData || {},
-                achievements: player.achievements || {},
                 properties: player.properties || []
             };
         } catch (err) {
@@ -299,23 +301,29 @@ class HypixelHandler {
                 asciiLines.push(line);
             }
 
+            const p = stats.player;
+            const d = p.stats[gameInfo.apiName] || {};
+            const a = p.achievements || {};
+
             const rank = formatter.formatRank(stats.rank);
             const guild = stats.guild ? ` §e[${stats.guild}]` : "";
             this.proxy.proxyChat("§7§m----------------------------------------");
             asciiLines.forEach(line => this.proxy.client.write("chat", { message: JSON.stringify({ text: line }), position: 1 }));
             this.proxy.proxyChat(" ");
-            const d = stats.data;
-            const a = stats.achievements;
+            
             let lines = [];
             switch (gameInfo.apiName) {
                 case "Bedwars":
                     lines.push(`${rank} ${username} §7[§f${a.bedwars_level || 0}✫§7]${guild}`);
                     lines.push(`§fWins: §a${(d.wins_bedwars || 0).toLocaleString()} §8| §fLosses: §c${(d.losses_bedwars || 1).toLocaleString()}`);
                     lines.push(`§fFinal Kills: §a${(d.final_kills_bedwars || 0).toLocaleString()} §8| §fFinal Deaths: §c${(d.final_deaths_bedwars || 1).toLocaleString()}`);
-                    const fkdr = ((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2);
-                    const bblr = ((d.beds_broken_bedwars || 0) / (d.beds_lost_bedwars || 1)).toFixed(2);
-                    const wlrBw = ((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2);
-                    lines.push(`§fFKDR: §6${fkdr} §8| §fBBLR: §6${bblr} §8| §fWLR: §6${wlrBw}`);
+                    lines.push(`§fFKDR: §6${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}`);
+                    break;
+                case "SkyWars":
+                    lines.push(`${rank} ${username} §7[§f${p.stats.SkyWars.levelFormatted || '0✫'}§7]${guild}`);
+                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fLosses: §c${(d.losses || 1).toLocaleString()}`);
+                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
+                    lines.push(`§fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
                     break;
                 case "Duels":
                     const prefix = gameInfo.prefix || '';
@@ -324,27 +332,60 @@ class HypixelHandler {
                     const killsKey = prefix ? `${prefix}_kills` : 'kills';
                     const deathsKey = prefix ? `${prefix}_deaths` : 'deaths';
                     const wins = d[winsKey] || 0;
-                    const losses = d[lossesKey] || 1;
-                    const kills = d[killsKey] || 0;
-                    const deaths = d[deathsKey] || 1;
                     lines.push(`§f[${gameInfo.displayName}] ${rank} ${username} §7[§f${wins.toLocaleString()} Wins§7]${guild}`);
-                    lines.push(`§fWins: §a${wins.toLocaleString()} §8| §fLosses: §c${losses.toLocaleString()}`);
-                    lines.push(`§fKills: §a${kills.toLocaleString()} §8| §fDeaths: §c${deaths.toLocaleString()}`);
-                    const wlr = (wins / losses).toFixed(2);
-                    const kdr = (kills / deaths).toFixed(2);
-                    lines.push(`§fWLR: §6${wlr} §8| §fKDR: §6${kdr}`);
+                    lines.push(`§fWins: §a${wins.toLocaleString()} §8| §fLosses: §c${(d[lossesKey] || 1).toLocaleString()}`);
+                    lines.push(`§fKills: §a${(d[killsKey] || 0).toLocaleString()} §8| §fDeaths: §c${(d[deathsKey] || 1).toLocaleString()}`);
+                    lines.push(`§fWLR: §6${(wins / (d[lossesKey] || 1)).toFixed(2)} §8| §fKDR: §6${((d[killsKey] || 0) / (d[deathsKey] || 1)).toFixed(2)}`);
                     break;
-                case "SkyWars":
-                    lines.push(`${rank} ${username} §7[§f${d.levelFormatted || '0✫'}§7]${guild}`);
+                case "Walls3":
+                    lines.push(`${rank} ${username}${guild}`);
                     lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fLosses: §c${(d.losses || 1).toLocaleString()}`);
-                    const wlrSw = ((d.wins || 0) / (d.losses || 1)).toFixed(2);
-                    const KDRSw = ((d.kills || 0) / (d.deaths || 1)).toFixed(2);
-                    lines.push(`§fKDR: §6${KDRSw} §8| §fWLR: §6${wlrSw}`);
+                    lines.push(`§fFinal Kills: §a${(d.final_kills || 0).toLocaleString()} §8| §fFinal Deaths: §c${(d.final_deaths || 1).toLocaleString()}`);
+                    lines.push(`§fFKDR: §6${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
+                    break;
+                case "HungerGames":
+                    lines.push(`${rank} ${username}${guild}`);
+                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()}`);
+                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
+                    lines.push(`§fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
+                    break;
+                case "UHC":
+                    lines.push(`${rank} ${username} §7[§f${(a.uhc_champion || 0)}✫§7]${guild}`);
+                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fScore: §6${(d.score || 0).toLocaleString()}`);
+                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
+                    lines.push(`§fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
+                    break;
+                case "MurderMystery":
+                    lines.push(`${rank} ${username} §7[§f${(d.wins || 0).toLocaleString()} Wins§7]${guild}`);
+                    lines.push(`§fGames: §a${(d.games || 0).toLocaleString()}`);
+                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
+                    lines.push(`§fWin Rate: §6${(((d.wins || 0) / (d.games || 1)) * 100).toFixed(2)}%`);
+                    break;
+                case "BuildBattle":
+                    lines.push(`${rank} ${username} §7[§fScore: ${(d.score || 0).toLocaleString()}§7]${guild}`);
+                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fGames Played: §e${(d.games_played || 0).toLocaleString()}`);
+                    lines.push(`§fWin Rate: §6${(((d.wins || 0) / (d.games_played || 1)) * 100).toFixed(2)}%`);
+                    break;
+                 case "WoolGames":
+                    lines.push(`${rank} ${username}${guild}`);
+                    const ww = d.wool_wars || {};
+                    const stats = ww.stats || {};
+                    lines.push(`§fWins: §a${(stats.wins || 0).toLocaleString()} §8| §fGames: §e${(stats.games_played || 0).toLocaleString()}`);
+                    lines.push(`§fKills: §a${(stats.kills || 0).toLocaleString()} §8| §fAssists: §b${(stats.assists || 0).toLocaleString()}`);
+                    lines.push(`§fWLR: §6${((stats.wins || 0) / ((stats.games_played - (stats.wins || 0)) || 1)).toFixed(2)}`);
+                    break;
+                case "Pit":
+                    const pitProfile = p.stats.Pit ? p.stats.Pit.profile : {};
+                    const pitStats = p.stats.Pit ? p.stats.Pit.pit_stats_ptl : {};
+                    const prestige = pitProfile.prestiges ? pitProfile.prestiges.length : 0;
+                    lines.push(`${rank} ${username} §7[§e${prestige}✫§7]${guild}`);
+                    lines.push(`§fKills: §a${(pitStats.kills || 0).toLocaleString()} §8| §fDeaths: §c${(pitStats.deaths || 1).toLocaleString()}`);
+                    lines.push(`§fKDR: §6${((pitStats.kills || 0) / (pitStats.deaths || 1)).toFixed(2)}`);
                     break;
                 default:
                     lines.push(`${rank} ${username}${guild}`);
-                    lines.push(`§cStat display for ${gameInfo.displayName} is not implemented yet.`);
-                    lines.push(`§eWins: §a${(d.wins || 'N/A').toLocaleString()}`);
+                    lines.push(`§fWins: §a${(d.wins || 'N/A').toLocaleString()}`);
+                    lines.push(`§fKills: §a${(d.kills || 'N/A').toLocaleString()} §8| §fDeaths: §c${(d.deaths || 'N/A').toLocaleString()}`);
             }
             lines.forEach(line => this.proxy.proxyChat(line));
             this.proxy.proxyChat("§7§m----------------------------------------");
