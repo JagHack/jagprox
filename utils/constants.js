@@ -168,10 +168,28 @@ const quickQueueMap = {
   'halloween': { name: 'Halloween Simulator', command: '/play arcade_halloween_simulator' }
 };
 
+const duelsDivisions = {
+    rookie: { wins: 50, levels: 5, step: 10 },
+    iron: { wins: 100, levels: 5, step: 30 },
+    gold: { wins: 250, levels: 5, step: 50 },
+    diamond: { wins: 500, levels: 5, step: 100 },
+    master: { wins: 1000, levels: 5, step: 200 },
+    legend: { wins: 2000, levels: 5, step: 600 },
+    grandmaster: { wins: 5000, levels: 5, step: 1000 },
+    godlike: { wins: 10000, levels: 5, step: 3000 },
+    celestial: { wins: 25000, levels: 5, step: 5000 },
+    divine: { wins: 50000, levels: 5, step: 10000 },
+    ascended: { wins: 100000, levels: 5, step: 20000 }
+};
+
+const romanNumerals = ["I", "II", "III", "IV", "V"];
+
 module.exports = {
     mcColors,
     findClosestMinecraftColor,
     commandAliases,
     gameModeMap,
-    quickQueueMap
+    quickQueueMap,
+    duelsDivisions,
+    romanNumerals
 };

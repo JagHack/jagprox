@@ -258,7 +258,7 @@ ipcMain.on('get-gamemodes', (event) => {
 ipcMain.on('get-player-stats', async (event, { name, gamemode }) => {
     if (!statsHandler) return event.reply('player-stats-result', { error: "Hypixel handler not initialized." });
     const result = await statsHandler.getStatsForAPI(gamemode, name);
-    if (result && !result.error) {
+    if (result && !result.error && result.stats) {
         result.skinUrl = extractSkinUrl(result.stats.properties);
     }
     event.reply('player-stats-result', result);
@@ -269,7 +269,9 @@ ipcMain.on('get-player-status', async (event, name) => {
     const result = await statsHandler.getStatusForAPI(name);
     if (result && !result.error) {
         const playerFull = await statsHandler.getStats(result.uuid, '');
-        result.skinUrl = extractSkinUrl(playerFull.properties);
+        if (playerFull) {
+            result.skinUrl = extractSkinUrl(playerFull.properties);
+        }
     }
     event.reply('player-status-result', result);
 });

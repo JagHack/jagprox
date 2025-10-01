@@ -33,6 +33,8 @@ const autoggMessageInput = document.getElementById('autogg-message');
 const autoggDelayInput = document.getElementById('autogg-delay');
 const checkForUpdatesBtn = document.getElementById('check-for-updates-btn');
 const updateInfo = document.getElementById('update-info');
+let duelsDivisions = null;
+let romanNumerals = null;
 
 minimizeBtn.addEventListener('click', () => ipcRenderer.send('minimize-window'));
 maximizeBtn.addEventListener('click', () => ipcRenderer.send('maximize-window'));
@@ -126,8 +128,9 @@ ipcRenderer.on('player-stats-result', (event, result) => {
         statSearchResults.innerHTML = `<p class="result-error">${result.error}</p>`;
         return;
     }
-    const d = result.stats.data;
-    const a = result.stats.achievements;
+    const player = result.stats.player;
+    const d = (player.stats && player.stats[result.game.apiName]) || {};
+    const a = player.achievements || {};
     let statsHtml = `<div class="result-grid">`;
     switch (result.game.apiName) {
         case 'Bedwars':
@@ -139,18 +142,63 @@ ipcRenderer.on('player-stats-result', (event, result) => {
             statsHtml += `<span>FKDR:</span><span>${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)}</span>`;
             break;
         case 'SkyWars':
-            statsHtml += `<span>Level:</span><span>${d.levelFormatted || 'N/A'}</span>`;
+            statsHtml += `<span>Level:</span><span>${(player.stats.SkyWars && player.stats.SkyWars.levelFormatted) || 'N/A'}</span>`;
             statsHtml += `<span>Wins:</span><span>${(d.wins || 0).toLocaleString()}</span>`;
             statsHtml += `<span>Kills:</span><span>${(d.kills || 0).toLocaleString()}</span>`;
             statsHtml += `<span>Deaths:</span><span>${(d.deaths || 1).toLocaleString()}</span>`;
             statsHtml += `<span>KDR:</span><span>${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}</span>`;
             break;
         case 'Duels':
-            const prefix = result.game.prefix ? `${result.game.prefix}_duel_` : '';
-            const wins = d[`${prefix}wins`] || 0;
-            const losses = d[`${prefix}losses`] || 1;
+            const prefix = result.game.prefix;
+            const wins = d[prefix ? `${prefix}_wins` : 'wins'] || 0;
+            const losses = d[prefix ? `${prefix}_losses` : 'losses'] || 1;
+
+            let prestige = 0;
+            const gameName = result.game.displayName.split(' ')[0].toLowerCase();
+            if (gameName && gameName !== 'duels') {
+                for (const key in d) {
+                    if (key.startsWith(gameName) && key.endsWith('_title_prestige')) {
+                        prestige++;
+                    }
+                }
+            } else { // for "Duels" (overall)
+                for (const key in d) {
+                    if (key.startsWith('all_modes_') && key.endsWith('_title_prestige')) {
+                        prestige++;
+                    }
+                }
+            }
+
+            let division = 'N/A';
+            if (duelsDivisions && romanNumerals) {
+                const divisions = Object.keys(duelsDivisions);
+                let highestDivision = 'N/A';
+                let divisionLevel = '';
+
+                const playerWins = wins;
+
+                for (let i = divisions.length - 1; i >= 0; i--) {
+                    const divisionName = divisions[i];
+                    const divisionData = duelsDivisions[divisionName];
+                    if (playerWins >= divisionData.wins) {
+                        highestDivision = divisionName.charAt(0).toUpperCase() + divisionName.slice(1);
+                        let level = 1;
+                        for (let j = 1; j < divisionData.levels; j++) {
+                            if (playerWins >= divisionData.wins + (j * divisionData.step)) {
+                                level = j + 1;
+                            }
+                        }
+                        divisionLevel = romanNumerals[level - 1];
+                        break;
+                    }
+                }
+                division = highestDivision !== 'N/A' ? `${highestDivision} ${divisionLevel}` : 'N/A';
+            }
+
+            statsHtml += `<span>Prestige:</span><span>${prestige}✫</span>`;
+            statsHtml += `<span>Division:</span><span>${division}</span>`;
             statsHtml += `<span>Wins:</span><span>${wins.toLocaleString()}</span>`;
-            statsHtml += `<span>WLR:</span><span>${(wins / (losses || 1)).toFixed(2)}</span>`;
+            statsHtml += `<span>WLR:</span><span>${(wins / losses).toFixed(2)}</span>`;
             break;
         default: statsHtml += `<span>Wins:</span><span>${(d.wins || 'N/A').toLocaleString()}</span>`;
     }
@@ -195,6 +243,11 @@ ipcRenderer.on('player-status-result', (event, result) => {
 ipcRenderer.on('gamemodes-loaded', (event, gamemodes) => {
     statSearchGamemodeSelect.innerHTML = gamemodes
         .map(gm => `<option value="${gm.value}">${gm.text}</option>`).join('');
+});
+
+ipcRenderer.on('duels-divisions-loaded', (event, data) => {
+    duelsDivisions = data.duelsDivisions;
+    romanNumerals = data.romanNumerals;
 });
 
 function appendToScrollbox(element, message, parseColors = false) {
@@ -305,3 +358,4 @@ ipcRenderer.on('api-key-loaded', (event, apiKey) => {
 
 ipcRenderer.send('get-api-key');
 ipcRenderer.send('get-gamemodes');
+ipcRenderer.send('get-duels-divisions');
