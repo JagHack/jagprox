@@ -117,6 +117,9 @@ ipcMain.on('check-for-updates', () => {
 });
 
 autoUpdater.on('update-not-available', () => {
+     if (process.platform === 'win32') {
+    app.setAppUserModelId("com.jaghack.jagprox");
+    }
     log.info('Update not available.');
     mainWindow.webContents.send('update-status', `You are on the latest version: v${app.getVersion()}`);
     new Notification({
@@ -126,6 +129,9 @@ autoUpdater.on('update-not-available', () => {
 });
 
 autoUpdater.on('update-available', (info) => {
+    if (process.platform === 'win32') {
+    app.setAppUserModelId("com.jaghack.jagprox");
+    }
     log.info(`Update available: ${info.version}`);
     mainWindow.webContents.send('update-status', `Update v${info.version} found!`);
     const notification = new Notification({
@@ -152,6 +158,9 @@ autoUpdater.on('download-progress', (progressObj) => {
 });
 
 autoUpdater.on('update-downloaded', (info) => {
+    if (process.platform === 'win32') {
+    app.setAppUserModelId("com.jaghack.jagprox");
+    }
     log.info(`Update downloaded: ${info.version}`);
     mainWindow.webContents.send('update-status', `Update v${info.version} downloaded. Ready to install.`);
     const notification = new Notification({
@@ -169,6 +178,9 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 autoUpdater.on('error', (err) => {
+    if (process.platform === 'win32') {
+    app.setAppUserModelId("com.jaghack.jagprox");
+    }
     log.error('Error in auto-updater.', err);
     mainWindow.webContents.send('update-status', 'Error checking for updates.');
     new Notification({

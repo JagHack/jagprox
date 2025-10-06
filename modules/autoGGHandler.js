@@ -36,7 +36,7 @@ class AutoGGHandler {
 
                 setTimeout(() => {
                     if (this.proxy.target) {
-                        this.proxy.target.write('chat', { message: message });
+                        this.proxy.target.write('chat', { message: '/ac ' + message });
                         formatter.log(`AutoGG (Title) sent: "${message}"`);
                     }
                 }, delay);
