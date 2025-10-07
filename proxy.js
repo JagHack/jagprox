@@ -9,6 +9,7 @@ const TabAlerter = require("./modules/tabAlerter.js");
 const AutoGGHandler = require("./modules/autoGGHandler.js");
 const path = require("path");
 const fs = require("fs");
+const discordRpc = require('./modules/discordRpcHandler.js');
 
 function replaceNamesInComponent(component, nicknames) {
     if (!component) return;
@@ -63,6 +64,14 @@ class JagProx {
         formatter.log(`Client connected to proxy: ${this.client.username}`);
         this.lastPlayCommand = null;
         this.autoGG.reset();
+
+        discordRpc.setActivity({
+            details: 'Playing',
+            state: 'In Game',
+            largeImageKey: 'icon',
+            largeImageText: 'JagProx',
+            instance: false,
+        });
 
         const userDataPath = process.env.USER_DATA_PATH || '.';
         const cachePath = path.isAbsolute(this.config.cache_folder)
@@ -176,6 +185,14 @@ class JagProx {
 
             this.client = null;
             this.target = null;
+
+            discordRpc.setActivity({
+                details: 'Idling',
+                state: 'In Launcher',
+                largeImageKey: 'icon',
+                largeImageText: 'JagProx',
+                instance: false,
+            });
         };
 
         this.client.on("error", onEndOrError);

@@ -7,6 +7,7 @@ const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const HypixelHandler = require('../modules/hypixelHandler.js');
 const { gameModeMap } = require('../utils/constants.js');
+const discordRpc = require('../modules/discordRpcHandler.js');
 
 let mainWindow;
 let proxyProcess;
@@ -51,6 +52,14 @@ app.whenReady().then(() => {
     initializeFile(envPath, 'HYPIXEL_API_KEY=');
 
     createWindow();
+
+    discordRpc.setActivity({
+        details: 'Idling',
+        state: 'In Launcher',
+        largeImageKey: 'icon',
+        largeImageText: 'JagProx',
+        instance: false,
+    });
 });
 
 
@@ -304,6 +313,14 @@ ipcMain.on('toggle-proxy', (event, start) => {
             env: childEnv
         });
 
+        discordRpc.setActivity({
+            details: 'Playing',
+            state: 'In Game',
+            largeImageKey: 'icon',
+            largeImageText: 'JagProx',
+            instance: false,
+        });
+
         mainWindow.webContents.send('proxy-status', 'running');
         const handleData = (data) => {
             const lines = data.toString().split('\n').filter(line => line.length > 0);
@@ -321,6 +338,13 @@ ipcMain.on('toggle-proxy', (event, start) => {
             mainWindow.webContents.send('proxy-log', `[SYSTEM] Proxy process exited with code ${code}`);
             mainWindow.webContents.send('proxy-status', 'stopped');
             proxyProcess = null;
+            discordRpc.setActivity({
+                details: 'Idling',
+                state: 'In Launcher',
+                largeImageKey: 'icon',
+                largeImageText: 'JagProx',
+                instance: false,
+            });
         });
     } else if (!start && proxyProcess) {
         proxyProcess.kill();
