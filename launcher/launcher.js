@@ -17,6 +17,8 @@ let aliasesPath;
 let envPath;
 let configPath;
 
+let config = {};
+
 function createWindow() {
     log.info('Creating main window...');
     mainWindow = new BrowserWindow({
@@ -33,6 +35,17 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     createHypixelHandler();
+
+    try {
+        if (fs.existsSync(configPath)) {
+            config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
+            if (config.discord_rpc && config.discord_rpc.enabled) {
+                discordRpc.login();
+            }
+        }
+    } catch (e) {
+        log.error('Failed to load config.yml for Discord RPC:', e);
+    }
 }
 
 app.whenReady().then(() => {
@@ -52,14 +65,6 @@ app.whenReady().then(() => {
     initializeFile(envPath, 'HYPIXEL_API_KEY=');
 
     createWindow();
-
-    discordRpc.setActivity({
-        details: 'Idling',
-        state: 'In Launcher',
-        largeImageKey: 'icon',
-        largeImageText: 'JagProx',
-        instance: false,
-    });
 });
 
 
@@ -212,16 +217,33 @@ ipcMain.on('get-config', (event) => {
 
 ipcMain.on('save-settings', (event, settings) => {
     try {
-        let config = {};
         if (fs.existsSync(configPath)) {
             config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
         }
         config.auto_gg = settings.auto_gg;
+        config.discord_rpc = settings.discord_rpc;
         fs.writeFileSync(configPath, yaml.stringify(config));
         event.reply('settings-saved-reply', true);
     } catch (e) {
         log.error('Failed to save settings to config.yml:', e);
         event.reply('settings-saved-reply', false);
+    }
+});
+
+ipcMain.on('toggle-discord-rpc', (event, enabled) => {
+    try {
+        if (enabled) {
+            discordRpc.login();
+        } else {
+            discordRpc.logout();
+        }
+        if (fs.existsSync(configPath)) {
+            config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
+        }
+        config.discord_rpc = { enabled };
+        fs.writeFileSync(configPath, yaml.stringify(config));
+    } catch (e) {
+        log.error('Failed to toggle Discord RPC and save settings:', e);
     }
 });
 
@@ -313,13 +335,15 @@ ipcMain.on('toggle-proxy', (event, start) => {
             env: childEnv
         });
 
-        discordRpc.setActivity({
-            details: 'Playing',
-            state: 'In Game',
-            largeImageKey: 'icon',
-            largeImageText: 'JagProx',
-            instance: false,
-        });
+        if (discordRpc.isActive()) {
+            discordRpc.setActivity({
+                details: 'Playing',
+                state: 'In Game',
+                largeImageKey: 'icon',
+                largeImageText: 'JagProx',
+                instance: false,
+            });
+        }
 
         mainWindow.webContents.send('proxy-status', 'running');
         const handleData = (data) => {
@@ -338,13 +362,15 @@ ipcMain.on('toggle-proxy', (event, start) => {
             mainWindow.webContents.send('proxy-log', `[SYSTEM] Proxy process exited with code ${code}`);
             mainWindow.webContents.send('proxy-status', 'stopped');
             proxyProcess = null;
-            discordRpc.setActivity({
-                details: 'Idling',
-                state: 'In Launcher',
-                largeImageKey: 'icon',
-                largeImageText: 'JagProx',
-                instance: false,
-            });
+            if (discordRpc.isActive()) {
+                discordRpc.setActivity({
+                    details: 'Idling',
+                    state: 'In Launcher',
+                    largeImageKey: 'icon',
+                    largeImageText: 'JagProx',
+                    instance: false,
+                });
+            }
         });
     } else if (!start && proxyProcess) {
         proxyProcess.kill();

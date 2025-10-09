@@ -31,6 +31,7 @@ const saveSettingsBtn = document.getElementById('save-settings-btn');
 const autoggEnabledCheckbox = document.getElementById('autogg-enabled');
 const autoggMessageInput = document.getElementById('autogg-message');
 const autoggDelayInput = document.getElementById('autogg-delay');
+const discordRpcEnabledCheckbox = document.getElementById('discord-rpc-enabled');
 const checkForUpdatesBtn = document.getElementById('check-for-updates-btn');
 const updateInfo = document.getElementById('update-info');
 let duelsDivisions = null;
@@ -89,9 +90,16 @@ saveSettingsBtn.addEventListener('click', () => {
             enabled: autoggEnabledCheckbox.checked,
             message: autoggMessageInput.value || "gg",
             delay: parseInt(autoggDelayInput.value) || 1500
+        },
+        discord_rpc: {
+            enabled: discordRpcEnabledCheckbox.checked
         }
     };
     ipcRenderer.send('save-settings', settings);
+});
+
+discordRpcEnabledCheckbox.addEventListener('change', () => {
+    ipcRenderer.send('toggle-discord-rpc', discordRpcEnabledCheckbox.checked);
 });
 
 checkForUpdatesBtn.addEventListener('click', () => {
@@ -107,10 +115,15 @@ ipcRenderer.on('update-status', (event, message) => {
 });
 
 ipcRenderer.on('config-loaded', (event, config) => {
-    if (config && config.auto_gg) {
-        autoggEnabledCheckbox.checked = config.auto_gg.enabled || false;
-        autoggMessageInput.value = config.auto_gg.message || "gg";
-        autoggDelayInput.value = config.auto_gg.delay || 1500;
+    if (config) {
+        if (config.auto_gg) {
+            autoggEnabledCheckbox.checked = config.auto_gg.enabled || false;
+            autoggMessageInput.value = config.auto_gg.message || "gg";
+            autoggDelayInput.value = config.auto_gg.delay || 1500;
+        }
+        if (config.discord_rpc) {
+            discordRpcEnabledCheckbox.checked = config.discord_rpc.enabled || false;
+        }
     }
 });
 
