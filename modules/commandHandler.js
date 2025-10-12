@@ -5,6 +5,7 @@ const aliasManager = require('../aliasManager.js');
 const formatter = require('../formatter.js');
 const { gameModeMap, quickQueueMap } = require('../utils/constants.js');
 const { getStatValue, statAliases } = require('../utils/stat-helper.js');
+const discordRpc = require('./discordRpcHandler.js');
 
 class CommandHandler {
     constructor(proxy) {
@@ -99,6 +100,9 @@ class CommandHandler {
                 return true;
             case 'jagprox':
                 this.handleHelpCommand();
+                return true;
+            case 'drpc':
+                this.handleDrpcCommand();
                 return true;
             default:
                 return false;
@@ -267,6 +271,7 @@ class CommandHandler {
             { syntax: '/alert <add|rem|list> [player]', desc: 'Manages in-game alerts for players.' },
             { syntax: '/nickname <add|rem|list> [args]', desc: 'Sets local nicknames for players.' },
             { syntax: '/superf <add|rem|list> [args]', desc: "Tracks friends' game activity." },
+            { syntax: '/drpc', desc: 'Toggles the Discord Rich Presence.' },
             { syntax: '/jagprox', desc: 'Displays this help message.' }
         ];
 
@@ -287,6 +292,21 @@ class CommandHandler {
         helpMessage += "\n§r\n§d§m----------------------------------------------------";
 
         this.proxy.proxyChat(helpMessage);
+    }
+
+    handleDrpcCommand() {
+        const drpcConfig = this.proxy.config.discord_rpc || { enabled: true };
+        drpcConfig.enabled = !drpcConfig.enabled;
+        this.proxy.config.discord_rpc = drpcConfig;
+
+        if (drpcConfig.enabled) {
+            discordRpc.login();
+            this.proxy.proxyChat("§aDiscord RPC has been enabled.");
+        } else {
+            discordRpc.logout();
+            this.proxy.proxyChat("§cDiscord RPC has been disabled.");
+        }
+        this.saveConfig();
     }
 
     handleNicknameCommand(args) {
@@ -485,6 +505,7 @@ class CommandHandler {
             fileConfig.super_friends = this.proxy.config.super_friends;
             fileConfig.tab_alerts = this.proxy.config.tab_alerts;
             fileConfig.nicknames = this.proxy.config.nicknames;
+            fileConfig.discord_rpc = this.proxy.config.discord_rpc;
             fs.writeFileSync(configPath, yaml.stringify(fileConfig), 'utf8');
         } catch (e) {
             this.proxy.proxyChat("§cError saving configuration to file.");

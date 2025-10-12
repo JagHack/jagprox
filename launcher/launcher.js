@@ -221,7 +221,6 @@ ipcMain.on('save-settings', (event, settings) => {
             config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
         }
         config.auto_gg = settings.auto_gg;
-        config.discord_rpc = settings.discord_rpc;
         fs.writeFileSync(configPath, yaml.stringify(config));
         event.reply('settings-saved-reply', true);
     } catch (e) {
@@ -342,6 +341,7 @@ ipcMain.on('toggle-proxy', (event, start) => {
                 largeImageKey: 'icon',
                 largeImageText: 'JagProx',
                 instance: false,
+                startTimestamp: new Date()
             });
         }
 
@@ -369,6 +369,7 @@ ipcMain.on('toggle-proxy', (event, start) => {
                     largeImageKey: 'icon',
                     largeImageText: 'JagProx',
                     instance: false,
+                    startTimestamp: new Date()
                 });
             }
         });

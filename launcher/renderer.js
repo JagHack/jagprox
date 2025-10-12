@@ -90,9 +90,6 @@ saveSettingsBtn.addEventListener('click', () => {
             enabled: autoggEnabledCheckbox.checked,
             message: autoggMessageInput.value || "gg",
             delay: parseInt(autoggDelayInput.value) || 1500
-        },
-        discord_rpc: {
-            enabled: discordRpcEnabledCheckbox.checked
         }
     };
     ipcRenderer.send('save-settings', settings);
@@ -101,6 +98,8 @@ saveSettingsBtn.addEventListener('click', () => {
 discordRpcEnabledCheckbox.addEventListener('change', () => {
     ipcRenderer.send('toggle-discord-rpc', discordRpcEnabledCheckbox.checked);
 });
+
+
 
 checkForUpdatesBtn.addEventListener('click', () => {
     ipcRenderer.send('check-for-updates');

@@ -40,6 +40,10 @@ class JagProx {
         this.tabAlerter = new TabAlerter(this);
         this.autoGG = new AutoGGHandler(this);
 
+        if (this.config.discord_rpc && this.config.discord_rpc.enabled) {
+            discordRpc.login();
+        }
+
         this.server = mc.createServer({
             "online-mode": true,
             port: this.config.port || 25565,
@@ -71,6 +75,7 @@ class JagProx {
             largeImageKey: 'icon',
             largeImageText: 'JagProx',
             instance: false,
+            startTimestamp: new Date()
         });
 
         const userDataPath = process.env.USER_DATA_PATH || '.';
@@ -192,6 +197,7 @@ class JagProx {
                 largeImageKey: 'icon',
                 largeImageText: 'JagProx',
                 instance: false,
+                startTimestamp: new Date()
             });
         };
 

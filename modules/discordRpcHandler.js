@@ -26,6 +26,7 @@ function login() {
       largeImageKey: 'icon',
       largeImageText: 'JagProx',
       instance: false,
+      startTimestamp: new Date()
     });
   }).catch(e => {
     console.error('Failed to connect Discord RPC:', e);
