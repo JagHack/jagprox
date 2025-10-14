@@ -157,6 +157,7 @@ const quickQueueMap = {
   'vampirez': { name: 'VampireZ', command: '/play vampirez' },
   'voidless2': { name: 'Voidless Doubles', command: '/play bedwars_eight_two_voidless' },
   'voidless4': { name: 'Voidless 4v4v4v4', command: '/play bedwars_four_four_voidless' },
+  'bw4s': { name: 'Bedwars 4v4v4v4', command: '/play bedwars_four_four' },
   'zombiesp': { name: 'Zombies (Prison)', command: '/play arcade_zombies_prison' },
   'zombiesd': { name: 'Zombies (Dead End)', command: '/play arcade_zombies_dead_end' },
   'zombiesb': { name: 'Zombies (Bad Blood)', command: '/play arcade_zombies_bad_blood' },
