@@ -37,7 +37,7 @@ JagProx is a powerful, local Hypixel proxy built with Node.js that enhances your
 
 ## Installation Guide
 
-Follow these steps to get JagProx up and running on your system.
+Follow these steps to get the JagProx devbuild up and running on your system. If you only want a working build, go to the releases tab and download the latest setup.exe file.
 
 ### 1. Prerequisites
 
@@ -78,21 +78,8 @@ You have two configuration files in the root of the `jagprox` folder:
 ## How to Use
 
 ### 1. Starting JagProx
-
-You have two ways to run the application:
-
-**A) Using the Desktop Launcher (Recommended)**
-This provides a full user interface to control the proxy and access all features.
-
 ```bash
 npm run launcher
-```
-
-**B) Running the Proxy Only (Headless)**
-This will start the proxy in your terminal without the user interface.
-
-```bash
-npm start
 ```
 
 ### 2. Connecting in Minecraft
@@ -131,6 +118,12 @@ npm start
 
 * `/nickname <add|remove|list> [player] [nickname]`
   Set a local, client-side nickname for a player that appears in chat and the tab list.
+
+* `/drpc`
+  Toggles the discord rich presence.
+
+* `/goal`
+  Sets FKDR, WLR or BBLR goals for specific modes.
 
 * `/jagprox`
   Displays the list of available custom commands.
