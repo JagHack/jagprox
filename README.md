@@ -20,8 +20,11 @@ JagProx is a powerful, local Hypixel proxy built with Node.js that enhances your
 - **Advanced Friend Notifications (`/superf`):**  
   Track specific "super friends." Get custom, multi-line notifications when they log in or out. When they join, their stats for your predefined gamemodes are automatically fetched and displayed.
 
-- **Party Stat Check (`/psc`):**  
-  Instantly get a statistical overview (Bedwars stats) of all members in your current party to assess team strength.
+- **Party Stat Check (`/psc`):**
+
+  Checks the stats of all players in your party for a specified game mode. If no game mode is provided, it defaults to the current game or Bedwars. This is useful for quickly assessing your party's skill level before starting a game.
+
+  * `/psc [gamemode]`
 
 - **Modern Desktop Launcher:**  
   A sleek, standalone launcher to manage the proxy, view logs, and access tools without cluttering your game.

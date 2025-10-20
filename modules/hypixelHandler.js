@@ -46,7 +46,7 @@ class HypixelHandler {
         }
     }
 
-    handlePartyStatCheck() {
+    handlePartyStatCheck(gamemode) {
         this.proxy.proxyChat("§eRequesting party member list...");
         const partyMembers = new Set();
         let capturing = false;
@@ -88,7 +88,7 @@ class HypixelHandler {
                 if (partyMembers.size > 0) {
                     capturing = false;
                     this.proxy.target.removeListener('packet', partyListener);
-                    this.processPartyMembers(Array.from(partyMembers));
+                    this.processPartyMembers(Array.from(partyMembers), gamemode);
                 }
             }
         };
@@ -100,23 +100,19 @@ class HypixelHandler {
             if (capturing) {
                 this.proxy.target.removeListener('packet', partyListener);
                 if (partyMembers.size > 0) {
-                    this.processPartyMembers(Array.from(partyMembers));
+                    this.processPartyMembers(Array.from(partyMembers), gamemode);
                 }
             }
         }, 5000);
     }
 
-    async processPartyMembers(partyMembers) {
+    async processPartyMembers(partyMembers, gamemode) {
         if (partyMembers.length === 0) {
             this.proxy.proxyChat("§cCould not find any party members.");
             return;
         }
 
-        const currentGameKey = this.proxy.queueStats.currentGameKey;
-        let gameInfo = gameModeMap.bedwars;
-        if (currentGameKey && gameModeMap[currentGameKey]) {
-            gameInfo = gameModeMap[currentGameKey];
-        }
+        let gameInfo = gameModeMap[gamemode] || gameModeMap[this.proxy.queueStats.currentGameKey] || gameModeMap.bedwars;
 
         this.proxy.proxyChat(`§aFound ${partyMembers.length} members. Fetching stats for §e${gameInfo.displayName}§a...`);
 

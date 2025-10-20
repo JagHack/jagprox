@@ -82,7 +82,7 @@ class CommandHandler {
                 this.handleSuperFriend(args);
                 return true;
             case 'psc':
-                this.proxy.hypixel.handlePartyStatCheck();
+                this.proxy.hypixel.handlePartyStatCheck(args[0]);
                 return true;
             case 'alert':
                 this.handleAlertCommand(args);
@@ -266,7 +266,7 @@ class CommandHandler {
             { syntax: `/${statusAlias} <player>`, desc: "Shows a player's online status." },
             { syntax: '/goal <set|view|cancel> [args]', desc: 'Manages your personal stat goals.' },
             { syntax: '/q <mode>', desc: 'Quickly joins a game mode. Use /q ? for a list.' },
-            { syntax: '/psc', desc: 'Runs a stat check for all party members.' },
+            { syntax: '/psc [game]', desc: 'Runs a stat check for all party members.' },
             { syntax: '/rq', desc: 'Re-queues your last played game.' },
             { syntax: '/alert <add|rem|list> [player]', desc: 'Manages in-game alerts for players.' },
             { syntax: '/nickname <add|rem|list> [args]', desc: 'Sets local nicknames for players.' },
