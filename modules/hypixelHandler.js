@@ -8,6 +8,22 @@ class HypixelHandler {
         this.proxy = proxy;
     }
 
+    resolveNickname(name) {
+        const nicknames = this.proxy.config.nicknames || {};
+        const lowerName = name.toLowerCase();
+        for (const realName in nicknames) {
+            if (nicknames[realName].toLowerCase() === lowerName) {
+                return realName;
+            }
+        }
+        const realName = Object.keys(nicknames).find(key => key.toLowerCase() === lowerName);
+        if (realName) {
+            return realName;
+        }
+
+        return name;
+    }
+
     async getStatusForAPI(username) {
         try {
             const mojangData = await this.getMojangUUID(username);
@@ -133,7 +149,9 @@ class HypixelHandler {
             const cleanUsername = username.replace(/§[0-9a-fk-or]/g, '').replace(/\[.*?\]\s/g, '');
             if (!cleanUsername) return null;
 
-            const mojangData = await this.getMojangUUID(cleanUsername);
+            const realUsername = this.resolveNickname(cleanUsername);
+
+            const mojangData = await this.getMojangUUID(realUsername);
             if (!mojangData) return `  §c§o'${cleanUsername}' not found.`;
             
             const stats = await this.getStats(mojangData.uuid);

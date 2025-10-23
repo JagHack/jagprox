@@ -12,17 +12,7 @@ class CommandHandler {
         this.proxy = proxy;
     }
 
-    resolveNickname(name) {
-        const nicknames = this.proxy.config.nicknames || {};
-        const lowerName = name.toLowerCase();
 
-        for (const realName in nicknames) {
-            if (nicknames[realName].toLowerCase() === lowerName) {
-                return realName;
-            }
-        }
-        return name;
-    }
 
     handle(message) {
         const aliases = aliasManager.getAliases();
@@ -58,7 +48,7 @@ class CommandHandler {
                     this.proxy.proxyChat("§eUse /sc ? to see all available gamemodes.");
                     return true;
                 }
-                const realName = this.resolveNickname(username);
+                const realName = this.proxy.hypixel.resolveNickname(username);
                 this.proxy.hypixel.statcheck(gamemode, realName);
                 return true;
             }
@@ -68,7 +58,7 @@ class CommandHandler {
                     this.proxy.proxyChat("§cUsage: /status <username>");
                     return true;
                 }
-                const realName = this.resolveNickname(username);
+                const realName = this.proxy.hypixel.resolveNickname(username);
                 this.proxy.hypixel.getPlayerStatus(realName);
                 return true;
             }
