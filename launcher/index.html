@@ -1,152 +1,306 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
-    <title>JagProx Launcher</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
-</head>
-<body class="sidebar-open">
-
-    <div class="title-bar">
-        <div class="title-bar-text">
-            <i class="fas fa-bolt"></i>
-            JagProx Launcher
-        </div>
-        <div class="window-controls">
-            <button class="window-btn" id="minimize-btn"><i class="fas fa-minus"></i></button>
-            <button class="window-btn" id="maximize-btn"><i class="far fa-square"></i></button>
-            <button class="window-btn close-btn" id="close-btn"><i class="fas fa-times"></i></button>
-        </div>
-    </div>
-
-    <div class="app-container">
-        <div class="sidebar" id="sidebar">
-            <nav>
-                <a href="#" class="nav-link active" data-page="home"><i class="fas fa-home"></i><span>Home</span></a>
-                <a href="#" class="nav-link" data-page="logs"><i class="fas fa-terminal"></i><span>Log Monitor</span></a>
-                <a href="#" class="nav-link" data-page="chat"><i class="fas fa-comments"></i><span>In-Game Chat</span></a>
-                <a href="#" class="nav-link" data-page="aliases"><i class="fas fa-list-ul"></i><span>Aliases</span></a>
-                <a href="#" class="nav-link" data-page="stat-search"><i class="fas fa-chart-bar"></i><span>Stat Search</span></a>
-                <a href="#" class="nav-link" data-page="status-check"><i class="fas fa-user-clock"></i><span>Status Check</span></a>
-                <a href="#" class="nav-link" data-page="settings"><i class="fas fa-cog"></i><span>Settings</span></a>
-            </nav>
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="script-src 'self' 'unsafe-inline';"
+        />
+        <title>JagProx Launcher</title>
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        />
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body class="sidebar-open">
+        <div class="title-bar">
+            <div class="title-bar-text">
+                <i class="fas fa-bolt"></i>
+                JagProx Launcher
+            </div>
+            <div class="window-controls">
+                <button class="window-btn" id="minimize-btn">
+                    <i class="fas fa-minus"></i>
+                </button>
+                <button class="window-btn" id="maximize-btn">
+                    <i class="far fa-square"></i>
+                </button>
+                <button class="window-btn close-btn" id="close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
         </div>
 
-        <div class="top-bar">
-            <button id="burger-menu-btn"><i class="fas fa-bars"></i></button>
-        </div>
+        <div class="app-container">
+            <div class="sidebar" id="sidebar">
+                <nav>
+                    <a href="#" class="nav-link active" data-page="home"
+                        ><i class="fas fa-home"></i><span>Home</span></a
+                    >
+                    <a href="#" class="nav-link" data-page="logs"
+                        ><i class="fas fa-terminal"></i
+                        ><span>Log Monitor</span></a
+                    >
+                    <a href="#" class="nav-link" data-page="chat"
+                        ><i class="fas fa-comments"></i
+                        ><span>In-Game Chat</span></a
+                    >
+                    <a href="#" class="nav-link" data-page="aliases"
+                        ><i class="fas fa-list-ul"></i><span>Aliases</span></a
+                    >
+                    <a href="#" class="nav-link" data-page="stat-search"
+                        ><i class="fas fa-chart-bar"></i
+                        ><span>Stat Search</span></a
+                    >
+                    <a href="#" class="nav-link" data-page="status-check"
+                        ><i class="fas fa-user-clock"></i
+                        ><span>Status Check</span></a
+                    >
+                    <a href="#" class="nav-link" data-page="settings"
+                        ><i class="fas fa-cog"></i><span>Settings</span></a
+                    >
+                </nav>
+            </div>
 
-        <div class="main-content">
-            <div class="page active" id="home">
-                <div class="header"><h1>JagProx</h1><p>Your Hypixel Advantage</p></div>
-                <button id="toggle-proxy-btn" data-status="stopped">Launch Proxy</button>
-                <div class="api-key-container">
-                    <div class="api-key-wrapper">
-                        <input type="password" id="api-key-input" placeholder="Enter your Hypixel API Key...">
-                        <i class="fas fa-eye" id="toggle-api-key-btn"></i>
+            <div class="top-bar">
+                <button id="burger-menu-btn">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+
+            <div class="main-content">
+                <div class="page active" id="home">
+                    <div class="header">
+                        <h1>JagProx</h1>
+                        <p>Your Hypixel Advantage</p>
                     </div>
-                    <button class="action-btn save-btn" id="save-api-key-btn"><i class="fas fa-save"></i> Save Key</button>
-                </div>
-            </div>
-
-            <div class="page" id="stat-search">
-                <div class="settings-container">
-                    <div class="settings-header"><i class="fas fa-chart-bar"></i><span>Player Stat Search</span></div>
-                    <div class="search-form-grid">
-                        <input type="text" id="stat-search-name" placeholder="Enter player name">
-                        <select id="stat-search-gamemode"></select>
-                        <button class="action-btn" id="stat-search-btn"><i class="fas fa-search"></i> Search</button>
+                    <button id="toggle-proxy-btn" data-status="stopped">
+                        Launch Proxy
+                    </button>
+                    <div class="api-key-container">
+                        <div class="api-key-wrapper">
+                            <input
+                                type="password"
+                                id="api-key-input"
+                                placeholder="Enter your Hypixel API Key..."
+                            />
+                            <i class="fas fa-eye" id="toggle-api-key-btn"></i>
+                        </div>
+                        <button
+                            class="action-btn save-btn"
+                            id="save-api-key-btn"
+                        >
+                            <i class="fas fa-save"></i> Save Key
+                        </button>
                     </div>
-                    <div class="search-results-container" id="stat-search-results"></div>
                 </div>
-            </div>
 
-            <div class="page" id="status-check">
-                <div class="settings-container" style="max-width: 600px;">
-                    <div class="settings-header"><i class="fas fa-user-clock"></i><span>Player Status Check</span></div>
-                    <div class="search-form-grid">
-                        <input type="text" id="status-check-name" placeholder="Enter player name">
-                        <button class="action-btn" id="status-check-btn"><i class="fas fa-search"></i> Check Status</button>
+                <div class="page" id="stat-search">
+                    <div class="settings-container">
+                        <div class="settings-header">
+                            <i class="fas fa-chart-bar"></i
+                            ><span>Player Stat Search</span>
+                        </div>
+                        <div class="search-form-grid">
+                            <input
+                                type="text"
+                                id="stat-search-name"
+                                placeholder="Enter player name"
+                            />
+                            <select id="stat-search-gamemode"></select>
+                            <button class="action-btn" id="stat-search-btn">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                        <div
+                            class="search-results-container"
+                            id="stat-search-results"
+                        ></div>
                     </div>
-                    <div class="search-results-container" id="status-check-results"></div>
                 </div>
-            </div>
 
-            <div class="page" id="logs">
-                <div id="log-container"><div class="log-header"><i class="fas fa-terminal"></i><span>LIVE LOGS</span></div><div id="log-output"></div></div>
-            </div>
-            <div class="page" id="chat">
-                <div id="chat-container"><div class="chat-header"><i class="fas fa-comments"></i><span>IN-GAME CHAT</span></div><div id="chat-output"></div></div>
-            </div>
-            <div class="page" id="aliases">
-                <div class="settings-container">
-                    <div class="settings-header"><i class="fas fa-list-ul"></i><span>Command Aliases</span></div>
-                    <div class="settings-content" id="aliases-container"></div>
-                    <div class="settings-actions">
-                        <button class="action-btn" id="add-alias-btn"><i class="fas fa-plus"></i> New Alias</button>
-                        <button class="action-btn save-btn" id="save-aliases-btn"><i class="fas fa-save"></i> Save Aliases</button>
+                <div class="page" id="status-check">
+                    <div class="settings-container" style="max-width: 600px">
+                        <div class="settings-header">
+                            <i class="fas fa-user-clock"></i
+                            ><span>Player Status Check</span>
+                        </div>
+                        <div class="search-form-grid">
+                            <input
+                                type="text"
+                                id="status-check-name"
+                                placeholder="Enter player name"
+                            />
+                            <button class="action-btn" id="status-check-btn">
+                                <i class="fas fa-search"></i> Check Status
+                            </button>
+                        </div>
+                        <div
+                            class="search-results-container"
+                            id="status-check-results"
+                        ></div>
                     </div>
-                     <p class="settings-note">Note: The proxy must be restarted for changes to take effect.</p>
                 </div>
-            </div>
 
-            <div class="page" id="settings">
-                <div class="settings-container">
-                    <div class="settings-header"><i class="fas fa-cog"></i><span>Settings</span></div>
-                    <div class="settings-content">
-                        <div class="settings-group">
-                            <div class="settings-group-header">Auto GG</div>
-                            <div class="settings-item">
-                                <label for="autogg-enabled">Enable Auto GG</label>
-                                <input type="checkbox" id="autogg-enabled">
+                <div class="page" id="logs">
+                    <div id="log-container">
+                        <div class="log-header">
+                            <i class="fas fa-terminal"></i>
+                            <span>LIVE LOGS</span>
+                            <button
+                                class="action-btn"
+                                id="copy-log-btn"
+                                title="Copy Logs"
+                                style="margin-left: auto"
+                            >
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <div id="log-output"></div>
+                    </div>
+                </div>
+                <div class="page" id="chat">
+                    <div id="chat-container">
+                        <div class="chat-header">
+                            <i class="fas fa-comments"></i
+                            ><span>IN-GAME CHAT</span>
+                        </div>
+                        <div id="chat-output"></div>
+                    </div>
+                </div>
+                <div class="page" id="aliases">
+                    <div class="settings-container">
+                        <div class="settings-header">
+                            <i class="fas fa-list-ul"></i
+                            ><span>Command Aliases</span>
+                        </div>
+                        <div
+                            class="settings-content"
+                            id="aliases-container"
+                        ></div>
+                        <div class="settings-actions">
+                            <button class="action-btn" id="add-alias-btn">
+                                <i class="fas fa-plus"></i> New Alias
+                            </button>
+                            <button
+                                class="action-btn save-btn"
+                                id="save-aliases-btn"
+                            >
+                                <i class="fas fa-save"></i> Save Aliases
+                            </button>
+                        </div>
+                        <p class="settings-note">
+                            Note: The proxy must be restarted for changes to
+                            take effect.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="page" id="settings">
+                    <div class="settings-container">
+                        <div class="settings-header">
+                            <i class="fas fa-cog"></i><span>Settings</span>
+                        </div>
+                        <div class="settings-content">
+                            <div class="settings-group">
+                                <div class="settings-group-header">Auto GG</div>
+                                <div class="settings-item">
+                                    <label for="autogg-enabled"
+                                        >Enable Auto GG</label
+                                    >
+                                    <input
+                                        type="checkbox"
+                                        id="autogg-enabled"
+                                    />
+                                </div>
+                                <div class="settings-item">
+                                    <label for="autogg-message">Message</label>
+                                    <input
+                                        type="text"
+                                        id="autogg-message"
+                                        placeholder="gg"
+                                    />
+                                </div>
+                                <div class="settings-item">
+                                    <label for="autogg-delay">Delay (ms)</label>
+                                    <input
+                                        type="number"
+                                        id="autogg-delay"
+                                        placeholder="1500"
+                                        min="0"
+                                        step="100"
+                                    />
+                                </div>
                             </div>
-                            <div class="settings-item">
-                                <label for="autogg-message">Message</label>
-                                <input type="text" id="autogg-message" placeholder="gg">
+                            <div class="settings-group">
+                                <div class="settings-group-header">
+                                    Application Updates
+                                </div>
+                                <div class="update-container">
+                                    <p id="update-info">
+                                        Current Version: v0.0.0
+                                    </p>
+                                    <button
+                                        class="action-btn"
+                                        id="check-for-updates-btn"
+                                    >
+                                        <i class="fas fa-sync-alt"></i> Check
+                                        for Updates
+                                    </button>
+                                </div>
                             </div>
-                            <div class="settings-item">
-                                <label for="autogg-delay">Delay (ms)</label>
-                                <input type="number" id="autogg-delay" placeholder="1500" min="0" step="100">
+                            <div class="settings-group">
+                                <div class="settings-group-header">
+                                    Discord RPC
+                                </div>
+                                <div class="update-container">
+                                    <p id="update-info">
+                                        Toggle the discord rich presence!
+                                    </p>
+                                    <label
+                                        class="switch"
+                                        id="discord-rpc-toggle"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            id="discord-rpc-enabled"
+                                        />
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
-                        <div class="settings-group">
-                            <div class="settings-group-header">Application Updates</div>
-                            <div class="update-container">
-                                <p id="update-info">Current Version: v0.0.0</p>
-                                <button class="action-btn" id="check-for-updates-btn"><i class="fas fa-sync-alt"></i> Check for Updates</button>
-                            </div>
+                        <div class="settings-actions">
+                            <button
+                                class="action-btn save-btn"
+                                id="save-settings-btn"
+                            >
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
                         </div>
-                        <div class="settings-group">
-                            <div class="settings-group-header">Discord RPC</div>
-                            <div class="update-container">
-                                <p id="update-info">Toggle the discord rich presence!</p>
-                            <label class="switch" id="discord-rpc-toggle">
-                              <input type="checkbox" id="discord-rpc-enabled">
-                              <span class="slider round"></span>
-                            </label>
-                            </div>
-                        </div>
+                        <p class="settings-note">
+                            Note: The proxy must be restarted for changes to
+                            take effect.
+                        </p>
                     </div>
-                    <div class="settings-actions">
-                        <button class="action-btn save-btn" id="save-settings-btn"><i class="fas fa-save"></i> Save Settings</button>
-                    </div>
-                    <p class="settings-note">Note: The proxy must be restarted for changes to take effect.</p>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div id="confirm-modal" class="modal-overlay">
-        <div class="modal-content">
-            <p>Permanently delete this alias?</p>
-            <div class="modal-actions">
-                <button id="modal-confirm-btn" class="modal-btn danger-btn">Delete</button>
-                <button id="modal-cancel-btn" class="modal-btn">Cancel</button>
+        <div id="confirm-modal" class="modal-overlay">
+            <div class="modal-content">
+                <p>Permanently delete this alias?</p>
+                <div class="modal-actions">
+                    <button id="modal-confirm-btn" class="modal-btn danger-btn">
+                        Delete
+                    </button>
+                    <button id="modal-cancel-btn" class="modal-btn">
+                        Cancel
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
-    <script src="./renderer.js"></script>
-</body>
+        <script src="./renderer.js"></script>
+    </body>
 </html>

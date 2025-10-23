@@ -40,5 +40,5 @@ auto_gg:
   enabled: false
   message: "gg"
   delay: 1500
-discord_rpc:
+discord_rpc: 
   enabled: true

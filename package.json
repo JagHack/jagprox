@@ -19,7 +19,8 @@
     "electron-log": "^5.1.4",
     "electron-updater": "^6.1.8",
     "jimp": "^1.6.0",
-    "minecraft-protocol": "^1.26.5",
+    "minecraft-protocol": "^1.47.0",
+    "prismarine-auth": "^2.2.0",
     "node-fetch": "^2.7.0",
     "yaml": "^2.4.1"
   },
