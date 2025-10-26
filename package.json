@@ -18,7 +18,7 @@
     "dotenv": "^16.4.5",
     "electron-log": "^5.1.4",
     "electron-updater": "^6.1.8",
-    "jimp": "^1.6.0",
+    "jimp": "^0.22.12",
     "minecraft-protocol": "^1.47.0",
     "prismarine-auth": "^2.2.0",
     "node-fetch": "^2.7.0",
