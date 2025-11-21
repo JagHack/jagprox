@@ -341,7 +341,7 @@ class HypixelHandler {
                 image.blit(skin, 0, 0, 40, 8, 8, 8);
             } catch (err) {
                 formatter.log(`Manual skin processing failed: ${err.message}. Falling back to Crafatar.`);
-                image = await Jimp.read(`https://crafatar.com/avatars/${uuid}?size=8&overlay=true`);
+                image = await Jimp.read(`https://minotar.net/avatar/${uuid}/8.png`);
             }
 
             const asciiLines = [];
