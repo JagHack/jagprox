@@ -6,6 +6,7 @@ const formatter = require('../formatter.js');
 const { gameModeMap, quickQueueMap } = require('../utils/constants.js');
 const { getStatValue, statAliases } = require('../utils/stat-helper.js');
 const discordRpc = require('./discordRpcHandler.js');
+const { API_BASE_URL, WEB_LINK_BASE_URL } = require('../utils/api_constants.js');
 
 class CommandHandler {
     constructor(proxy) {
@@ -93,6 +94,9 @@ class CommandHandler {
                 return true;
             case 'drpc':
                 this.handleDrpcCommand();
+                return true;
+            case 'link':
+                this.handleLinkCommand();
                 return true;
             default:
                 return false;
@@ -262,6 +266,7 @@ class CommandHandler {
             { syntax: '/nickname <add|rem|list> [args]', desc: 'Sets local nicknames for players.' },
             { syntax: '/superf <add|rem|list> [args]', desc: "Tracks friends' game activity." },
             { syntax: '/drpc', desc: 'Toggles the Discord Rich Presence.' },
+            { syntax: '/link', desc: 'Generates a link to connect your Minecraft account with your JagProx account.' },
             { syntax: '/jagprox', desc: 'Displays this help message.' }
         ];
 
@@ -500,6 +505,50 @@ class CommandHandler {
         } catch (e) {
             this.proxy.proxyChat("§cError saving configuration to file.");
             console.error("Config save error:", e);
+        }
+    }
+
+    async handleLinkCommand() {
+        const mc_uuid = this.proxy.client.uuid;
+        const mc_username = this.proxy.client.username;
+
+        if (!mc_uuid || !mc_username) {
+            this.proxy.proxyChat("§cCould not retrieve your Minecraft UUID or username. Please ensure you are logged in.");
+            return;
+        }
+
+        this.proxy.proxyChat("§eGenerating account linking code...");
+
+        const apiUrl = `${API_BASE_URL}/generate-link-code`;
+        console.log(`Attempting to generate link code from: ${apiUrl}`);
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mc_uuid, mc_username })
+            });
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const errorText = await response.text();
+                console.error('Server responded with non-JSON content:', errorText);
+                this.proxy.proxyChat(`§cError: Server did not respond with JSON. Status: ${response.status}. Response: ${errorText.substring(0, 100)}...`);
+                return;
+            }
+
+            const data = await response.json();
+
+            if (response.ok) {
+                const linkUrl = data.link_url || `${WEB_LINK_BASE_URL}/link.html?code=${data.code}`;
+                this.proxy.proxyChat(`§aYour account linking URL: §b${linkUrl}`);
+                this.proxy.proxyChat("§ePlease open this URL in your browser to complete the linking process.");
+            } else {
+                this.proxy.proxyChat(`§cError generating link: ${data.message || 'Unknown error.'}`);
+            }
+        } catch (error) {
+            console.error('Error generating link code:', error);
+            this.proxy.proxyChat("§cNetwork error or issue connecting to the JagProx authentication server.");
         }
     }
 }

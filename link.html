@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link JagProx Account</title>
+    <!-- Add your CSS here if desired -->
+</head>
+<body>
+    <h1>Link Your Minecraft Account</h1>
+    <p id="message"></p>
+    <form id="linkForm">
+        <label for="email">JagProx Email:</label><br>
+        <input type="email" id="email" name="email" required><br>
+        <label for="password">JagProx Password:</label><br>
+        <input type="password" id="password" name="password" required><br><br>
+        <button type="submit">Link Account</button>
+    </form>
+
+    <script>
+        const API_BASE_URL = 'https://jagprox.jaghack.com/api/v1'; // Define it locally for this page
+
+        document.getElementById('linkForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const messageElement = document.getElementById('message');
+
+            if (!code) {
+                messageElement.textContent = 'Error: No linking code found in URL.';
+                messageElement.style.color = 'red';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/complete-link`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password, code }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageElement.textContent = data.message;
+                    messageElement.style.color = 'green';
+                } else {
+                    messageElement.textContent = `Error: ${data.message || 'Something went wrong.'}`;
+                    messageElement.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Network error:', error);
+                messageElement.textContent = 'Network error. Please try again.';
+                messageElement.style.color = 'red';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,6 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
-/* === 1. Global Styles and Setup === */
 :root {
     --purple-primary: #8A2BE2;
     --purple-hover: #9932CC;
@@ -29,7 +28,6 @@ body {
     overflow: hidden;
 }
 
-/* === 2. Main Layout === */
 .title-bar {
     display: flex;
     justify-content: space-between;
@@ -78,7 +76,30 @@ body.sidebar-collapsed .sidebar {
     overflow: hidden;
 }
 
-/* === 3. Page Navigation === */
+#auth-buttons-container {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+
+#login-status-display {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-align: right;
+    white-space: pre-wrap;
+}
+
+#login-status-display.logged-in {
+    color: var(--purple-primary);
+    font-weight: bold;
+}
+
+
 .sidebar nav {
     display: flex;
     flex-direction: column;
@@ -169,6 +190,10 @@ body.sidebar-collapsed .sidebar {
     flex-direction: column;
 }
 
+#status-check .settings-container {
+    max-width: 600px;
+}
+
 .log-header,
 .chat-header,
 .settings-header {
@@ -183,6 +208,10 @@ body.sidebar-collapsed .sidebar {
     justify-content: center;
     gap: 8px;
     flex-shrink: 0;
+}
+
+#copy-log-btn {
+    margin-left: auto;
 }
 
 #log-output,
@@ -580,8 +609,6 @@ body.sidebar-collapsed #burger-menu-btn {
     text-align: right;
 }
 
-/* === 6. Components === */
-/* From Uiverse.io by TimTrayler */ 
 .switch {
  --secondary-container: #8A2BE2;
  --primary: #ffffff;
@@ -716,8 +743,6 @@ input:checked + .slider:before {
     background-color: var(--purple-primary);
     border-radius: 10px;
 }
-
-/* === 7. Utilities === */
 .mc-color-0 { color: #000000; }
 .mc-color-1 { color: #0000AA; }
 .mc-color-2 { color: #00AA00; }

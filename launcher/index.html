@@ -4,7 +4,7 @@
         <meta charset="UTF-8" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="script-src 'self' 'unsafe-inline';"
+            content="script-src 'self';"
         />
         <title>JagProx Launcher</title>
         <link
@@ -70,6 +70,14 @@
             </div>
 
             <div class="main-content">
+                <div id="auth-buttons-container">
+                    <div id="login-status-display">
+                        <p>Not logged in</p>
+                    </div>
+                    <button id="login-via-browser-button" class="action-btn">
+                        <i class="fas fa-sign-in-alt"></i> Login via Browser
+                    </button>
+                </div>
                 <div class="page active" id="home">
                     <div class="header">
                         <h1>JagProx</h1>
@@ -121,7 +129,7 @@
                 </div>
 
                 <div class="page" id="status-check">
-                    <div class="settings-container" style="max-width: 600px">
+                    <div class="settings-container">
                         <div class="settings-header">
                             <i class="fas fa-user-clock"></i
                             ><span>Player Status Check</span>
@@ -152,7 +160,6 @@
                                 class="action-btn"
                                 id="copy-log-btn"
                                 title="Copy Logs"
-                                style="margin-left: auto"
                             >
                                 <i class="fas fa-copy"></i>
                             </button>

@@ -1,10 +1,12 @@
-const { app, BrowserWindow, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const yaml = require('yaml');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const http = require('http');
+const url = require('url');
 const HypixelHandler = require('../modules/hypixelHandler.js');
 const { gameModeMap } = require('../utils/constants.js');
 const discordRpc = require('../modules/discordRpcHandler.js');
@@ -18,9 +20,9 @@ let envPath;
 let configPath;
 
 let config = {};
+let localAuthCallbackUrl = null;
 
 function createWindow() {
-    log.info('Creating main window...');
     mainWindow = new BrowserWindow({
         width: 1000,
         height: 650,
@@ -36,6 +38,85 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     createHypixelHandler();
 
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        shell.openExternal(url);
+        return { action: 'deny' };
+    });
+}
+
+function startAuthServer() {
+    let port = 8080;
+    const MAX_PORT_ATTEMPTS = 10;
+    let attempts = 0;
+
+    const server = http.createServer((req, res) => {
+        const parsedUrl = url.parse(req.url, true);
+        
+        if (parsedUrl.pathname === '/auth-callback') {
+            const token = parsedUrl.query.token;
+
+            if (token) {
+                if (mainWindow && mainWindow.webContents) {
+                    mainWindow.webContents.send('auth-token-received', token);
+                }
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>Authentication Success</title></head>
+                    <body>
+                        <h1>Login Successful!</h1>
+                        <p>You can now close this browser window and return to the JagProx Launcher.</p>
+                        <script>window.close();</script>
+                    </body>
+                    </html>
+                `);
+            } else {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Error: No token provided.');
+            }
+        } else {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not Found');
+        }
+    });
+
+    server.on('error', (e) => {
+        if (e.code === 'EADDRINUSE' && attempts < MAX_PORT_ATTEMPTS) {
+            log.warn(`Port ${port} is in use, trying next port.`);
+            port++;
+            attempts++;
+            server.listen(port, '127.0.0.1');
+        } else {
+            log.error('Auth server error:', e);
+        }
+    });
+
+    server.listen(port, '127.0.0.1', () => {
+        localAuthCallbackUrl = `http://127.0.0.1:${port}/auth-callback`;
+    });
+}
+
+
+app.whenReady().then(() => {
+    userDataPath = app.getPath('userData');
+    aliasesPath = path.join(userDataPath, 'aliases.json');
+    envPath = path.join(userDataPath, '.env');
+    configPath = path.join(userDataPath, 'config.yml');
+    
+    log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log');
+    autoUpdater.logger = log;
+    autoUpdater.logger.transports.file.level = "info";
+    autoUpdater.autoDownload = false;
+
+    if (process.platform === 'win32') {
+        app.setAppUserModelId("com.jaghack.jagprox");
+    }
+
+    initializeFile(aliasesPath, '{}');
+    initializeFile(envPath, 'HYPIXEL_API_KEY=');
+    initializeFile(configPath, 'discord_rpc:\n  enabled: false');
+
     try {
         if (fs.existsSync(configPath)) {
             config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
@@ -44,34 +125,21 @@ function createWindow() {
             }
         }
     } catch (e) {
-        log.error('Failed to load config.yml for Discord RPC:', e);
+        log.error('Failed to load initial config.yml for Discord RPC:', e);
     }
-}
-
-app.whenReady().then(() => {
-    userDataPath = app.getPath('userData');
-    aliasesPath = path.join(userDataPath, 'aliases.json');
-    envPath = path.join(userDataPath, '.env');
-    configPath = path.join(userDataPath, 'config.yml');
-    
-    log.transports.file.resolvePath = () => path.join(userDataPath, 'logs/main.log');
-    autoUpdater.logger = log;
-    autoUpdater.logger.transports.file.level = "info";
-    autoUpdater.autoDownload = false;
-
-    log.info('App is ready.');
-
-    initializeFile(aliasesPath, '{}');
-    initializeFile(envPath, 'HYPIXEL_API_KEY=');
 
     createWindow();
+    startAuthServer();
 });
 
 
 function initializeFile(filePath, defaultContent) {
     try {
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         if (!fs.existsSync(filePath)) {
-            log.info(`Initializing file: ${filePath}`);
             fs.writeFileSync(filePath, defaultContent, 'utf8');
         }
     } catch (e) {
@@ -120,21 +188,24 @@ ipcMain.on('maximize-window', () => {
 });
 ipcMain.on('close-window', () => app.quit());
 
+ipcMain.on('open-external-url', (event, url) => {
+    shell.openExternal(url);
+});
+
+ipcMain.on('get-local-auth-callback-url', (event) => {
+    event.returnValue = localAuthCallbackUrl;
+});
+
 ipcMain.on('get-app-version', (event) => {
     event.reply('app-version', app.getVersion());
 });
 
 ipcMain.on('check-for-updates', () => {
-    log.info('User triggered update check.');
     mainWindow.webContents.send('update-status', 'Checking for updates...');
     autoUpdater.checkForUpdates();
 });
 
 autoUpdater.on('update-not-available', () => {
-     if (process.platform === 'win32') {
-    app.setAppUserModelId("com.jaghack.jagprox");
-    }
-    log.info('Update not available.');
     mainWindow.webContents.send('update-status', `You are on the latest version: v${app.getVersion()}`);
     new Notification({
         title: 'JagProx Updater',
@@ -143,10 +214,6 @@ autoUpdater.on('update-not-available', () => {
 });
 
 autoUpdater.on('update-available', (info) => {
-    if (process.platform === 'win32') {
-    app.setAppUserModelId("com.jaghack.jagprox");
-    }
-    log.info(`Update available: ${info.version}`);
     mainWindow.webContents.send('update-status', `Update v${info.version} found!`);
     const notification = new Notification({
         title: 'Update available!',
@@ -155,7 +222,6 @@ autoUpdater.on('update-available', (info) => {
     });
     
     notification.on('click', () => {
-        log.info('User clicked notification to download update.');
         mainWindow.webContents.send('update-status', 'Downloading update...');
         autoUpdater.downloadUpdate();
     });
@@ -167,15 +233,10 @@ autoUpdater.on('download-progress', (progressObj) => {
     const percent = progressObj.percent.toFixed(2);
     const transferred = (progressObj.transferred / 1024 / 1024).toFixed(2);
     const total = (progressObj.total / 1024 / 1024).toFixed(2);
-    log.info(`Download progress: ${percent}%`);
     mainWindow.webContents.send('update-status', `Downloading... ${percent}% (${transferred}MB / ${total}MB)`);
 });
 
 autoUpdater.on('update-downloaded', (info) => {
-    if (process.platform === 'win32') {
-    app.setAppUserModelId("com.jaghack.jagprox");
-    }
-    log.info(`Update downloaded: ${info.version}`);
     mainWindow.webContents.send('update-status', `Update v${info.version} downloaded. Ready to install.`);
     const notification = new Notification({
         title: 'Download complete!',
@@ -184,7 +245,6 @@ autoUpdater.on('update-downloaded', (info) => {
     });
 
     notification.on('click', () => {
-        log.info('User clicked notification to install update.');
         autoUpdater.quitAndInstall();
     });
 
@@ -192,10 +252,6 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 autoUpdater.on('error', (err) => {
-    if (process.platform === 'win32') {
-    app.setAppUserModelId("com.jaghack.jagprox");
-    }
-    log.error('Error in auto-updater.', err);
     mainWindow.webContents.send('update-status', 'Error checking for updates.');
     new Notification({
         title: 'Update Error',
@@ -211,7 +267,6 @@ ipcMain.on('get-config', (event) => {
             event.reply('config-loaded', config);
         }
     } catch (e) {
-        log.error('Failed to load config.yml:', e);
     }
 });
 
@@ -224,7 +279,6 @@ ipcMain.on('save-settings', (event, settings) => {
         fs.writeFileSync(configPath, yaml.stringify(config));
         event.reply('settings-saved-reply', true);
     } catch (e) {
-        log.error('Failed to save settings to config.yml:', e);
         event.reply('settings-saved-reply', false);
     }
 });
@@ -242,7 +296,6 @@ ipcMain.on('toggle-discord-rpc', (event, enabled) => {
         config.discord_rpc = { enabled };
         fs.writeFileSync(configPath, yaml.stringify(config));
     } catch (e) {
-        log.error('Failed to toggle Discord RPC and save settings:', e);
     }
 });
 
@@ -260,7 +313,6 @@ ipcMain.on('save-api-key', (event, apiKey) => {
         createHypixelHandler();
         event.reply('api-key-saved-reply', true);
     } catch (e) {
-        log.error('Failed to save API key:', e);
         event.reply('api-key-saved-reply', false);
     }
 });
@@ -270,7 +322,6 @@ ipcMain.on('get-aliases', (event) => {
         const data = fs.readFileSync(aliasesPath, 'utf8');
         event.reply('aliases-loaded', JSON.parse(data));
     } catch (e) {
-        log.error('Failed to load aliases:', e);
         event.reply('aliases-loaded', {});
     }
 });
@@ -280,7 +331,6 @@ ipcMain.on('save-aliases', (event, aliases) => {
         fs.writeFileSync(aliasesPath, JSON.stringify(aliases, null, 4));
         event.reply('aliases-saved-reply', true);
     } catch (e) {
-        log.error('Failed to save aliases:', e);
         event.reply('aliases-saved-reply', false);
     }
 });
