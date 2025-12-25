@@ -1,15 +1,16 @@
-const { app, BrowserWindow, ipcMain, Notification, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell } = require('electron'); // Add 'shell'
 const path = require('path');
 const fs = require('fs');
 const yaml = require('yaml');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
-const http = require('http');
-const url = require('url');
+const http = require('http'); // Add http module
+const url = require('url'); // Add url module
 const HypixelHandler = require('../modules/hypixelHandler.js');
 const { gameModeMap } = require('../utils/constants.js');
 const discordRpc = require('../modules/discordRpcHandler.js');
+const formatter = require('../formatter.js');
 
 let mainWindow;
 let proxyProcess;
@@ -20,7 +21,7 @@ let envPath;
 let configPath;
 
 let config = {};
-let localAuthCallbackUrl = null;
+let localAuthCallbackUrl = null; // Add this line
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -36,24 +37,25 @@ function createWindow() {
     });
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
-    createHypixelHandler();
+    // REMOVE this: createHypixelHandler(); // Will be called after API key is known
 
+    // Handle external links for security and better UX
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        shell.openExternal(url);
-        return { action: 'deny' };
+        shell.openExternal(url); // Open URL in default browser
+        return { action: 'deny' }; // Prevent Electron from opening it
     });
 }
 
 function startAuthServer() {
-    let port = 8080;
+    let port = 8080; // Start with a default port
     const MAX_PORT_ATTEMPTS = 10;
     let attempts = 0;
 
     const server = http.createServer((req, res) => {
         const parsedUrl = url.parse(req.url, true);
-        
+
         if (parsedUrl.pathname === '/auth-callback') {
-            const token = parsedUrl.query.token;
+            const token = parsedUrl.query.token; // Your web login redirects here with the token
 
             if (token) {
                 if (mainWindow && mainWindow.webContents) {
@@ -82,42 +84,49 @@ function startAuthServer() {
     });
 
     server.on('error', (e) => {
+        // If port is in use, try next one up to MAX_PORT_ATTEMPTS
         if (e.code === 'EADDRINUSE' && attempts < MAX_PORT_ATTEMPTS) {
             log.warn(`Port ${port} is in use, trying next port.`);
             port++;
             attempts++;
-            server.listen(port, '127.0.0.1');
+            server.listen(port, '127.0.0.1'); // Try again with new port
         } else {
             log.error('Auth server error:', e);
         }
     });
 
     server.listen(port, '127.0.0.1', () => {
+        log.info(`Local auth callback server listening on http://127.0.0.1:${port}`);
         localAuthCallbackUrl = `http://127.0.0.1:${port}/auth-callback`;
     });
 }
-
 
 app.whenReady().then(() => {
     userDataPath = app.getPath('userData');
     aliasesPath = path.join(userDataPath, 'aliases.json');
     envPath = path.join(userDataPath, '.env');
     configPath = path.join(userDataPath, 'config.yml');
-    
-    log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log');
+
+    // Change this line: (if it exists)
+    // log.transports.file.resolvePath = () => path.join(userDataPath, 'logs/main.log');
+    // To this:
+    log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log'); // U resolvePathFn
+
     autoUpdater.logger = log;
     autoUpdater.logger.transports.file.level = "info";
     autoUpdater.autoDownload = false;
 
-    if (process.platform === 'win32') {
+    if (process.platform === 'win32') { // Set AppUserModelId for Windows notifications
         app.setAppUserModelId("com.jaghack.jagprox");
     }
 
+    log.info('App is ready.');
+
     initializeFile(aliasesPath, '{}');
     initializeFile(envPath, 'HYPIXEL_API_KEY=');
-    initializeFile(configPath, 'discord_rpc:\n  enabled: false');
+    initializeFile(configPath, 'discord_rpc:\n  enabled: false'); // Initialize config.yml i it doesn't exist
 
-    try {
+    try { // Load config for initial Discord RPC state
         if (fs.existsSync(configPath)) {
             config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
             if (config.discord_rpc && config.discord_rpc.enabled) {
@@ -129,9 +138,8 @@ app.whenReady().then(() => {
     }
 
     createWindow();
-    startAuthServer();
+    startAuthServer(); // Start the local auth callback server
 });
-
 
 function initializeFile(filePath, defaultContent) {
     try {
@@ -140,6 +148,7 @@ function initializeFile(filePath, defaultContent) {
             fs.mkdirSync(dir, { recursive: true });
         }
         if (!fs.existsSync(filePath)) {
+            log.info(`Initializing file: ${filePath}`);
             fs.writeFileSync(filePath, defaultContent, 'utf8');
         }
     } catch (e) {
@@ -168,9 +177,13 @@ function extractSkinUrl(properties) {
 
 function createHypixelHandler() {
     const apiKey = getApiKeyFromEnv();
+    if (!apiKey) {
+        log.warn('Hypixel API Key not available. Stats/commands will be limited.');
+    }
     const mockProxy = {
         env: { apiKey: apiKey },
-        proxyChat: (msg) => console.log(`[MOCK_PROXY_CHAT] ${msg}`)
+        // Use log instead of console.log for consistent logging
+        proxyChat: (msg) => log(`[MOCK_PROXY_CHAT] ${msg}`)
     };
     statsHandler = new HypixelHandler(mockProxy);
 }
@@ -259,7 +272,6 @@ autoUpdater.on('error', (err) => {
     }).show();
 });
 
-
 ipcMain.on('get-config', (event) => {
     try {
         if (fs.existsSync(configPath)) {
@@ -299,22 +311,27 @@ ipcMain.on('toggle-discord-rpc', (event, enabled) => {
     }
 });
 
-ipcMain.on('get-api-key', (event) => { event.reply('api-key-loaded', getApiKeyFromEnv()); });
-ipcMain.on('save-api-key', (event, apiKey) => {
+ipcMain.on('save-api-key-to-local-env', (event, apiKey) => { // Renamed from 'save-api-key'
     try {
         let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
         const key = 'HYPIXEL_API_KEY';
-        if (envContent.includes(key)) {
-            envContent = envContent.replace(new RegExp(`^${key}=.*$`, 'm'), `${key}=${apiKey}`);
-        } else {
-            envContent += `\n${key}=${apiKey}`;
-        }
-        fs.writeFileSync(envPath, envContent.trim());
-        createHypixelHandler();
-        event.reply('api-key-saved-reply', true);
+        // Remove existing HYPIXEL_API_KEY line if it exists
+        envContent = envContent.split('\n').filter(line => !line.startsWith(`${key}=`)).join('\n');
+        // Add the new HYPIXEL_API_KEY
+        envContent += `\n${key}=${apiKey}`;
+
+        fs.writeFileSync(envPath, envContent.trim(), 'utf8');
+        log.info('Hypixel API key saved to local .env.');
+        createHypixelHandler(); // Reinitialize HypixelHandler with new key
+        event.reply('api-key-local-env-saved-reply', true);
     } catch (e) {
-        event.reply('api-key-saved-reply', false);
+        log.error('Failed to save API key to local .env:', e);
+        event.reply('api-key-local-env-saved-reply', false);
     }
+});
+
+ipcMain.on('get-api-key-from-local-env', (event) => {
+    event.reply('api-key-loaded-from-local-env', getApiKeyFromEnv());
 });
 
 ipcMain.on('get-aliases', (event) => {
@@ -377,7 +394,8 @@ ipcMain.on('toggle-proxy', (event, start) => {
         const childEnv = {
             ...process.env,
             ELECTRON_RUN_AS_NODE: '1',
-            USER_DATA_PATH: userDataPath
+            USER_DATA_PATH: userDataPath,
+            HYPIXEL_API_KEY: getApiKeyFromEnv()
         };
 
         proxyProcess = spawn(electronExecutable, [mainScriptPath], {
@@ -401,6 +419,15 @@ ipcMain.on('toggle-proxy', (event, start) => {
             lines.forEach(line => {
                 if (line.startsWith('[JAGPROX_CHAT]')) {
                     mainWindow.webContents.send('proxy-chat', line.replace('[JAGPROX_CHAT]', ''));
+                } else if (line.startsWith('[JAGPROX_RAW_CHAT]')) {
+                    try {
+                        const rawJson = line.replace('[JAGPROX_RAW_CHAT]', '');
+                        const legacyText = formatter.reconstructLegacyText(rawJson);
+                        mainWindow.webContents.send('proxy-chat', legacyText);
+                    } catch (e) {
+                        log.error('Failed to parse raw chat JSON:', e);
+                        mainWindow.webContents.send('proxy-log', `[ERROR] Bad raw chat message: ${line}`);
+                    }
                 } else {
                     mainWindow.webContents.send('proxy-log', line);
                 }

@@ -4,7 +4,6 @@ const yaml = require("yaml");
 const JagProx = require(path.join(__dirname, 'proxy.js'));
 
 const userDataPath = process.env.USER_DATA_PATH || '.';
-require("dotenv").config({ path: path.join(userDataPath, '.env') });
 
 let config, env;
 const configPath = path.join(userDataPath, "config.yml");
@@ -41,8 +40,8 @@ try {
 
 env = { apiKey: process.env.HYPIXEL_API_KEY };
 if (!env.apiKey || env.apiKey.trim() === "") {
-    console.error(`\n❌ FATAL ERROR: HYPIXEL_API_KEY not found in your .env file in ${userDataPath}.`);
-    console.error("   Please set it using the launcher UI.");
+    console.error(`\n❌ FATAL ERROR: HYPIXEL_API_KEY not found in your environment.`);
+    console.error("   Please ensure it's provided by the launcher or set in the local .env if running standalone.");
     process.exit(1);
 } else {
     console.log("✓ Hypixel API key loaded successfully.");
