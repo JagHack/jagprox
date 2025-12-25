@@ -108,7 +108,7 @@ app.whenReady().then(() => {
     configPath = path.join(userDataPath, 'config.yml');
 
     // Change this line: (if it exists)
-    // log.transports.file.resolvePath = () => path.join(userDataPath, 'logs/main.log');
+    // log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log'); // U resolvePathFn
     // To this:
     log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log'); // U resolvePathFn
 

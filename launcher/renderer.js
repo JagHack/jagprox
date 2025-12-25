@@ -263,4 +263,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         chatOutput.appendChild(messageElement);
         chatOutput.scrollTop = chatOutput.scrollHeight;
     });
+
+    initializeSettingsPage();
 });
+
+function initializeSettingsPage() {
+    const checkForUpdatesBtn = document.getElementById('check-for-updates-btn');
+    const updateInfo = document.getElementById('update-info');
+
+    checkForUpdatesBtn.addEventListener('click', () => {
+        ipcRenderer.send('check-for-updates');
+    });
+
+    ipcRenderer.on('app-version', (event, version) => {
+        updateInfo.innerText = `Current Version: v${version}`;
+    });
+
+    ipcRenderer.on('update-status', (event, message) => {
+        updateInfo.innerText = message;
+    });
+
+    ipcRenderer.send('get-app-version');
+}
+
