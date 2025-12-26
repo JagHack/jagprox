@@ -12,7 +12,6 @@ function switchPage(pageId) {
         link.classList.remove('active');
     });
     document.querySelector(`.nav-link[data-page="${pageId}"]`).classList.add('active');
-    // Removed specific logic for aliases or settings pages.
 }
 
 function updateLoginStatus(username) {
@@ -35,15 +34,13 @@ function updateLoginStatus(username) {
 
 ipcRenderer.on('auth-token-received', async (event, token) => {
     localStorage.setItem('jwt_token', token);
-    
-    // Immediately send the token to the main process
     ipcRenderer.send('set-jwt', token);
 
     try {
-        const response = await fetch(`${API_BASE_URL}/user/profile`, { // Use API_BASE_URL
+        const response = await fetch(`${API_BASE_URL}/user/profile`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`, // Use the received JWT token
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -52,7 +49,6 @@ ipcRenderer.on('auth-token-received', async (event, token) => {
 
         if (!response.ok) {
             console.error('Failed to fetch user profile:', profileData.message);
-            // Fallback to decode token if profile fetch fails
             try {
                 const decodedToken = JSON.parse(atob(token.split('.')[1]));
                 localStorage.setItem('user_display_name', decodedToken.email);
@@ -77,10 +73,9 @@ ipcRenderer.on('auth-token-received', async (event, token) => {
         localStorage.removeItem('jwt_token');
         localStorage.removeItem('user_display_name');
         updateLoginStatus(null);
-        ipcRenderer.send('clear-jwt'); // Tell main process to clear session
+        ipcRenderer.send('clear-jwt');
     }
 });
-
 function formatMinecraftString(html) {
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const colorMap = {
@@ -121,7 +116,6 @@ function formatMinecraftString(html) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // ... (existing event listeners for minimize, maximize, close, burger-menu) ...
     document.getElementById('minimize-btn').addEventListener('click', () => {
         ipcRenderer.send('minimize-window');
     });
@@ -133,7 +127,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('close-btn').addEventListener('click', () => {
         ipcRenderer.send('close-window');
     });
-
     // Burger menu button
     document.getElementById('burger-menu-btn').addEventListener('click', () => {
         document.body.classList.toggle('sidebar-collapsed');
@@ -147,11 +140,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // New Login/Logout button handlers
     document.getElementById('login-via-browser-button').addEventListener('click', async () => {
         const localAuthCallbackUrl = ipcRenderer.sendSync('get-local-auth-callback-url');
         if (localAuthCallbackUrl) {
-            // Ensure WEB_LINK_BASE_URL points to your actual login page on jagprox.jaghack.com
             const authUrl = `${WEB_LINK_BASE_URL}/login?redirect_uri=${encodeURIComponent(localAuthCallbackUrl)}`;
             ipcRenderer.send('open-external-url', authUrl);
         } else {
@@ -164,13 +155,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.removeItem('user_display_name');
         ipcRenderer.send('clear-jwt'); // Tell main process to clear its session state
         updateLoginStatus(null);
-        // Optionally redirect to home or login page within launcher
         switchPage('home');
-        document.body.classList.remove('sidebar-open'); // Collapse sidebar on logout
+        document.body.classList.remove('sidebar-open');
     });
 
-
-    // Handle initial login status check on startup
     const existingToken = localStorage.getItem('jwt_token');
 
     if (existingToken) {
@@ -181,40 +169,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
             if (!response.ok) {
-                // Token is invalid or expired
                 throw new Error(`Token validation failed with status: ${response.status}`);
             }
             
             const profileData = await response.json();
             const displayName = profileData.username || profileData.email;
             
-            // If we reach here, token is valid
             localStorage.setItem('user_display_name', displayName);
             updateLoginStatus(displayName);
-            ipcRenderer.send('set-jwt', existingToken); // Set valid JWT in main process
+            ipcRenderer.send('set-jwt', existingToken);
             
             switchPage('home');
             document.body.classList.add('sidebar-open');
 
         } catch (error) {
-            // This catches network errors or the thrown error from a bad response status
             console.warn('Startup token validation failed:', error.message);
             localStorage.removeItem('jwt_token');
             localStorage.removeItem('user_display_name');
             updateLoginStatus(null);
-            ipcRenderer.send('clear-jwt'); // Ensure main process is also cleared
+            ipcRenderer.send('clear-jwt');
             switchPage('home');
             document.body.classList.remove('sidebar-open');
         }
     } else {
-        updateLoginStatus(null); // No token exists
-        switchPage('home'); // Show home by default if not logged in
-        document.body.classList.remove('sidebar-open'); // Start collapsed if not logged in
+        updateLoginStatus(null);
+        switchPage('home');
+        document.body.classList.remove('sidebar-open');
     }
-
-    // ... (rest of DOMContentLoaded for toggle-proxy-btn and ipcRenderer.on('proxy-status') ...
-    // Ensure proxy-related logic remains.
-    document.getElementById('toggle-proxy-btn').addEventListener('click', async () => { // Make it async
+    document.getElementById('toggle-proxy-btn').addEventListener('click', async () => {
         const toggleProxyBtn = document.getElementById('toggle-proxy-btn');
         const currentStatus = toggleProxyBtn.dataset.status;
 
@@ -225,10 +207,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             
-            // The key is no longer pre-fetched. The proxy process will get it on demand.
             ipcRenderer.send('toggle-proxy', { start: true, token: token });
         } else {
-            // Stop command remains the same
             ipcRenderer.send('toggle-proxy', { start: false });
         }
     });
@@ -249,7 +229,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const logEntry = document.createElement('div');
         logEntry.innerHTML = formatMinecraftString(log);
         logOutput.appendChild(logEntry);
-        logOutput.scrollTop = logOutput.scrollHeight; // Scroll to bottom
+        logOutput.scrollTop = logOutput.scrollHeight;
     });
 
     ipcRenderer.on('proxy-chat', (event, message) => {

@@ -1,12 +1,12 @@
-const { app, BrowserWindow, ipcMain, Notification, shell } = require('electron'); // Add 'shell'
+const { app, BrowserWindow, ipcMain, Notification, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const yaml = require('yaml');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
-const http = require('http'); // Add http module
-const url = require('url'); // Add url module
+const http = require('http');
+const url = require('url');
 const HypixelHandler = require('../modules/hypixelHandler.js');
 const { gameModeMap } = require('../utils/constants.js');
 const discordRpc = require('../modules/discordRpcHandler.js');
@@ -24,7 +24,7 @@ let apiHandler;
 let jwtToken = null;
 
 let config = {};
-let localAuthCallbackUrl = null; // Add this line
+let localAuthCallbackUrl = null;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -40,16 +40,14 @@ function createWindow() {
     });
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
-    
-    // Handle external links for security and better UX
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        shell.openExternal(url); // Open URL in default browser
-        return { action: 'deny' }; // Prevent Electron from opening it
+        shell.openExternal(url);
+        return { action: 'deny' };
     });
 }
 
 function startAuthServer() {
-    let port = 8080; // Start with a default port
+    let port = 8080;
     const MAX_PORT_ATTEMPTS = 10;
     let attempts = 0;
 
@@ -57,7 +55,7 @@ function startAuthServer() {
         const parsedUrl = url.parse(req.url, true);
 
         if (parsedUrl.pathname === '/auth-callback') {
-            const token = parsedUrl.query.token; // Your web login redirects here with the token
+            const token = parsedUrl.query.token;
 
             if (token) {
                 if (mainWindow && mainWindow.webContents) {
@@ -86,12 +84,11 @@ function startAuthServer() {
     });
 
     server.on('error', (e) => {
-        // If port is in use, try next one up to MAX_PORT_ATTEMPTS
         if (e.code === 'EADDRINUSE' && attempts < MAX_PORT_ATTEMPTS) {
             log.warn(`Port ${port} is in use, trying next port.`);
             port++;
             attempts++;
-            server.listen(port, '127.0.0.1'); // Try again with new port
+            server.listen(port, '127.0.0.1');
         } else {
             log.error('Auth server error:', e);
         }
@@ -109,22 +106,19 @@ app.whenReady().then(() => {
     configPath = path.join(userDataPath, 'config.yml');
     apiHandler = new ApiHandler();
 
-    log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log'); 
-
+    log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log');
     autoUpdater.logger = log;
     autoUpdater.logger.transports.file.level = "info";
     autoUpdater.autoDownload = false;
 
-    if (process.platform === 'win32') { // Set AppUserModelId for Windows notifications
+    if (process.platform === 'win32') {
         app.setAppUserModelId("com.jaghack.jagprox");
     }
 
     log.info('App is ready.');
-
     initializeFile(aliasesPath, '{}');
-    initializeFile(configPath, 'discord_rpc:\n  enabled: false'); // Initialize config.yml i it doesn't exist
-
-    try { // Load config for initial Discord RPC state
+    initializeFile(configPath, 'discord_rpc:\n  enabled: false');
+    try {
         if (fs.existsSync(configPath)) {
             config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
             if (config.discord_rpc && config.discord_rpc.enabled) {
@@ -136,9 +130,8 @@ app.whenReady().then(() => {
     }
 
     createWindow();
-    startAuthServer(); // Start the local auth callback server
+    startAuthServer();
 });
-
 function initializeFile(filePath, defaultContent) {
     try {
         const dir = path.dirname(filePath);
@@ -185,7 +178,6 @@ async function createHypixelHandler() {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('will-quit', () => { if (proxyProcess) proxyProcess.kill(); });
-
 ipcMain.on('minimize-window', () => mainWindow.minimize());
 ipcMain.on('maximize-window', () => {
     if (mainWindow.isMaximized()) {
@@ -195,25 +187,22 @@ ipcMain.on('maximize-window', () => {
     }
 });
 ipcMain.on('close-window', () => app.quit());
-
 ipcMain.on('open-external-url', (event, url) => {
     shell.openExternal(url);
 });
-
 ipcMain.on('set-jwt', (event, token) => {
     jwtToken = token;
     apiHandler.setJwt(token);
     log.info('JWT has been set in the launcher main process.');
-    createHypixelHandler(); // Now that we have a token, we can create the handler
+    createHypixelHandler();
 });
 
 ipcMain.on('clear-jwt', () => {
     jwtToken = null;
     apiHandler.setJwt(null);
-    statsHandler = null; // Clear the handler as it's no longer valid
+    statsHandler = null;
     log.info('JWT and stats handler have been cleared due to logout.');
 });
-
 ipcMain.on('get-local-auth-callback-url', (event) => {
     event.returnValue = localAuthCallbackUrl;
 });
@@ -280,7 +269,6 @@ autoUpdater.on('error', (err) => {
         body: `An error occurred: ${err.message}`
     }).show();
 });
-
 ipcMain.on('get-config', (event) => {
     try {
         if (fs.existsSync(configPath)) {
@@ -319,7 +307,6 @@ ipcMain.on('toggle-discord-rpc', (event, enabled) => {
     } catch (e) {
     }
 });
-
 ipcMain.on('save-api-key', async (event, apiKey) => {
     if (!apiHandler.jwt) {
         log.error('Cannot save API key without a JWT.');
@@ -328,7 +315,7 @@ ipcMain.on('save-api-key', async (event, apiKey) => {
     try {
         await apiHandler.saveApiKey(apiKey);
         log.info('Hypixel API key saved to backend.');
-        await createHypixelHandler(); // Reinitialize HypixelHandler with new key
+        await createHypixelHandler();
         event.reply('api-key-saved-reply', true);
     } catch (e) {
         log.error('Failed to save API key to backend:', e);
@@ -349,7 +336,6 @@ ipcMain.on('get-api-key', async (event) => {
         event.reply('api-key-loaded', null);
     }
 });
-
 ipcMain.on('get-aliases', (event) => {
     try {
         const data = fs.readFileSync(aliasesPath, 'utf8');
@@ -367,7 +353,6 @@ ipcMain.on('save-aliases', (event, aliases) => {
         event.reply('aliases-saved-reply', false);
     }
 });
-
 ipcMain.on('get-gamemodes', (event) => {
     const uniqueGamemodes = new Map();
     for (const [key, modeInfo] of Object.entries(gameModeMap)) {
@@ -382,7 +367,7 @@ ipcMain.on('get-gamemodes', (event) => {
 
 ipcMain.on('get-player-stats', async (event, { name, gamemode }) => {
     if (!statsHandler) {
-        await createHypixelHandler(); // Attempt to create it now
+        await createHypixelHandler();
     }
     if (!statsHandler) {
         return event.reply('player-stats-result', { error: "Hypixel handler not initialized. Is user logged in?" });
@@ -393,10 +378,9 @@ ipcMain.on('get-player-stats', async (event, { name, gamemode }) => {
     }
     event.reply('player-stats-result', result);
 });
-
 ipcMain.on('get-player-status', async (event, name) => {
     if (!statsHandler) {
-        await createHypixelHandler(); // Attempt to create it now
+        await createHypixelHandler();
     }
     if (!statsHandler) {
         return event.reply('player-status-result', { error: "Hypixel handler not initialized. Is user logged in?" });
@@ -410,10 +394,8 @@ ipcMain.on('get-player-status', async (event, name) => {
     }
     event.reply('player-status-result', result);
 });
-
 ipcMain.on('toggle-proxy', (event, { start, token }) => {
     if (start && !proxyProcess) {
-        // Ensure JWT is set for other operations if it wasn't already
         if (token && !jwtToken) {
             jwtToken = token;
             apiHandler.setJwt(token);
@@ -429,7 +411,7 @@ ipcMain.on('toggle-proxy', (event, { start, token }) => {
             ...process.env,
             ELECTRON_RUN_AS_NODE: '1',
             USER_DATA_PATH: userDataPath,
-            JAGPROX_JWT: token, // Pass JWT to proxy process
+            JAGPROX_JWT: token,
         };
 
         proxyProcess = spawn(electronExecutable, [mainScriptPath], {

@@ -12,19 +12,16 @@ class HypixelHandler {
     }
 
     async getApiKey() {
-        // Case 1: Launcher context with a pre-fetched key
         if (this.proxy.env.apiKey) {
             return this.proxy.env.apiKey;
         }
 
-        // Case 2: Proxy context, check cache first
-        if (this.apiKeyCache && this.apiKeyCacheTime && (Date.now() - this.apiKeyCacheTime < 60000)) { // 1-minute cache
+        if (this.apiKeyCache && this.apiKeyCacheTime && (Date.now() - this.apiKeyCacheTime < 60000)) {
             return this.apiKeyCache;
         }
 
-        // Case 3: Proxy context, fetch from backend
         if (this.proxy.env.jwt) {
-            if (!this.apiHandler) { // Initialize on first use
+            if (!this.apiHandler) {
                 const ApiHandler = require('../utils/apiHandler.js');
                 this.apiHandler = new ApiHandler({ jwt: this.proxy.env.jwt });
             }
@@ -35,8 +32,6 @@ class HypixelHandler {
                     this.apiKeyCacheTime = Date.now();
                     return apiKey;
                 } else {
-                    // This can happen if the user simply hasn't set a key yet.
-                    // Only log it, don't spam the user's chat unless a command fails.
                     formatter.log('Could not retrieve Hypixel API key from backend. It might not be set.');
                     return null;
                 }
@@ -46,7 +41,6 @@ class HypixelHandler {
             }
         }
         
-        // Case 4: No key or JWT available
         formatter.log('API Key is not configured in any context.');
         return null;
     }
@@ -341,7 +335,6 @@ class HypixelHandler {
             if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${username}' not found.`);
             const stats = await this.getStats(mojangData.uuid);
             if (!stats) {
-                // The getStats method now handles its own error messages for API key issues
                 return this.proxy.proxyChat(`§cCould not retrieve data for '${mojangData.username}'.`);
             }
             if (!stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
