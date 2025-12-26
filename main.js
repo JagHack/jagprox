@@ -38,13 +38,14 @@ try {
     process.exit(1);
 }
 
-env = { apiKey: process.env.HYPIXEL_API_KEY };
-if (!env.apiKey || env.apiKey.trim() === "") {
-    console.error(`\n❌ FATAL ERROR: HYPIXEL_API_KEY not found in your environment.`);
-    console.error("   Please ensure it's provided by the launcher or set in the local .env if running standalone.");
+env = { jwt: process.env.JAGPROX_JWT };
+if (!env.jwt || env.jwt.trim() === "") {
+    console.error(`\n❌ FATAL ERROR: JAGPROX_JWT not found in your environment.`);
+    console.error("   This is required for authenticating with the backend to get a Hypixel API key.");
+    console.error("   Please ensure it's provided by the launcher.");
     process.exit(1);
 } else {
-    console.log("✓ Hypixel API key loaded successfully.");
+    console.log("✓ JWT loaded successfully.");
 }
 
 try {

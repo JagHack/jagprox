@@ -98,6 +98,9 @@ class CommandHandler {
             case 'link':
                 this.handleLinkCommand();
                 return true;
+            case 'gametrack':
+                this.proxy.gametrack.handle(message);
+                return true;
             default:
                 return false;
         }

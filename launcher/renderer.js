@@ -33,35 +33,12 @@ function updateLoginStatus(username) {
     }
 }
 
-async function fetchCloudApiKeyAndSaveLocally(token) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/user/api-key`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            console.warn('Failed to fetch cloud API key:', data.message);
-            ipcRenderer.send('save-api-key-to-local-env', ''); // Clear local API key
-            return;
-        }
-
-        // Send the fetched API key to the main process to update the local .env
-        ipcRenderer.send('save-api-key-to-local-env', data.apiKey);
-
-    } catch (error) {
-        console.error('Error fetching cloud API key:', error);
-        ipcRenderer.send('save-api-key-to-local-env', ''); // Clear local API key on error
-    }
-}
-
 ipcRenderer.on('auth-token-received', async (event, token) => {
     localStorage.setItem('jwt_token', token);
+    
+    // Immediately send the token to the main process
+    ipcRenderer.send('set-jwt', token);
+
     try {
         const response = await fetch(`${API_BASE_URL}/user/profile`, { // Use API_BASE_URL
             method: 'GET',
@@ -92,18 +69,15 @@ ipcRenderer.on('auth-token-received', async (event, token) => {
             updateLoginStatus(displayName);
         }
 
-        // Now fetch the API key and send it to the main process
-        await fetchCloudApiKeyAndSaveLocally(token);
-
         switchPage('home');
         document.body.classList.add('sidebar-open');
 
     } catch (error) {
-        console.error('Critical Error during profile fetch or API key fetch:', error);
+        console.error('Critical Error during profile fetch:', error);
         localStorage.removeItem('jwt_token');
         localStorage.removeItem('user_display_name');
         updateLoginStatus(null);
-        ipcRenderer.send('save-api-key-to-local-env', ''); // Clear local API key if login/profile fails
+        ipcRenderer.send('clear-jwt'); // Tell main process to clear session
     }
 });
 
@@ -188,7 +162,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('logout-button').addEventListener('click', async () => {
         localStorage.removeItem('jwt_token');
         localStorage.removeItem('user_display_name');
-        ipcRenderer.send('save-api-key-to-local-env', ''); // Clear local API key on logout
+        ipcRenderer.send('clear-jwt'); // Tell main process to clear its session state
         updateLoginStatus(null);
         // Optionally redirect to home or login page within launcher
         switchPage('home');
@@ -196,19 +170,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
 
-    // Handle initial login status check and API key fetch on startup
+    // Handle initial login status check on startup
     const existingToken = localStorage.getItem('jwt_token');
-    const storedDisplayName = localStorage.getItem('user_display_name');
 
-    if (existingToken && storedDisplayName) {
-        updateLoginStatus(storedDisplayName);
-        // Attempt to re-fetch API key in case it changed or wasn't set
-        await fetchCloudApiKeyAndSaveLocally(existingToken);
+    if (existingToken) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/user/profile`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${existingToken}` }
+            });
 
-        switchPage('home');
-        document.body.classList.add('sidebar-open');
+            if (!response.ok) {
+                // Token is invalid or expired
+                throw new Error(`Token validation failed with status: ${response.status}`);
+            }
+            
+            const profileData = await response.json();
+            const displayName = profileData.username || profileData.email;
+            
+            // If we reach here, token is valid
+            localStorage.setItem('user_display_name', displayName);
+            updateLoginStatus(displayName);
+            ipcRenderer.send('set-jwt', existingToken); // Set valid JWT in main process
+            
+            switchPage('home');
+            document.body.classList.add('sidebar-open');
+
+        } catch (error) {
+            // This catches network errors or the thrown error from a bad response status
+            console.warn('Startup token validation failed:', error.message);
+            localStorage.removeItem('jwt_token');
+            localStorage.removeItem('user_display_name');
+            updateLoginStatus(null);
+            ipcRenderer.send('clear-jwt'); // Ensure main process is also cleared
+            switchPage('home');
+            document.body.classList.remove('sidebar-open');
+        }
     } else {
-        updateLoginStatus(null); // Not logged in or token/display name missing
+        updateLoginStatus(null); // No token exists
         switchPage('home'); // Show home by default if not logged in
         document.body.classList.remove('sidebar-open'); // Start collapsed if not logged in
     }
@@ -226,14 +225,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             
-            console.log('Re-fetching API key before launching proxy...');
-            await fetchCloudApiKeyAndSaveLocally(token);
-            
-            // Now that the key is saved, tell the main process to start the proxy
-            ipcRenderer.send('toggle-proxy', true);
+            // The key is no longer pre-fetched. The proxy process will get it on demand.
+            ipcRenderer.send('toggle-proxy', { start: true, token: token });
         } else {
             // Stop command remains the same
-            ipcRenderer.send('toggle-proxy', false);
+            ipcRenderer.send('toggle-proxy', { start: false });
         }
     });
 

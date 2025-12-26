@@ -777,3 +777,53 @@ input:checked + .slider:before {
     color: var(--text-secondary);
     font-family: 'Courier New', Courier, monospace;
 }
+
+.gametrack-controls {
+    display: flex;
+    gap: 10px;
+    padding: 0 15px 15px;
+    border-bottom: 1px solid var(--border-color);
+    width: 100%;
+}
+
+#gametrack-output .placeholder {
+    color: var(--text-secondary);
+    margin: auto;
+    font-size: 1.1rem;
+}
+
+#gametrack-output table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Inter', sans-serif;
+    font-size: 1rem;
+}
+
+#gametrack-output th,
+#gametrack-output td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#gametrack-output th {
+    background-color: var(--border-color);
+    color: var(--text-secondary);
+    font-weight: 700;
+}
+
+#gametrack-output tr:last-child td {
+    border-bottom: none;
+}
+
+.gametrack-win {
+    color: var(--mc-color-a); /* Bright Green */
+}
+
+.gametrack-loss {
+    color: var(--mc-color-c); /* Bright Red */
+}
+
+.gametrack-wlr {
+    font-weight: 700;
+}

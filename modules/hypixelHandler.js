@@ -6,6 +6,49 @@ const { findClosestMinecraftColor, gameModeMap } = require("../utils/constants")
 class HypixelHandler {
     constructor(proxy) {
         this.proxy = proxy;
+        this.apiKeyCache = null;
+        this.apiKeyCacheTime = null;
+        this.apiHandler = null;
+    }
+
+    async getApiKey() {
+        // Case 1: Launcher context with a pre-fetched key
+        if (this.proxy.env.apiKey) {
+            return this.proxy.env.apiKey;
+        }
+
+        // Case 2: Proxy context, check cache first
+        if (this.apiKeyCache && this.apiKeyCacheTime && (Date.now() - this.apiKeyCacheTime < 60000)) { // 1-minute cache
+            return this.apiKeyCache;
+        }
+
+        // Case 3: Proxy context, fetch from backend
+        if (this.proxy.env.jwt) {
+            if (!this.apiHandler) { // Initialize on first use
+                const ApiHandler = require('../utils/apiHandler.js');
+                this.apiHandler = new ApiHandler({ jwt: this.proxy.env.jwt });
+            }
+            try {
+                const apiKey = await this.apiHandler.getApiKey();
+                if (apiKey) {
+                    this.apiKeyCache = apiKey;
+                    this.apiKeyCacheTime = Date.now();
+                    return apiKey;
+                } else {
+                    // This can happen if the user simply hasn't set a key yet.
+                    // Only log it, don't spam the user's chat unless a command fails.
+                    formatter.log('Could not retrieve Hypixel API key from backend. It might not be set.');
+                    return null;
+                }
+            } catch (e) {
+                this.proxy.proxyChat(`§cError fetching API Key: ${e.message}`);
+                return null;
+            }
+        }
+        
+        // Case 4: No key or JWT available
+        formatter.log('API Key is not configured in any context.');
+        return null;
     }
 
     resolveNickname(name) {
@@ -216,8 +259,10 @@ class HypixelHandler {
     }
 
     async getGuild(uuid) {
+        const apiKey = await this.getApiKey();
+        if (!apiKey) return null;
         try {
-            const response = await fetch(`https://api.hypixel.net/v2/guild?key=${this.proxy.env.apiKey}&player=${uuid}`);
+            const response = await fetch(`https://api.hypixel.net/v2/guild?key=${apiKey}&player=${uuid}`);
             if (!response.ok) return null;
             const data = await response.json();
             return data.guild ? data.guild.name : null;
@@ -255,10 +300,12 @@ class HypixelHandler {
     }
 
     async getHypixelStatus(uuid) {
+        const apiKey = await this.getApiKey();
+        if (!apiKey) return null;
         try {
             const [statusResponse, playerResponse] = await Promise.all([
-                fetch(`https://api.hypixel.net/v2/status?key=${this.proxy.env.apiKey}&uuid=${uuid}`),
-                fetch(`https://api.hypixel.net/v2/player?key=${this.proxy.env.apiKey}&uuid=${uuid}`)
+                fetch(`https://api.hypixel.net/v2/status?key=${apiKey}&uuid=${uuid}`),
+                fetch(`https://api.hypixel.net/v2/player?key=${apiKey}&uuid=${uuid}`)
             ]);
             const statusData = await statusResponse.json();
             const playerData = await playerResponse.json();
@@ -293,7 +340,10 @@ class HypixelHandler {
             const mojangData = await this.getMojangUUID(username);
             if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${username}' not found.`);
             const stats = await this.getStats(mojangData.uuid);
-            if (!stats) return this.proxy.proxyChat(`§cCould not retrieve data for '${mojangData.username}'.`);
+            if (!stats) {
+                // The getStats method now handles its own error messages for API key issues
+                return this.proxy.proxyChat(`§cCould not retrieve data for '${mojangData.username}'.`);
+            }
             if (!stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
                 return this.proxy.proxyChat(`§cNo ${gameInfo.displayName} stats found for '${mojangData.username}'.`);
             }
@@ -305,8 +355,10 @@ class HypixelHandler {
     }
 
     async getStats(uuid) {
+        const apiKey = await this.getApiKey();
+        if (!apiKey) return null;
         try {
-            const response = await fetch(`https://api.hypixel.net/v2/player?key=${this.proxy.env.apiKey}&uuid=${uuid}`);
+            const response = await fetch(`https://api.hypixel.net/v2/player?key=${apiKey}&uuid=${uuid}`);
             if (!response.ok) return null;
             const data = await response.json();
             if (!data.success || !data.player) return null;

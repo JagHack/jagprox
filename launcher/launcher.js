@@ -11,14 +11,17 @@ const HypixelHandler = require('../modules/hypixelHandler.js');
 const { gameModeMap } = require('../utils/constants.js');
 const discordRpc = require('../modules/discordRpcHandler.js');
 const formatter = require('../formatter.js');
+const ApiHandler = require('../utils/apiHandler.js');
 
 let mainWindow;
 let proxyProcess;
 let statsHandler;
 let userDataPath;
 let aliasesPath;
-let envPath;
 let configPath;
+
+let apiHandler;
+let jwtToken = null;
 
 let config = {};
 let localAuthCallbackUrl = null; // Add this line
@@ -37,8 +40,7 @@ function createWindow() {
     });
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
-    // REMOVE this: createHypixelHandler(); // Will be called after API key is known
-
+    
     // Handle external links for security and better UX
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url); // Open URL in default browser
@@ -104,13 +106,10 @@ function startAuthServer() {
 app.whenReady().then(() => {
     userDataPath = app.getPath('userData');
     aliasesPath = path.join(userDataPath, 'aliases.json');
-    envPath = path.join(userDataPath, '.env');
     configPath = path.join(userDataPath, 'config.yml');
+    apiHandler = new ApiHandler();
 
-    // Change this line: (if it exists)
-    // log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log'); // U resolvePathFn
-    // To this:
-    log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log'); // U resolvePathFn
+    log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs/main.log'); 
 
     autoUpdater.logger = log;
     autoUpdater.logger.transports.file.level = "info";
@@ -123,7 +122,6 @@ app.whenReady().then(() => {
     log.info('App is ready.');
 
     initializeFile(aliasesPath, '{}');
-    initializeFile(envPath, 'HYPIXEL_API_KEY=');
     initializeFile(configPath, 'discord_rpc:\n  enabled: false'); // Initialize config.yml i it doesn't exist
 
     try { // Load config for initial Discord RPC state
@@ -156,13 +154,6 @@ function initializeFile(filePath, defaultContent) {
     }
 }
 
-function getApiKeyFromEnv() {
-    if (!fs.existsSync(envPath)) return null;
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    const match = envContent.match(/^HYPIXEL_API_KEY=(.*)$/m);
-    return match ? match[1] : null;
-}
-
 function extractSkinUrl(properties) {
     try {
         const texturesProp = properties.find(p => p.name === 'textures');
@@ -175,17 +166,21 @@ function extractSkinUrl(properties) {
     }
 }
 
-function createHypixelHandler() {
-    const apiKey = getApiKeyFromEnv();
-    if (!apiKey) {
-        log.warn('Hypixel API Key not available. Stats/commands will be limited.');
+async function createHypixelHandler() {
+    try {
+        const apiKey = await apiHandler.getApiKey();
+        if (!apiKey) {
+            log.warn('Hypixel API Key not available from backend. Stats/commands will be limited.');
+        }
+        const mockProxy = {
+            env: { apiKey: apiKey },
+            proxyChat: (msg) => log(`[MOCK_PROXY_CHAT] ${msg}`)
+        };
+        statsHandler = new HypixelHandler(mockProxy);
+        log.info('Hypixel handler created with key from backend.');
+    } catch (error) {
+        log.error('Failed to create Hypixel handler:', error);
     }
-    const mockProxy = {
-        env: { apiKey: apiKey },
-        // Use log instead of console.log for consistent logging
-        proxyChat: (msg) => log(`[MOCK_PROXY_CHAT] ${msg}`)
-    };
-    statsHandler = new HypixelHandler(mockProxy);
 }
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
@@ -203,6 +198,20 @@ ipcMain.on('close-window', () => app.quit());
 
 ipcMain.on('open-external-url', (event, url) => {
     shell.openExternal(url);
+});
+
+ipcMain.on('set-jwt', (event, token) => {
+    jwtToken = token;
+    apiHandler.setJwt(token);
+    log.info('JWT has been set in the launcher main process.');
+    createHypixelHandler(); // Now that we have a token, we can create the handler
+});
+
+ipcMain.on('clear-jwt', () => {
+    jwtToken = null;
+    apiHandler.setJwt(null);
+    statsHandler = null; // Clear the handler as it's no longer valid
+    log.info('JWT and stats handler have been cleared due to logout.');
 });
 
 ipcMain.on('get-local-auth-callback-url', (event) => {
@@ -311,27 +320,34 @@ ipcMain.on('toggle-discord-rpc', (event, enabled) => {
     }
 });
 
-ipcMain.on('save-api-key-to-local-env', (event, apiKey) => { // Renamed from 'save-api-key'
+ipcMain.on('save-api-key', async (event, apiKey) => {
+    if (!apiHandler.jwt) {
+        log.error('Cannot save API key without a JWT.');
+        return event.reply('api-key-saved-reply', false);
+    }
     try {
-        let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
-        const key = 'HYPIXEL_API_KEY';
-        // Remove existing HYPIXEL_API_KEY line if it exists
-        envContent = envContent.split('\n').filter(line => !line.startsWith(`${key}=`)).join('\n');
-        // Add the new HYPIXEL_API_KEY
-        envContent += `\n${key}=${apiKey}`;
-
-        fs.writeFileSync(envPath, envContent.trim(), 'utf8');
-        log.info('Hypixel API key saved to local .env.');
-        createHypixelHandler(); // Reinitialize HypixelHandler with new key
-        event.reply('api-key-local-env-saved-reply', true);
+        await apiHandler.saveApiKey(apiKey);
+        log.info('Hypixel API key saved to backend.');
+        await createHypixelHandler(); // Reinitialize HypixelHandler with new key
+        event.reply('api-key-saved-reply', true);
     } catch (e) {
-        log.error('Failed to save API key to local .env:', e);
-        event.reply('api-key-local-env-saved-reply', false);
+        log.error('Failed to save API key to backend:', e);
+        event.reply('api-key-saved-reply', false);
     }
 });
 
-ipcMain.on('get-api-key-from-local-env', (event) => {
-    event.reply('api-key-loaded-from-local-env', getApiKeyFromEnv());
+ipcMain.on('get-api-key', async (event) => {
+    if (!apiHandler.jwt) {
+        log.error('Cannot get API key without a JWT.');
+        return event.reply('api-key-loaded', null);
+    }
+    try {
+        const apiKey = await apiHandler.getApiKey();
+        event.reply('api-key-loaded', apiKey);
+    } catch (e) {
+        log.error('Failed to get API key from backend:', e);
+        event.reply('api-key-loaded', null);
+    }
 });
 
 ipcMain.on('get-aliases', (event) => {
@@ -365,7 +381,12 @@ ipcMain.on('get-gamemodes', (event) => {
 });
 
 ipcMain.on('get-player-stats', async (event, { name, gamemode }) => {
-    if (!statsHandler) return event.reply('player-stats-result', { error: "Hypixel handler not initialized." });
+    if (!statsHandler) {
+        await createHypixelHandler(); // Attempt to create it now
+    }
+    if (!statsHandler) {
+        return event.reply('player-stats-result', { error: "Hypixel handler not initialized. Is user logged in?" });
+    }
     const result = await statsHandler.getStatsForAPI(gamemode, name);
     if (result && !result.error && result.stats) {
         result.skinUrl = extractSkinUrl(result.stats.properties);
@@ -374,7 +395,12 @@ ipcMain.on('get-player-stats', async (event, { name, gamemode }) => {
 });
 
 ipcMain.on('get-player-status', async (event, name) => {
-    if (!statsHandler) return event.reply('player-status-result', { error: "Hypixel handler not initialized." });
+    if (!statsHandler) {
+        await createHypixelHandler(); // Attempt to create it now
+    }
+    if (!statsHandler) {
+        return event.reply('player-status-result', { error: "Hypixel handler not initialized. Is user logged in?" });
+    }
     const result = await statsHandler.getStatusForAPI(name);
     if (result && !result.error) {
         const playerFull = await statsHandler.getStats(result.uuid, '');
@@ -385,8 +411,16 @@ ipcMain.on('get-player-status', async (event, name) => {
     event.reply('player-status-result', result);
 });
 
-ipcMain.on('toggle-proxy', (event, start) => {
+ipcMain.on('toggle-proxy', (event, { start, token }) => {
     if (start && !proxyProcess) {
+        // Ensure JWT is set for other operations if it wasn't already
+        if (token && !jwtToken) {
+            jwtToken = token;
+            apiHandler.setJwt(token);
+            log.info('JWT has been set from toggle-proxy.');
+            if (!statsHandler) createHypixelHandler();
+        }
+
         const electronExecutable = process.execPath;
         const appPath = app.getAppPath();
         const mainScriptPath = path.join(appPath, 'main.js');
@@ -395,7 +429,7 @@ ipcMain.on('toggle-proxy', (event, start) => {
             ...process.env,
             ELECTRON_RUN_AS_NODE: '1',
             USER_DATA_PATH: userDataPath,
-            HYPIXEL_API_KEY: getApiKeyFromEnv()
+            JAGPROX_JWT: token, // Pass JWT to proxy process
         };
 
         proxyProcess = spawn(electronExecutable, [mainScriptPath], {

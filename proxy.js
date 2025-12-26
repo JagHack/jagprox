@@ -7,6 +7,7 @@ const EntityManager = require("./modules/entityManager.js");
 const TabManager = require("./modules/tabManager.js");
 const TabAlerter = require("./modules/tabAlerter.js");
 const AutoGGHandler = require("./modules/autoGGHandler.js");
+const GametrackClientHandler = require("./modules/gametrackClientHandler.js");
 const path = require("path");
 const fs = require("fs");
 const discordRpc = require('./modules/discordRpcHandler.js');
@@ -31,6 +32,7 @@ class JagProx {
         this.client = null;
         this.target = null;
         this.lastPlayCommand = null;
+        this.mc_uuid = null;
 
         this.hypixel = new HypixelHandler(this);
         this.commands = new CommandHandler(this);
@@ -39,6 +41,7 @@ class JagProx {
         this.tabManager = new TabManager(this);
         this.tabAlerter = new TabAlerter(this);
         this.autoGG = new AutoGGHandler(this);
+        this.gametrack = new GametrackClientHandler(this);
 
         if (this.config.discord_rpc && this.config.discord_rpc.enabled) {
             discordRpc.login();
@@ -66,6 +69,7 @@ class JagProx {
 
     handleLogin() {
         formatter.log(`Client connected to proxy: ${this.client.username}`);
+        this.mc_uuid = this.client.uuid;
         this.lastPlayCommand = null;
         this.autoGG.reset();
 
