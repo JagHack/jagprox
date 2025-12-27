@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('close-btn').addEventListener('click', () => {
         ipcRenderer.send('close-window');
     });
-    // Burger menu button
+
     document.getElementById('burger-menu-btn').addEventListener('click', () => {
         document.body.classList.toggle('sidebar-collapsed');
     });
@@ -225,7 +225,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Stat Search functionality
     document.getElementById('stat-search-btn').addEventListener('click', () => {
         const name = document.getElementById('stat-search-name').value;
         const gamemode = document.getElementById('stat-search-gamemode').value;
@@ -236,7 +235,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Helper function to format game-specific stats lines
     function formatGameStatsLines(p, d, a, apiName, prefix) {
         const lines = [];
         switch (apiName) {
@@ -324,7 +322,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         resultsDiv.innerHTML = outputHtml;
     });
 
-    // Status Check functionality
     document.getElementById('status-check-btn').addEventListener('click', () => {
         const name = document.getElementById('status-check-name').value;
         if (name) {
@@ -428,4 +425,5 @@ function initializeSettingsPage() {
 
     ipcRenderer.send('get-app-version');
 }
+
 

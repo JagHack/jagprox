@@ -35,7 +35,7 @@ class QueueStatsHandler {
             formatter.log(`Game over detected. Re-arming queue stats trigger for the next game.`);
             this.hasTriggeredForGame = false;
             this.awaitingTeleportForWho = false;
-            // No need to reset lastOpponentStatCheckTime here, as it's a global cooldown
+
         }
     }
 
@@ -94,7 +94,6 @@ class QueueStatsHandler {
                 this.resetTrigger();
             }
 
-                        // Duels Auto Stat Check Logic
 
                         const COOLDOWN_MS = 0; // Temporarily disabled for debugging. Set to 5000 (5 seconds) for normal operation.
 
@@ -114,7 +113,6 @@ class QueueStatsHandler {
 
                             formatter.log('DEBUG: Auto stat check conditions met.');
 
-                            // Look for opponent name in chat messages, simplified for exact testing
 
                             let opponentNameMatch = cleanMessage.match(/Opponent: (.+)/);
 

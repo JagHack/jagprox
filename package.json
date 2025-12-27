@@ -1,6 +1,6 @@
 {
   "name": "jagprox-launcher",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "description": "Launcher for JagProx",
   "main": "launcher/launcher.js",
   "scripts": {

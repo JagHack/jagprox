@@ -12,9 +12,9 @@ class HypixelHandler {
     }
 
     cleanRankPrefix(username) {
-        // Regex to match common Hypixel rank prefixes and color codes
-        // e.g., [MVP+], [VIP], [MVP], [VIP+], [MVP++]
-        // Also remove any Minecraft color codes (§.)
+
+
+
         return username.replace(/\[[A-Z+]+\]\s?|§./g, '').trim();
     }
 
@@ -199,14 +199,19 @@ class HypixelHandler {
             if (!mojangData) return `  §c§o'${cleanUsername}' not found.`;
             
             const stats = await this.getStats(mojangData.uuid);
-            if (!stats || !stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
-                return `  ${formatter.formatRank(stats.rank)} ${mojangData.username} §7- No stats found.`;
+            if (!stats) {
+                return `  §7${mojangData.username} §7- No stats found.`;
+            }
+
+            const rank = formatter.formatRank(stats.rank);
+
+            if (!stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
+                return `  ${rank} ${mojangData.username} §7- No stats found.`;
             }
             
             const p = stats.player;
             const d = p.stats[gameInfo.apiName] || {};
             const a = p.achievements || {};
-            const rank = formatter.formatRank(stats.rank);
 
             let statLines = [];
             let header = `  ${rank} ${mojangData.username}`;
@@ -245,8 +250,8 @@ class HypixelHandler {
     }
 
     async autoStatCheckDuels(username, gamemode) {
-        // This is just a wrapper for the existing statcheck function.
-        // The auto-checker in queueStatsHandler expects this function name.
+
+
         formatter.log(`Auto-checking Duels stats for ${username}...`);
         return this.statcheck(gamemode, username);
     }
@@ -371,13 +376,19 @@ class HypixelHandler {
             const data = await response.json();
             if (!data.success || !data.player) return null;
             const player = data.player;
+
+            let rank = "NONE";
+            if (player.rank && player.rank !== 'NORMAL') {
+                rank = player.rank;
+            } else if (player.monthlyPackageRank === 'SUPERSTAR') {
+                rank = 'MVP_PLUS_PLUS';
+            } else if (player.newPackageRank) {
+                rank = player.newPackageRank;
+            }
+
             return {
                 player: player,
-                rank: formatter.formatRank(
-                    (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR")
-                        ? "MVP_PLUS_PLUS"
-                        : (player.newPackageRank || "NONE")
-                ),
+                rank: rank, // Now unformatted
                 guild: await this.getGuild(uuid),
                 properties: player.properties || []
             };

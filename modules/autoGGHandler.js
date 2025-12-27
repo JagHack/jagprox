@@ -30,21 +30,20 @@ class AutoGGHandler {
             ];
 
             if (!this.ggSentInGame && gameOverKeywords.some(keyword => cleanTitle.toUpperCase().includes(keyword))) {
-                
-                // --- Gametrack Win/Loss Detection (User-specified logic) ---
+
                 let result = null;
                 const upperTitle = cleanTitle.toUpperCase();
 
                 if (upperTitle.includes('WINNER!')) {
                     if (upperTitle.endsWith('WINNER!')) {
-                        // Loss condition: "[random name] [random name] WINNER!"
+
                         const before = upperTitle.replace('WINNER!', '').trim();
                         const words = before.split(' ').filter(w => w.length > 0);
                         if (words.length >= 2) {
                             result = 'loss';
                         }
                     } else {
-                        // Win condition: "[random name] WINNER! [random name]"
+
                         const parts = upperTitle.split('WINNER!');
                         if (parts.length === 2 && parts[0].trim().length > 0 && parts[1].trim().length > 0) {
                             result = 'win';
@@ -55,7 +54,7 @@ class AutoGGHandler {
                 if (result) {
                     this.proxy.gametrack.recordEvent(result);
                 }
-                // --- End Gametrack ---
+
 
                 this.ggSentInGame = true;
                 const delay = this.proxy.config.auto_gg.delay || 1500;

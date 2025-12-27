@@ -68,7 +68,7 @@ class GametrackClientHandler {
             if (winnerName === this.localPlayerName) {
                 result = 'win';
             } else if (message.includes(this.localPlayerName)) {
-                // The message is a winner message and includes our player, but they aren't the winner.
+
                 result = 'loss';
             }
         }

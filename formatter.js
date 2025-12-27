@@ -78,13 +78,21 @@ function formatRank(rank) {
     case "MVP_PLUS_PLUS":
       return "§6[MVP§c++§6]";
     case "MVP_PLUS":
-      return "§b[MVP§a+§b]";
+      return "§b[MVP§c+§b]"; // Red plus
     case "MVP":
       return "§b[MVP]";
     case "VIP_PLUS":
       return "§a[VIP§6+§a]";
     case "VIP":
       return "§a[VIP]";
+    case "YOUTUBE":
+      return "§f[§cYT§f]";
+    case "ADMIN":
+      return "§c[ADMIN]";
+    case "MODERATOR":
+      return "§2[MOD]";
+    case "HELPER":
+      return "§9[HELPER]";
     default:
       return "§7";
   }
@@ -96,3 +104,4 @@ module.exports = {
   reconstructLegacyText,
   formatRank,
 };
+
