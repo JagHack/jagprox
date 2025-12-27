@@ -37,10 +37,11 @@ class QueueStatsHandler {
     }
 
     resetForNewGame(newGameKey) {
-        formatter.log(`Game context set to: "${newGameKey}". Awaiting start message.`);
+        formatter.log(`Game context set to: "${newGameKey}".`);
         this.currentGameKey = newGameKey;
         this.hasTriggeredForGame = false;
         this.awaitingTeleportForWho = false;
+        this.proxy.onGameChanged(newGameKey);
     }
 
     handlePacket(data, meta) {

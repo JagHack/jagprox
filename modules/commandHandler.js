@@ -13,8 +13,6 @@ class CommandHandler {
         this.proxy = proxy;
     }
 
-
-
     handle(message) {
         const aliases = aliasManager.getAliases();
         const aliasedCommand = aliases[message.toLowerCase()];
@@ -99,10 +97,95 @@ class CommandHandler {
                 this.handleLinkCommand();
                 return true;
             case 'gametrack':
-                this.proxy.gametrack.handle(message);
+            case 'gt':
+                this.handleGametrackCommand(args);
                 return true;
             default:
                 return false;
+        }
+    }
+
+    async handleGametrackCommand(args) {
+        const subCommand = args[0] ? args[0].toLowerCase() : 'hour';
+        const gametrackApiHandler = this.proxy.gametrackApiHandler;
+
+        const sendLine = () => this.proxy.proxyChat("§d§m----------------------------------------------------");
+
+        try {
+            switch (subCommand) {
+                case 'hour': {
+                    const hours = args[1] ? parseInt(args[1], 10) : 1;
+                    if (isNaN(hours) || hours <= 0) {
+                        return this.proxy.proxyChat("§cInvalid number of hours.");
+                    }
+                    
+                    const data = await gametrackApiHandler.getStats('hour', hours);
+                    const playerData = data[this.proxy.mc_uuid];
+
+                    sendLine();
+                    this.proxy.proxyChat(`  §d§lGame Stats for the Last ${hours} Hour(s)`);
+                    if (!playerData || Object.keys(playerData).length === 0) {
+                        this.proxy.proxyChat("    §7No game data found for your account in this period.");
+                    } else {
+                        for (const [mode, stats] of Object.entries(playerData)) {
+                            const formattedMode = mode.charAt(0).toUpperCase() + mode.slice(1);
+                            const wlr = stats.losses === 0
+                                ? (stats.wins > 0 ? 'Infinite' : 'N/A')
+                                : (stats.wins / stats.losses).toFixed(2);
+                            const wlrString = `| ${wlr} WLR`;
+
+                            this.proxy.proxyChat(`  §e${formattedMode}: §a${stats.wins} Wins §8- §c${stats.losses} Losses ${wlrString}`);
+                        }
+                    }
+                    sendLine();
+                    break;
+                }
+                
+                case 'day': {
+                    const data = await gametrackApiHandler.getStats('day');
+                    const playerData = data[this.proxy.mc_uuid];
+                    sendLine();
+                    this.proxy.proxyChat("  §d§lGame Stats For Today");
+                     if (!playerData || Object.keys(playerData).length === 0) {
+                        this.proxy.proxyChat("    §7No game data found for your account today.");
+                    } else {
+                        for (const [mode, stats] of Object.entries(playerData)) {
+                            const formattedMode = mode.charAt(0).toUpperCase() + mode.slice(1);
+                            const wlr = stats.losses === 0
+                                ? (stats.wins > 0 ? 'Infinite' : 'N/A')
+                                : (stats.wins / stats.losses).toFixed(2);
+                            const wlrString = `| ${wlr} WLR`;
+                            this.proxy.proxyChat(`  §e${formattedMode}: §a${stats.wins} Wins §8- §c${stats.losses} Losses ${wlrString}`);
+                        }
+                    }
+                    sendLine();
+                    break;
+                }
+                
+                case 'log': {
+                    const logData = await gametrackApiHandler.getStats('log');
+                    sendLine();
+                    this.proxy.proxyChat("  §d§lRecent Game Log");
+                    if (!logData || logData.length === 0) {
+                        this.proxy.proxyChat("    §7No recent games found.");
+                    } else {
+                        logData.slice(0, 10).forEach(entry => {
+                            const resultColor = entry.result === 'win' ? '§a' : '§c';
+                            const timestamp = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const formattedMode = entry.mode.charAt(0).toUpperCase() + entry.mode.slice(1);
+                            this.proxy.proxyChat(`  §7[${timestamp}] §e${formattedMode}: ${resultColor}${entry.result.toUpperCase()}`);
+                        });
+                    }
+                    sendLine();
+                    break;
+                }
+                
+                default:
+                    this.proxy.proxyChat("§cInvalid /gametrack command. Use: hour, day, or log.");
+                    break;
+            }
+        } catch (e) {
+            this.proxy.proxyChat(`§c[GameTrack] Error: ${e.message}`);
         }
     }
 

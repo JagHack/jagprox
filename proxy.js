@@ -7,6 +7,7 @@ const EntityManager = require("./modules/entityManager.js");
 const TabManager = require("./modules/tabManager.js");
 const TabAlerter = require("./modules/tabAlerter.js");
 const AutoGGHandler = require("./modules/autoGGHandler.js");
+const GametrackApiHandler = require("./modules/gametrackApiHandler.js");
 const GametrackClientHandler = require("./modules/gametrackClientHandler.js");
 const path = require("path");
 const fs = require("fs");
@@ -33,6 +34,8 @@ class JagProx {
         this.target = null;
         this.lastPlayCommand = null;
         this.mc_uuid = null;
+        this.gametrackApiHandler = new GametrackApiHandler(this.env.jwt);
+        this.gametrackClientHandler = null;
 
         this.hypixel = new HypixelHandler(this);
         this.commands = new CommandHandler(this);
@@ -41,7 +44,6 @@ class JagProx {
         this.tabManager = new TabManager(this);
         this.tabAlerter = new TabAlerter(this);
         this.autoGG = new AutoGGHandler(this);
-        this.gametrack = new GametrackClientHandler(this);
 
         if (this.config.discord_rpc && this.config.discord_rpc.enabled) {
             discordRpc.login();
@@ -70,6 +72,7 @@ class JagProx {
     handleLogin() {
         formatter.log(`Client connected to proxy: ${this.client.username}`);
         this.mc_uuid = this.client.uuid;
+        this.gametrackClientHandler = new GametrackClientHandler(this, this.client.uuid, this.client.username); 
         this.lastPlayCommand = null;
         this.autoGG.reset();
 
@@ -130,16 +133,21 @@ class JagProx {
             const hasNicknames = Object.keys(nicknames).length > 0;
 
             if (meta.name === 'chat' && data.message) {
+                let chatObject;
                 try {
-                    let chatObject = JSON.parse(data.message);
+                    chatObject = JSON.parse(data.message);
                     if (hasNicknames) {
                         replaceNamesInComponent(chatObject, nicknames);
                     }
                     if (data.position === 0 || data.position === 1) {
                         console.log(`[JAGPROX_CHAT]${formatter.reconstructLegacyText(chatObject)}`);
                     }
+                    this.gametrackClientHandler.parseChatMessage(chatObject);
                     data.message = JSON.stringify(chatObject);
-                } catch(e) {}
+                } catch(e) {
+                    this.gametrackClientHandler.parseChatMessage({text: data.message}); 
+                    formatter.log(`Error parsing chat JSON for gametrack: ${e.message}. Passing raw message.`);
+                }
             } else if (hasNicknames && meta.name === 'player_info' && (data.action === 'add_player' || data.action === 'update_display_name')) {
                 data.data.forEach(player => {
                     const nickname = nicknames[player.name];
@@ -209,6 +217,12 @@ class JagProx {
         this.client.on("end", onEndOrError);
         this.target.on("error", onEndOrError);
         this.target.on("end", onEndOrError);
+    }
+
+    onGameChanged(newGameKey) {
+        if (this.gametrackClientHandler) {
+            this.gametrackClientHandler.onGameChanged(newGameKey);
+        }
     }
 
     proxyChat(message) {
