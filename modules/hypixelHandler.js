@@ -11,6 +11,13 @@ class HypixelHandler {
         this.apiHandler = null;
     }
 
+    cleanRankPrefix(username) {
+        // Regex to match common Hypixel rank prefixes and color codes
+        // e.g., [MVP+], [VIP], [MVP], [VIP+], [MVP++]
+        // Also remove any Minecraft color codes (§.)
+        return username.replace(/\[[A-Z+]+\]\s?|§./g, '').trim();
+    }
+
     async getApiKey() {
         if (this.proxy.env.apiKey) {
             return this.proxy.env.apiKey;
@@ -237,6 +244,13 @@ class HypixelHandler {
         }
     }
 
+    async autoStatCheckDuels(username, gamemode) {
+        // This is just a wrapper for the existing statcheck function.
+        // The auto-checker in queueStatsHandler expects this function name.
+        formatter.log(`Auto-checking Duels stats for ${username}...`);
+        return this.statcheck(gamemode, username);
+    }
+
     async getMojangUUID(username) {
         try {
             const response = await fetch(`https://api.mojang.com/users/profiles/minecraft/${username}`);
@@ -331,7 +345,8 @@ class HypixelHandler {
         }
         this.proxy.proxyChat(`§eChecking ${gameInfo.displayName} stats for ${username}...`);
         try {
-            const mojangData = await this.getMojangUUID(username);
+            const cleanUsername = this.cleanRankPrefix(username); // Clean rank prefix for statcheck
+            const mojangData = await this.getMojangUUID(cleanUsername);
             if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${username}' not found.`);
             const stats = await this.getStats(mojangData.uuid);
             if (!stats) {
@@ -358,7 +373,11 @@ class HypixelHandler {
             const player = data.player;
             return {
                 player: player,
-                rank: (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || "NONE"),
+                rank: formatter.formatRank(
+                    (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR")
+                        ? "MVP_PLUS_PLUS"
+                        : (player.newPackageRank || "NONE")
+                ),
                 guild: await this.getGuild(uuid),
                 properties: player.properties || []
             };

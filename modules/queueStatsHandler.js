@@ -10,6 +10,7 @@ class QueueStatsHandler {
 
         this.isCapturingWho = false;
         this.whoPlayers = [];
+        this.lastOpponentStatCheckTime = 0; // New property for cooldown
 
         this.titleToKeyMap = new Map();
         for (const [key, modeInfo] of Object.entries(gameModeMap)) {
@@ -26,6 +27,7 @@ class QueueStatsHandler {
         this.awaitingTeleportForWho = false;
         this.isCapturingWho = false;
         this.whoPlayers = [];
+        this.lastOpponentStatCheckTime = 0;
     }
 
     resetTrigger() {
@@ -33,6 +35,7 @@ class QueueStatsHandler {
             formatter.log(`Game over detected. Re-arming queue stats trigger for the next game.`);
             this.hasTriggeredForGame = false;
             this.awaitingTeleportForWho = false;
+            // No need to reset lastOpponentStatCheckTime here, as it's a global cooldown
         }
     }
 
@@ -84,10 +87,72 @@ class QueueStatsHandler {
                 cleanMessage = fullMessage.replace(/§[0-9a-fk-or]/g, '').trim();
             } catch (e) { }
 
+            formatter.log('DEBUG: Chat message: "' + cleanMessage + '"');
+
             const gameOverKeywords = ['VICTORY!', 'GAME END', 'You died!', 'You have been eliminated!', 'You won!', 'Draw!'];
             if (gameOverKeywords.some(keyword => cleanMessage.includes(keyword))) {
                 this.resetTrigger();
             }
+
+                        // Duels Auto Stat Check Logic
+
+                        const COOLDOWN_MS = 0; // Temporarily disabled for debugging. Set to 5000 (5 seconds) for normal operation.
+
+            
+
+                        formatter.log('DEBUG: Date.now(): ' + Date.now());
+
+                        formatter.log('DEBUG: this.lastOpponentStatCheckTime: ' + this.lastOpponentStatCheckTime);
+
+                        formatter.log('DEBUG: COOLDOWN_MS: ' + COOLDOWN_MS);
+
+                        formatter.log('DEBUG: Cooldown check result: ' + (Date.now() - this.lastOpponentStatCheckTime > COOLDOWN_MS));
+
+                        
+
+                        if (Date.now() - this.lastOpponentStatCheckTime > COOLDOWN_MS) {
+
+                            formatter.log('DEBUG: Auto stat check conditions met.');
+
+                            // Look for opponent name in chat messages, simplified for exact testing
+
+                            let opponentNameMatch = cleanMessage.match(/Opponent: (.+)/);
+
+                            
+
+                            if (opponentNameMatch) {
+
+                                formatter.log('DEBUG: Opponent name match attempt. cleanMessage: "' + cleanMessage + '"');
+
+                                formatter.log('DEBUG: opponentNameMatch result: ' + JSON.stringify(opponentNameMatch));
+
+                                let extractedName = opponentNameMatch[1];
+
+                                if (extractedName) {
+
+                                    extractedName = extractedName.trim();
+
+                                    formatter.log('DEBUG: Extracted name: "' + extractedName + '"');
+
+            
+
+                                    if (extractedName.length > 0 && extractedName !== this.proxy.client.username) {
+
+                                        this.lastOpponentStatCheckTime = Date.now(); // Set cooldown
+
+                                        formatter.log('DEBUG: Current game key: "' + this.currentGameKey + '"');
+
+                                        formatter.log('DEBUG: Calling autoStatCheckDuels with: ' + extractedName + ', ' + this.currentGameKey);
+
+                                        this.proxy.hypixel.autoStatCheckDuels(extractedName, this.currentGameKey);
+
+                                    }
+
+                                }
+
+                            }
+
+                        }
 
             if (this.isCapturingWho) {
                 if (cleanMessage.startsWith('ONLINE: ')) {

@@ -236,24 +236,93 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Helper function to format game-specific stats lines
+    function formatGameStatsLines(p, d, a, apiName, prefix) {
+        const lines = [];
+        switch (apiName) {
+            case "Bedwars":
+                lines.push(`    §fWins: §a${(d.wins_bedwars || 0).toLocaleString()} §8| §fLosses: §c${(d.losses_bedwars || 1).toLocaleString()}`);
+                lines.push(`    §fFKDR: §6${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}`);
+                break;
+            case "SkyWars":
+                lines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fLosses: §c${(d.losses || 1).toLocaleString()}`);
+                lines.push(`    §fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
+                break;
+            case "Duels":
+                const winsKey = prefix ? `${prefix}_wins` : 'wins';
+                const lossesKey = prefix ? `${prefix}_losses` : 'losses';
+                const killsKey = prefix ? `${prefix}_kills` : 'kills';
+                const deathsKey = prefix ? `${prefix}_deaths` : 'deaths';
+                const wins = d[winsKey] || 0;
+                const losses = d[lossesKey] || 1;
+                const kills = d[killsKey] || 0;
+                const deaths = d[deathsKey] || 1;
+                lines.push(`    §fWins: §a${wins.toLocaleString()} §8| §fLosses: §c${losses.toLocaleString()}`);
+                lines.push(`    §fWLR: §6${(wins / (losses || 1)).toFixed(2)} §8| §fKDR: §6${(kills / (deaths || 1)).toFixed(2)}`);
+                break;
+            case "Walls3":
+                lines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fLosses: §c${(d.losses || 1).toLocaleString()}`);
+                lines.push(`    §fFinal Kills: §a${(d.final_kills || 0).toLocaleString()} §8| §fFinal Deaths: §c${(d.final_deaths || 1).toLocaleString()}`);
+                lines.push(`    §fFKDR: §6${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
+                break;
+            case "UHC":
+                lines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fKills: §a${(d.kills || 0).toLocaleString()}`);
+                lines.push(`    §fDeaths: §c${(d.deaths || 1).toLocaleString()} §8| §fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
+                break;
+            case "MurderMystery":
+                lines.push(`    §fGames: §a${(d.games || 0).toLocaleString()} §8| §fWins: §a${(d.wins || 0).toLocaleString()}`);
+                lines.push(`    §fKills: §a${(d.kills || 0).toLocaleString()} §8| §fWin Rate: §6${(((d.wins || 0) / (d.games || 1)) * 100).toFixed(2)}%`);
+                break;
+            case "BuildBattle":
+                lines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fGames Played: §e${(d.games_played || 0).toLocaleString()}`);
+                lines.push(`    §fScore: §e${(d.score || 0).toLocaleString()} §8| §fWin Rate: §6${(((d.wins || 0) / (d.games_played || 1)) * 100).toFixed(2)}%`);
+                break;
+            case "Pit":
+                const pitStats = p.stats.Pit ? p.stats.Pit.pit_stats_ptl : {};
+                lines.push(`    §fKills: §a${(pitStats.kills || 0).toLocaleString()} §8| §fDeaths: §c${(pitStats.deaths || 1).toLocaleString()}`);
+                lines.push(`    §fKDR: §6${((pitStats.kills || 0) / (pitStats.deaths || 1)).toFixed(2)}`);
+                break;
+            case "WoolGames":
+                const ww = d.wool_wars || {};
+                const stats = ww.stats || {};
+                lines.push(`    §fWins: §a${(stats.wins || 0).toLocaleString()} §8| §fGames: §e${(stats.games_played || 0).toLocaleString()}`);
+                lines.push(`    §fKills: §a${(stats.kills || 0).toLocaleString()} §8| §fAssists: §b${(stats.assists || 0).toLocaleString()}`);
+                lines.push(`    §fWLR: §6${((stats.wins || 0) / ((stats.games_played - (stats.wins || 0)) || 1)).toFixed(2)}`);
+                break;
+            default:
+                lines.push(`    §fWins: §a${(d.wins || 'N/A').toLocaleString()} §8| §fKills: §a${(d.kills || 'N/A').toLocaleString()}`);
+                lines.push(`    §fDeaths: §c${(d.deaths || 'N/A').toLocaleString()}`);
+                break;
+        }
+        return lines;
+    }
+    
     ipcRenderer.on('player-stats-result', (event, result) => {
         const resultsDiv = document.getElementById('stat-search-results');
         resultsDiv.innerHTML = ''; // Clear previous results
         if (result.error) {
-            resultsDiv.innerHTML = `<p class="error">${result.error}</p>`;
+            resultsDiv.innerHTML = `<p class="error">${formatMinecraftString(result.error)}</p>`;
             return;
         }
+    
+        const sendLine = () => `<p class="mc-chat-line">${formatMinecraftString("§d§m----------------------------------------------------")}</p>`;
         
-        // Display formatted stats
-        let outputHtml = '<h3>Player Stats:</h3>';
-        outputHtml += `<p><strong>${result.username}</strong> (${result.uuid})</p>`;
-        outputHtml += `<p>Game: ${result.game.displayName}</p>`;
-        outputHtml += `<p>Wins: ${result.stats.player?.stats?.[result.game.apiName]?.wins || 'N/A'}</p>`;
-        outputHtml += `<p>Kills: ${result.stats.player?.stats?.[result.game.apiName]?.kills || 'N/A'}</p>`;
-        // Add more stats as needed from result.stats
+        let outputHtml = sendLine();
+        outputHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §d§lPlayer Stats for ${result.game.displayName}`)}</p>`;
+        outputHtml += `<p class="mc-chat-line">${formatMinecraftString(`  ${result.stats.rank} ${result.username} §7${result.stats.guild ? `[§e${result.stats.guild}§7]` : ''}`)}</p>`;
+        
+        const p = result.stats.player; // Full player object from Hypixel
+        const d = p.stats?.[result.game.apiName] || {}; // Game mode specific stats
+        const a = p.achievements || {}; // Player achievements
+    
+        const statLines = formatGameStatsLines(p, d, a, result.game.apiName, result.game.prefix);
+        statLines.forEach(line => {
+            outputHtml += `<p class="mc-chat-line">${formatMinecraftString(line)}</p>`;
+        });
+    
+        outputHtml += sendLine();
         resultsDiv.innerHTML = outputHtml;
     });
-
 
     // Status Check functionality
     document.getElementById('status-check-btn').addEventListener('click', () => {
@@ -269,20 +338,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         const resultsDiv = document.getElementById('status-check-results');
         resultsDiv.innerHTML = ''; // Clear previous results
         if (result.error) {
-            resultsDiv.innerHTML = `<p class="error">${result.error}</p>`;
+            resultsDiv.innerHTML = `<p class="error">${formatMinecraftString(result.error)}</p>`;
             return;
         }
 
-        let statusHtml = '<h3>Player Status:</h3>';
-        statusHtml += `<p><strong>${result.username}</strong></p>`;
-        statusHtml += `<p>Status: ${result.online ? '§aOnline' : '§cOffline'}</p>`;
-        if (result.online && !result.hidden) {
-            statusHtml += `<p>Game: ${result.gameType || 'N/A'}</p>`;
-            statusHtml += `<p>Mode: ${result.mode || 'N/A'}</p>`;
-            statusHtml += `<p>Map: ${result.map || 'N/A'}</p>`;
-        } else if (result.online && result.hidden) {
-            statusHtml += `<p>(Status is hidden)</p>`;
+        const sendLine = () => `<p class="mc-chat-line">${formatMinecraftString("§d§m----------------------------------------------------")}</p>`;
+
+        let statusHtml = sendLine();
+        statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §d§lPlayer Status for ${result.username}`)}</p>`;
+        statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  ${result.rank} ${result.username}`)}</p>`;
+        
+        if (result.online) {
+            statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §aOnline.`)}</p>`;
+            if (!result.hidden) {
+                statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §fGame: §b${result.gameType}`)}</p>`;
+                if (result.mode) statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §fMode: §e${result.mode}`)}</p>`;
+                if (result.map) statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §fMap: §e${result.map}`)}</p>`;
+            } else {
+                statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §7(Status is hidden, game info unavailable)`)}</p>`;
+            }
+        } else {
+            statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §cOffline.`)}</p>`;
         }
+        statusHtml += sendLine();
         resultsDiv.innerHTML = statusHtml;
     });
 
