@@ -394,6 +394,18 @@ ipcMain.on('get-player-status', async (event, name) => {
     }
     event.reply('player-status-result', result);
 });
+
+ipcMain.on('get-gamemode-list', (event) => {
+    const uniqueGamemodes = new Map();
+    for (const [key, modeInfo] of Object.entries(gameModeMap)) {
+        if (!uniqueGamemodes.has(modeInfo.displayName)) {
+            uniqueGamemodes.set(modeInfo.displayName, key);
+        }
+    }
+    const availableGamemodes = Array.from(uniqueGamemodes, ([displayName, apiKey]) => ({ text: displayName, value: apiKey }));
+    availableGamemodes.sort((a, b) => a.text.localeCompare(b.text));
+    event.reply('gamemode-list-response', availableGamemodes);
+});
 ipcMain.on('toggle-proxy', (event, { start, token }) => {
     if (start && !proxyProcess) {
         if (token && !jwtToken) {

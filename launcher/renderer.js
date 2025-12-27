@@ -11,7 +11,19 @@ function switchPage(pageId) {
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    document.querySelector(`.nav-link[data-page="${pageId}"]`).classList.add('active');
+    const activeLink = document.querySelector(`.nav-link[data-page="${pageId}"]`);
+    if (activeLink) {
+        activeLink.classList.add('active');
+    }
+
+    const authButtonsContainer = document.getElementById('auth-buttons-container');
+    if (authButtonsContainer) {
+        if (pageId === 'home') {
+            authButtonsContainer.style.display = 'block';
+        } else {
+            authButtonsContainer.style.display = 'none';
+        }
+    }
 }
 
 function updateLoginStatus(username) {
@@ -213,6 +225,68 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Stat Search functionality
+    document.getElementById('stat-search-btn').addEventListener('click', () => {
+        const name = document.getElementById('stat-search-name').value;
+        const gamemode = document.getElementById('stat-search-gamemode').value;
+        if (name && gamemode) {
+            ipcRenderer.send('get-player-stats', { name, gamemode });
+        } else {
+            document.getElementById('stat-search-results').innerHTML = '<p class="error">Please enter player name and select a gamemode.</p>';
+        }
+    });
+
+    ipcRenderer.on('player-stats-result', (event, result) => {
+        const resultsDiv = document.getElementById('stat-search-results');
+        resultsDiv.innerHTML = ''; // Clear previous results
+        if (result.error) {
+            resultsDiv.innerHTML = `<p class="error">${result.error}</p>`;
+            return;
+        }
+        
+        // Display formatted stats
+        let outputHtml = '<h3>Player Stats:</h3>';
+        outputHtml += `<p><strong>${result.username}</strong> (${result.uuid})</p>`;
+        outputHtml += `<p>Game: ${result.game.displayName}</p>`;
+        outputHtml += `<p>Wins: ${result.stats.player?.stats?.[result.game.apiName]?.wins || 'N/A'}</p>`;
+        outputHtml += `<p>Kills: ${result.stats.player?.stats?.[result.game.apiName]?.kills || 'N/A'}</p>`;
+        // Add more stats as needed from result.stats
+        resultsDiv.innerHTML = outputHtml;
+    });
+
+
+    // Status Check functionality
+    document.getElementById('status-check-btn').addEventListener('click', () => {
+        const name = document.getElementById('status-check-name').value;
+        if (name) {
+            ipcRenderer.send('get-player-status', name);
+        } else {
+            document.getElementById('status-check-results').innerHTML = '<p class="error">Please enter player name.</p>';
+        }
+    });
+
+    ipcRenderer.on('player-status-result', (event, result) => {
+        const resultsDiv = document.getElementById('status-check-results');
+        resultsDiv.innerHTML = ''; // Clear previous results
+        if (result.error) {
+            resultsDiv.innerHTML = `<p class="error">${result.error}</p>`;
+            return;
+        }
+
+        let statusHtml = '<h3>Player Status:</h3>';
+        statusHtml += `<p><strong>${result.username}</strong></p>`;
+        statusHtml += `<p>Status: ${result.online ? '§aOnline' : '§cOffline'}</p>`;
+        if (result.online && !result.hidden) {
+            statusHtml += `<p>Game: ${result.gameType || 'N/A'}</p>`;
+            statusHtml += `<p>Mode: ${result.mode || 'N/A'}</p>`;
+            statusHtml += `<p>Map: ${result.map || 'N/A'}</p>`;
+        } else if (result.online && result.hidden) {
+            statusHtml += `<p>(Status is hidden)</p>`;
+        }
+        resultsDiv.innerHTML = statusHtml;
+    });
+
+
     ipcRenderer.on('proxy-status', (event, status) => {
         const toggleProxyBtn = document.getElementById('toggle-proxy-btn');
         if (status === 'running') {
@@ -239,6 +313,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         chatOutput.appendChild(messageElement);
         chatOutput.scrollTop = chatOutput.scrollHeight;
     });
+
+    ipcRenderer.on('gamemode-list-response', (event, gamemodes) => {
+        const selector = document.getElementById('stat-search-gamemode');
+        if (selector) {
+            selector.innerHTML = ''; // Clear existing options
+            gamemodes.forEach(mode => {
+                const option = document.createElement('option');
+                option.value = mode.value;
+                option.textContent = mode.text;
+                selector.appendChild(option);
+            });
+        }
+    });
+
+    ipcRenderer.send('get-gamemode-list'); // Request gamemodes on startup
 
     initializeSettingsPage();
 });

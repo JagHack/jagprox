@@ -53,12 +53,9 @@
                         ><i class="fas fa-chart-bar"></i
                         ><span>Stat Search</span></a
                     >
-                        <i class="fas fa-user-clock"></i
+                    <a href="#" class="nav-link" data-page="status-check"
+                        ><i class="fas fa-user-clock"></i
                         ><span>Status Check</span></a
-                    >
-                    <a href="#" class="nav-link" data-page="gametrack"
-                        ><i class="fas fa-gamepad"></i
-                        ><span>Gametrack</span></a
                     >
                     <a href="#" class="nav-link" data-page="settings"
                         ><i class="fas fa-cog"></i><span>Settings</span></a
@@ -119,7 +116,7 @@
                 </div>
 
                 <div class="page" id="status-check">
-                    <div class="settings-container">
+                    <div class="settings-container" style="max-width: 600px;">
                         <div class="settings-header">
                             <i class="fas fa-user-clock"></i
                             ><span>Player Status Check</span>
@@ -283,21 +280,6 @@
                     </div>
                 </div>
 
-                <div class="page" id="gametrack">
-                    <div class="settings-container">
-                        <div class="settings-header">
-                            <i class="fas fa-gamepad"></i><span>Gametrack Stats</span>
-                        </div>
-                        <div class="gametrack-controls">
-                            <button class="action-btn" data-stats="day">Today</button>
-                            <button class="action-btn" data-stats="hour">Last Hour</button>
-                            <button class="action-btn" data-stats="log">Full Log</button>
-                        </div>
-                        <div id="gametrack-output" class="search-results-container">
-                            <p class="placeholder">Select a timeframe to view stats.</p>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
