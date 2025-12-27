@@ -35,17 +35,14 @@ class GametrackClientHandler {
     async parseChatMessage(chatObject) {
         const message = formatter.extractText(chatObject);
         
-        // Only proceed if the message is potentially a game result
         if (!message.includes('WINNER!')) {
             return;
         }
 
-        // Prevent double-sending events for the same game result within the debounce period
         if (Date.now() - this.lastEventTimestamp < this.debouncePeriod) {
             return;
         }
         
-        // Ensure we have necessary info
         if (!this.mc_uuid || !this.localPlayerName || !this.gametrackApiHandler) {
             console.error('[GameTrack] Missing UUID, Player Name, or API Handler. Cannot track game.');
             return;
@@ -54,26 +51,30 @@ class GametrackClientHandler {
         const winnerIndex = message.indexOf('WINNER!');
         
         if (!this.currentGame || this.currentGame === 'limbo') {
-            return; // Not in a trackable game mode
+            return;
         }
         
-        // Ignore messages that are likely from non-game contexts
         if (message.includes('Lobby') || message.includes('Replay') || message.includes('Spectator')) {
             return;
         }
 
         let result = null;
-        const beforeText = message.substring(0, winnerIndex);
-        
-        if (beforeText.includes(this.localPlayerName)) {
-            result = 'win';
-        } else {
-            // Any WINNER! message where the player's name isn't before the keyword is a loss
-            result = 'loss';
+        const beforeText = message.substring(0, winnerIndex).trim();
+        const parts = beforeText.split(' ').filter(p => p); // Split by space and remove empty parts
+
+        if (parts.length > 0) {
+            const winnerName = parts[parts.length - 1]; // The last name before "WINNER!"
+            
+            if (winnerName === this.localPlayerName) {
+                result = 'win';
+            } else if (message.includes(this.localPlayerName)) {
+                // The message is a winner message and includes our player, but they aren't the winner.
+                result = 'loss';
+            }
         }
         
         if (result) {
-            this.lastEventTimestamp = Date.now(); // Update timestamp immediately to debounce
+            this.lastEventTimestamp = Date.now();
             console.log(`[GameTrack] Detected ${result} in ${this.currentGame} for ${this.localPlayerName}`);
             
             try {
