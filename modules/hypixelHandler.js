@@ -348,7 +348,7 @@ class HypixelHandler {
         if (!gameInfo) {
             return this.proxy.proxyChat(`§cUnknown game mode: ${gamemode}`);
         }
-        this.proxy.proxyChat(`§eChecking ${gameInfo.displayName} stats for ${username}...`);
+
         try {
             const cleanUsername = this.cleanRankPrefix(username); // Clean rank prefix for statcheck
             const mojangData = await this.getMojangUUID(cleanUsername);
