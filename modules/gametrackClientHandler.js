@@ -34,8 +34,9 @@ class GametrackClientHandler {
 
     async parseChatMessage(chatObject) {
         const message = formatter.extractText(chatObject);
+        const upperMessage = message.replace(/§[0-9a-fk-or]/g, '').toUpperCase().trim();
         
-        if (!message.includes('WINNER!')) {
+        if (!upperMessage.includes('WINNER!')) {
             return;
         }
 
@@ -43,39 +44,39 @@ class GametrackClientHandler {
             return;
         }
         
-        if (!this.mc_uuid || !this.localPlayerName || !this.gametrackApiHandler) {
-            console.error('[GameTrack] Missing UUID, Player Name, or API Handler. Cannot track game.');
+        if (!this.mc_uuid || !this.gametrackApiHandler) {
+            console.error('[GameTrack] Missing UUID or API Handler. Cannot track game.');
             return;
         }
-
-        const winnerIndex = message.indexOf('WINNER!');
         
         if (!this.currentGame || this.currentGame === 'limbo') {
             return;
         }
         
-        if (message.includes('Lobby') || message.includes('Replay') || message.includes('Spectator')) {
+        if (upperMessage.includes('LOBBY') || upperMessage.includes('REPLAY') || upperMessage.includes('SPECTATOR')) {
             return;
         }
 
         let result = null;
-        const beforeText = message.substring(0, winnerIndex).trim();
-        const parts = beforeText.split(' ').filter(p => p); // Split by space and remove empty parts
+        
+        const parts = upperMessage.split('WINNER!');
+        const before = parts[0].trim();
+        const after = parts.length > 1 ? parts[1].trim() : '';
 
-        if (parts.length > 0) {
-            const winnerName = parts[parts.length - 1]; // The last name before "WINNER!"
-            
-            if (winnerName === this.localPlayerName) {
-                result = 'win';
-            } else if (message.includes(this.localPlayerName)) {
-
+        if (after.length > 0) {
+            result = 'win';
+        } else if (before.length > 0) {
+            const wordsBefore = before.split(' ').filter(w => w.length > 0);
+            if (wordsBefore.length >= 2) {
                 result = 'loss';
+            } else if (wordsBefore.length === 1) {
+                result = 'win';
             }
         }
         
         if (result) {
             this.lastEventTimestamp = Date.now();
-            console.log(`[GameTrack] Detected ${result} in ${this.currentGame} for ${this.localPlayerName}`);
+            console.log(`[GameTrack] Detected ${result} in ${this.currentGame} for nicked player.`);
             
             try {
                 await this.gametrackApiHandler.sendEvent({
