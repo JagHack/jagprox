@@ -40,6 +40,10 @@ class GametrackClientHandler {
             return;
         }
 
+        if (message.includes(':')) {
+            return;
+        }
+
         if (Date.now() - this.lastEventTimestamp < this.debouncePeriod) {
             return;
         }
