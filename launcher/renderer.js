@@ -225,6 +225,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    document.getElementById('copy-log-btn').addEventListener('click', () => {
+        const logOutput = document.getElementById('log-output');
+        const logs = logOutput.innerText;
+        navigator.clipboard.writeText(logs).then(() => {
+            const copyBtn = document.getElementById('copy-log-btn');
+            const originalContent = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            setTimeout(() => {
+                copyBtn.innerHTML = originalContent;
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy logs: ', err);
+        });
+    });
+
     document.getElementById('stat-search-btn').addEventListener('click', () => {
         const name = document.getElementById('stat-search-name').value;
         const gamemode = document.getElementById('stat-search-gamemode').value;
