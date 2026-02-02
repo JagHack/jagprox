@@ -78,23 +78,11 @@ You have two configuration files in the root of the `jagprox` folder:
 
 ---
 
-## How to Use
+## Detailed Usage Guide
 
-### 1. Starting JagProx
-```bash
-npm run launcher
-```
+For a comprehensive guide on all features of the Jagprox Launcher, please refer to the [GUIDE.md](GUIDE.md) file.
 
-### 2. Connecting in Minecraft
-
-1. Launch Minecraft (**1.8.9 recommended**).
-2. Go to `Multiplayer` → `Add Server`.
-3. For the **Server Address**, enter:
-   ```
-   localhost:2107
-   ```
-   (or whichever port you configured in `config.yml`)
-4. Save the server and connect to it. You will be automatically logged into Hypixel through the proxy.
+---
 
 ### 3. In-Game Commands
 
@@ -130,6 +118,9 @@ npm run launcher
 
 * `/jagprox`
   Displays the list of available custom commands.
+
+  `/gt | /gametrack [hour|day|log] [hour count if used with hour]`
+  Shows you the stats for the given hours/day or logs your last games.
 
 ---
 
