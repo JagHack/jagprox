@@ -52,7 +52,7 @@ class JagProx {
         this.server = mc.createServer({
             "online-mode": true,
             port: this.config.port || 25565,
-            version: this.config.version,
+            version: '1.8.9',
             motd: ' '.repeat(20) + '§a§lJagProx §c§l[1.8-1.21]\n' + ' '.repeat(13) + '§6§lHypixel Proxy §c§l- made by JagHack'
         });
 
@@ -86,6 +86,7 @@ class JagProx {
         });
 
         const userDataPath = process.env.USER_DATA_PATH || '.';
+        const cacheFolder = this.config.cache_folder || './cache/profiles';
         const cachePath = path.isAbsolute(this.config.cache_folder)
             ? this.config.cache_folder
             : path.join(userDataPath, this.config.cache_folder);
@@ -99,14 +100,13 @@ class JagProx {
             port: 25565,
             username: this.client.username,
             auth: "microsoft",
-            version: this.config.version,
+            version: '1.8.9',
             profile: this.client.profile,
             profilesFolder: cachePath
         });
 
         this.target.on("connect", () => formatter.log(`Client connected to target: ${this.target.username}`));
-
-        this.client.on("packet", (data, meta) => {
+       this.client.on("packet", (data, meta) => {
             if (meta.name === "chat" && data.message && data.message.startsWith("/")) {
                 if (this.commands.handle(data.message)) {
                     return;
@@ -187,7 +187,7 @@ class JagProx {
 
         const onEndOrError = (err) => {
             if (err) {
-                formatter.log(`Connection error: ${err.message}`);
+            formatter.log(`Connection error: ${err.message || JSON.stringify(err)}`);
             }
             formatter.log(`Client disconnected: ${this.client ? this.client.username : 'Unknown'}`);
 

@@ -42,3 +42,4 @@ auto_gg:
   delay: 1500
 discord_rpc: 
   enabled: true
+cache_folder: ./cache/profiles
