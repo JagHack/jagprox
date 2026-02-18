@@ -34,6 +34,9 @@
     "directories": {
       "output": "dist"
     },
+    "linux":{
+      "target":["AppImage"]
+    },
     "win": {
       "target": "nsis",
       "icon": "launcher/icon.ico"

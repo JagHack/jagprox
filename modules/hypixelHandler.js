@@ -8,7 +8,13 @@ class HypixelHandler {
         this.proxy = proxy;
         this.apiKeyCache = null;
         this.apiKeyCacheTime = null;
-        this.apiHandler = null;
+        if (this.proxy.env.jwt) {
+            const ApiHandler = require('../utils/apiHandler.js');
+            this.apiHandler = new ApiHandler({ jwt: this.proxy.env.jwt });
+        } else {
+            this.apiHandler = null;
+        }
+        this.avatarCache = new Map();
     }
 
     cleanRankPrefix(username) {
@@ -118,7 +124,10 @@ class HypixelHandler {
             try {
                 const chatData = JSON.parse(data.message);
                 chatMessage = formatter.extractText(chatData);
-            } catch(e) { return; }
+            } catch(e) { 
+                this.proxy.target.removeListener('packet', partyListener); // Ensure listener is removed on parse error
+                return; 
+            }
 
             const cleanMessage = chatMessage.replace(/§[0-9a-fk-or]/g, '').trim();
 
@@ -176,10 +185,14 @@ class HypixelHandler {
 
         this.proxy.proxyChat(`§aFound ${partyMembers.length} members. Fetching stats for §e${gameInfo.displayName}§a...`);
 
-        const statPromises = partyMembers.map(username =>
-            this.getAndFormatPartyPlayerStats(username.replace(/\[.*?\]\s/g, ''), gameInfo)
-        );
-        const statBlocks = await Promise.all(statPromises);
+        const statBlocks = [];
+        for (const username of partyMembers) {
+            const block = await this.getAndFormatPartyPlayerStats(username.replace(/\[.*?\]\s/g, ''), gameInfo);
+            if (block) {
+                statBlocks.push(block);
+            }
+            await new Promise(resolve => setTimeout(resolve, 300)); // Add a delay between requests
+        }
 
         let finalMessage = `§d§m----------------------------------------------------\n`;
         finalMessage += `  §d§lParty Stats for ${gameInfo.displayName}\n \n`;
@@ -400,33 +413,39 @@ class HypixelHandler {
 
     async displayFormattedStats(username, uuid, stats, gameInfo) {
         try {
-            let image;
-            try {
-                const texturesProp = stats.properties.find(p => p.name === 'textures');
-                if (!texturesProp) throw new Error("No texture property found");
+            let asciiLines;
+            if (this.avatarCache.has(uuid)) {
+                asciiLines = this.avatarCache.get(uuid);
+            } else {
+                let image;
+                try {
+                    const texturesProp = stats.properties.find(p => p.name === 'textures');
+                    if (!texturesProp) throw new Error("No texture property found");
 
-                const texturesJson = Buffer.from(texturesProp.value, 'base64').toString('utf8');
-                const textures = JSON.parse(texturesJson);
-                const skinUrl = textures.textures?.SKIN?.url;
-                if (!skinUrl) throw new Error("No skin URL found");
+                    const texturesJson = Buffer.from(texturesProp.value, 'base64').toString('utf8');
+                    const textures = JSON.parse(texturesJson);
+                    const skinUrl = textures.textures?.SKIN?.url;
+                    if (!skinUrl) throw new Error("No skin URL found");
 
-                const skin = await Jimp.read(skinUrl);
-                image = new Jimp(8, 8);
-                image.blit(skin, 0, 0, 8, 8, 8, 8);
-                image.blit(skin, 0, 0, 40, 8, 8, 8);
-            } catch (err) {
-                formatter.log(`Manual skin processing failed: ${err.message}. Falling back to Crafatar.`);
-                image = await Jimp.read(`https://minotar.net/avatar/${uuid}/8.png`);
-            }
-
-            const asciiLines = [];
-            for (let y = 0; y < 8; y++) {
-                let line = "";
-                for (let x = 0; x < 8; x++) {
-                    const pixel = Jimp.intToRGBA(image.getPixelColor(x, y));
-                    line += (pixel.a > 128) ? findClosestMinecraftColor(pixel.r, pixel.g, pixel.b) + '█' : " ";
+                    const skin = await Jimp.read(skinUrl);
+                    image = new Jimp(8, 8);
+                    image.blit(skin, 0, 0, 8, 8, 8, 8);
+                    image.blit(skin, 0, 0, 40, 8, 8, 8);
+                } catch (err) {
+                    formatter.log(`Manual skin processing failed: ${err.message}. Falling back to Crafatar.`);
+                    image = await Jimp.read(`https://minotar.net/avatar/${uuid}/8.png`);
                 }
-                asciiLines.push(line);
+
+                asciiLines = [];
+                for (let y = 0; y < 8; y++) {
+                    let line = "";
+                    for (let x = 0; x < 8; x++) {
+                        const pixel = Jimp.intToRGBA(image.getPixelColor(x, y));
+                        line += (pixel.a > 128) ? findClosestMinecraftColor(pixel.r, pixel.g, pixel.b) + '█' : " ";
+                    }
+                    asciiLines.push(line);
+                }
+                this.avatarCache.set(uuid, asciiLines); // Cache the generated ASCII lines
             }
 
             const p = stats.player;

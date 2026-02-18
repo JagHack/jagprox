@@ -153,14 +153,19 @@ class JagProx {
                     const nickname = nicknames[player.name];
                     if (nickname) {
                         if (player.displayName) {
-                            try {
-                                let component = JSON.parse(player.displayName);
-                                replaceNamesInComponent(component, { [player.name]: nickname });
-                                player.displayName = JSON.stringify(component);
-                            } catch (e) {
-                                player.displayName = player.displayName.replace(player.name, nickname);
+                            // Only proceed if the player's real name is present in the display name
+                            if (player.displayName.includes(player.name)) {
+                                try {
+                                    let component = JSON.parse(player.displayName);
+                                    replaceNamesInComponent(component, { [player.name]: nickname });
+                                    player.displayName = JSON.stringify(component);
+                                } catch (e) {
+                                    // If JSON parsing fails, assume it's a plain string and replace globally
+                                    player.displayName = player.displayName.replace(new RegExp(player.name, 'g'), nickname);
+                                }
                             }
                         } else {
+                            // If displayName is null/undefined, set it to the nickname
                             player.displayName = JSON.stringify({ text: nickname });
                         }
                     }

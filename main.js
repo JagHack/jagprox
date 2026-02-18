@@ -59,3 +59,16 @@ try {
     console.error("   This could be because the proxy port (" + (config.port || 2107) + ") is already in use by another application.");
     process.exit(1);
 }
+
+process.on('uncaughtException', (err) => {
+    console.error('\n❌ FATAL ERROR: Uncaught Exception!');
+    console.error('   Details:', err);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('\n❌ FATAL ERROR: Unhandled Promise Rejection!');
+    console.error('   Reason:', reason);
+    console.error('   Promise:', promise);
+    process.exit(1);
+});
