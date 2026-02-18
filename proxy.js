@@ -204,6 +204,7 @@ class JagProx {
             this.tabManager.reset();
             this.tabAlerter.reset();
             this.autoGG.reset();
+            this.hypixel.reset();
 
             this.client = null;
             this.target = null;

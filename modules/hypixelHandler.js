@@ -17,6 +17,11 @@ class HypixelHandler {
         this.avatarCache = new Map();
     }
 
+    reset() {
+        this.avatarCache.clear();
+        formatter.log('HypixelHandler avatar cache reset.');
+    }
+
     cleanRankPrefix(username) {
 
 
