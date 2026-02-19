@@ -60,58 +60,42 @@ class QueueStatsHandler {
             formatter.log("Teleport confirmed. Executing /who after a short safety delay.");
 
             setTimeout(() => {
-                this.isCapturingWho = true;
-                this.whoPlayers = [];
-                this.proxy.target.write('chat', { message: '/who' });
-            }, 500);
-        }
+			this.isCapturingWho = true;
+			this.whoPlayers = [];
+			this.proxy.target.write('chat', { message: '/who' });
+		    }, 500);
+		}
 
-        if (meta.name === 'scoreboard_objective' && data.action === 0 && data.displayText) {
-            const newTitle = data.displayText.replace(/§[0-9a-fk-or]/g, '').trim().toUpperCase();
-            const foundGameKey = this.titleToKeyMap.get(newTitle);
-            if (foundGameKey && this.currentGameKey !== foundGameKey) {
-                this.resetForNewGame(foundGameKey);
-            }
-        }
+		if (meta.name === 'scoreboard_objective' && data.action === 0 && data.displayText) {
+		    const newTitle = data.displayText.replace(/§[0-9a-fk-or]/g, '').trim().toUpperCase();
+		    const foundGameKey = this.titleToKeyMap.get(newTitle);
+		    if (foundGameKey && this.currentGameKey !== foundGameKey) {
+			this.resetForNewGame(foundGameKey);
+		    }
+		}
 
-        if (meta.name === 'chat') {
-            let chatJson, fullMessage = '', cleanMessage = '';
-            try {
-                chatJson = JSON.parse(data.message);
-                const getFullText = (component) => {
-                    let text = component.text || '';
-                    if (component.extra) text += component.extra.map(getFullText).join('');
-                    return text;
-                };
-                fullMessage = getFullText(chatJson);
-                cleanMessage = fullMessage.replace(/§[0-9a-fk-or]/g, '').trim();
-            } catch (e) { }
-
-            formatter.log('DEBUG: Chat message: "' + cleanMessage + '"');
-
-            const gameOverKeywords = ['VICTORY!', 'GAME END', 'You died!', 'You have been eliminated!', 'You won!', 'Draw!'];
-            if (gameOverKeywords.some(keyword => cleanMessage.includes(keyword))) {
-                this.resetTrigger();
-            }
+		if (meta.name === 'chat') {
+		    let chatJson, fullMessage = '', cleanMessage = '';
+		    try {
+			chatJson = JSON.parse(data.message);
+			const getFullText = (component) => {
+			    let text = component.text || '';
+			    if (component.extra) text += component.extra.map(getFullText).join('');
+			    return text;
+			};
+			fullMessage = getFullText(chatJson);
+			cleanMessage = fullMessage.replace(/§[0-9a-fk-or]/g, '').trim();
+		    } catch (e) { }
+		    const gameOverKeywords = ['VICTORY!', 'GAME END', 'You died!', 'You have been eliminated!', 'You won!', 'Draw!'];
+		    if (gameOverKeywords.some(keyword => cleanMessage.includes(keyword))) {
+			this.resetTrigger();
+		    }
 
 
-                        const COOLDOWN_MS = 0; // Temporarily disabled for debugging. Set to 5000 (5 seconds) for normal operation.
+				const COOLDOWN_MS = 0; // Temporarily disabled for debugging. Set to 5000 (5 seconds) for normal operation.
 
-            
+				if (Date.now() - this.lastOpponentStatCheckTime > COOLDOWN_MS) {
 
-                        formatter.log('DEBUG: Date.now(): ' + Date.now());
-
-                        formatter.log('DEBUG: this.lastOpponentStatCheckTime: ' + this.lastOpponentStatCheckTime);
-
-                        formatter.log('DEBUG: COOLDOWN_MS: ' + COOLDOWN_MS);
-
-                        formatter.log('DEBUG: Cooldown check result: ' + (Date.now() - this.lastOpponentStatCheckTime > COOLDOWN_MS));
-
-                        
-
-                        if (Date.now() - this.lastOpponentStatCheckTime > COOLDOWN_MS) {
-
-                            formatter.log('DEBUG: Auto stat check conditions met.');
 
 
                             let opponentNameMatch = cleanMessage.match(/Opponent: (.+)/);

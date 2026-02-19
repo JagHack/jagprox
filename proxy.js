@@ -229,6 +229,15 @@ class JagProx {
         if (this.gametrackClientHandler) {
             this.gametrackClientHandler.onGameChanged(newGameKey);
         }
+        // Reset relevant modules on game/lobby change
+        this.queueStats.resetTrigger(); // Use resetTrigger to preserve currentGameKey
+        this.entityManager.reset();
+        this.tabManager.reset();
+        this.tabAlerter.reset();
+        this.autoGG.reset();
+        // hypixel.reset() should be handled carefully as it clears apiKeyCache.
+        // For now, we'll assume avatarCache is the only part that needs clearing on game change.
+        this.hypixel.reset();
     }
 
     proxyChat(message) {
