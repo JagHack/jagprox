@@ -43,15 +43,25 @@ const commandAliases = {
 };
 
 const duelsModes = {
-    general: { apiName: "Duels", displayName: "Duels", prefix: "" },
-    classic: { apiName: "Duels", displayName: "Classic Duels", prefix: "classic_duel" },
-    bridge: { apiName: "Duels", displayName: "Bridge Duels", prefix: "bridge_duel" },
-    uhc: { apiName: "Duels", displayName: "UHC Duels", prefix: "uhc_duel" },
-    skywars: { apiName: "Duels", displayName: "SkyWars Duels", prefix: "sw_duel" },
-    sumo: { apiName: "Duels", displayName: "Sumo Duels", prefix: "sumo_duel" },
-    bow: { apiName: "Duels", displayName: "Bow Duels", prefix: "bow_duel" },
-    combo: { apiName: "Duels", displayName: "Combo Duels", prefix: "combo_duel" },
-    op: { apiName: "Duels", displayName: "OP Duels", prefix: "op_duel" }
+  general: { apiName: "Duels", displayName: "Duels", prefix: "" },
+  classic: { apiName: "Duels", displayName: "Classic Duels", prefix: "classic_duel" },
+  bridge: { apiName: "Duels", displayName: "Bridge Duels", prefix: "bridge_duel" },
+  uhc: { apiName: "Duels", displayName: "UHC Duels", prefix: "uhc_duel" },
+  skywars: { apiName: "Duels", displayName: "SkyWars Duels", prefix: "sw_duel" },
+  sumo: { apiName: "Duels", displayName: "Sumo Duels", prefix: "sumo_duel" },
+  bow: { apiName: "Duels", displayName: "Bow Duels", prefix: "bow_duel" },
+  combo: { apiName: "Duels", displayName: "Combo Duels", prefix: "combo_duel" },
+  op: { apiName: "Duels", displayName: "OP Duels", prefix: "op_duel" },
+  spleef: { apiName: "Duels", displayName: "Spleef Duels", prefix: "spleef_duel" },
+  boxing: { apiName: "Duels", displayName: "Boxing Duels", prefix: "boxing_duel" },
+  ndb: { apiName: "Duels", displayName: "NoDebuff Duels", prefix: "potion_duel" },
+  blitz: { apiName: "Duels", displayName: "Blitz Duels", prefix: "blitz_duel" },
+  bwrush: { apiName: "Duels", displayName: "BedWars Rush", prefix: "bw_duel_rush" },
+  bwn: { apiName: "Duels", displayName: "BedWars (Normal)", prefix: "bw_duel_doubles" },
+  megawalls: { apiName: "Duels", displayName: "Mega Walls Duels", prefix: "mega_walls_duel" },
+  quake: { apiName: "Duels", displayName: "Quake Duels", prefix: "quake_duel" },
+  parkour: { apiName: "Duels", displayName: "Parkour Duels", prefix: "parkour_duel" },
+  bowSpleef: { apiName: "Duels", displayName: "Bow Spleef Duels", prefix: "bowspleef_duel" }
 };
 
 const gameModeMap = {
@@ -100,14 +110,17 @@ const gameModeMap = {
 };
 
 const quickQueueMap = {
-  'bedwars2': { name: 'Voidless Doubles', command: '/play bedwars_eight_two_voidless' },
-  'bedwars4': { name: 'Voidless 4v4v4v4', command: '/play bedwars_four_four_voidless' },
-  'blitzsolo': { name: 'Blitz Solo', command: '/play blitz_solo_normal' },
+  'voidless2': { name: 'Voidless Doubles', command: '/play bedwars_eight_two_voidless' },
+  'voidless4': { name: 'Voidless 4v4v4v4', command: '/play bedwars_four_four_voidless' },
+  'blitz': { name: 'Blitz Solo', command: '/play blitz_solo_normal' },
   'blitzteams': { name: 'Blitz Teams', command: '/play blitz_teams_normal' },
   'buildbattlepro': { name: 'Build Battle Pro', command: '/play build_battle_solo_pro' },
-  'buildbattlesolo': { name: 'Build Battle Solo', command: '/play build_battle_solo_normal' },
+  'buildbattle': { name: 'Build Battle Solo', command: '/play build_battle_solo_normal' },
+  'bb': { name: 'Build Battle Solo', command: '/play build_battle_solo_normal' },
   'buildbattlesolo114': { name: 'Build Battle Solo (1.14+)', command: '/play build_battle_solo_normal_latest' },
+  'bb114': { name: 'Build Battle Solo (1.14+)', command: '/play build_battle_solo_normal_latest' },
   'buildbattleteams': { name: 'Build Battle Teams', command: '/play build_battle_teams_normal' },
+  'bbteams': { name: 'Build Battle Teams', command: '/play build_battle_teams_normal' },
   'cvc': { name: 'Cops and Crims', command: '/play mcgo' },
   'doubles': { name: 'OP Duels (2v2)', command: '/play duels_op_doubles' },
   'infection': { name: 'Murder Mystery Infection', command: '/play murder_infection' },
@@ -155,8 +168,6 @@ const quickQueueMap = {
   'uhcmeetup': { name: 'UHC Deathmatch', command: '/play duels_uhc_meetup' },
   'uhcevents': { name: 'UHC Events Mode', command: '/play uhc_events' },
   'vampirez': { name: 'VampireZ', command: '/play vampirez' },
-  'voidless2': { name: 'Voidless Doubles', command: '/play bedwars_eight_two_voidless' },
-  'voidless4': { name: 'Voidless 4v4v4v4', command: '/play bedwars_four_four_voidless' },
   'bw4s': { name: 'Bedwars 4v4v4v4', command: '/play bedwars_four_four' },
   'zombiesp': { name: 'Zombies (Prison)', command: '/play arcade_zombies_prison' },
   'zombiesd': { name: 'Zombies (Dead End)', command: '/play arcade_zombies_dead_end' },
@@ -166,7 +177,17 @@ const quickQueueMap = {
   'walls': { name: 'The Walls', command: '/play walls' },
   'hideprop': { name: 'Hide and Seek (Prop Hunt)', command: '/play arcade_hide_and_seek_prop_hunt' },
   'hideparty': { name: 'Hide and Seek (Party Pooper)', command: '/play arcade_hide_and_seek_party_pooper' },
-  'halloween': { name: 'Halloween Simulator', command: '/play arcade_halloween_simulator' }
+  'halloween': { name: 'Halloween Simulator', command: '/play arcade_halloween_simulator' },
+  'classic': { name: 'Classic Duels', command: '/play duels_classic_duel' },
+  'op1': { name: 'OP Duels (1v1)', command: '/play duels_op_duel' },
+  'combo': { name: 'Combo Duels', command: '/play duels_combo_duel' },
+  'boxing': { name: 'Boxing Duels', command: '/play duels_boxing_duel' },
+  'ndb': { name: 'NoDebuff Duels', command: '/play duels_potion_duel' },
+  'bridge': { name: 'Bridge Duels (1v1)', command: '/play duels_bridge_duel' },
+  'bowduel': { name: 'Bow Duels', command: '/play duels_bow_duel' },
+  'spleefduel': { name: 'Spleef Duels', command: '/play duels_spleef_duel' },
+  'megawallsduel': { name: 'Mega Walls Duels', command: '/play duels_mega_walls_duel' },
+  'quakeduel': { name: 'Quake Duels', command: '/play duels_quake_duel' }
 };
 
 const duelsDivisions = {
