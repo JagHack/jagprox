@@ -274,6 +274,67 @@ class HypixelHandler {
         return this.statcheck(gamemode, username);
     }
 
+    async getLeaderboard(game, type) {
+        const apiKey = await this.getApiKey();
+        if (!apiKey) return { error: "API Key not configured." };
+
+        try {
+            const response = await fetch(`https://api.hypixel.net/v2/leaderboards?key=${apiKey}`);
+            if (!response.ok) {
+                return { error: `Failed to fetch leaderboards: ${response.statusText}` };
+            }
+            const data = await response.json();
+
+            if (!data.success) {
+                return { error: `Hypixel API Error: ${data.cause || 'Unknown error'}` };
+            }
+
+            const gameLeaderboards = data.leaderboards[game.toUpperCase()];
+            if (!gameLeaderboards) {
+                return { error: `No leaderboards found for game: ${game}` };
+            }
+
+            const targetLeaderboard = gameLeaderboards.find(lb => 
+                lb.prefix && lb.prefix.toLowerCase() === type.split(' ')[0].toLowerCase() && 
+                lb.title && lb.title.toLowerCase() === type.split(' ')[1].toLowerCase()
+            );
+
+            if (!targetLeaderboard) {
+                return { error: `No '${type}' leaderboard found for ${game}.` };
+            }
+
+            const leaders = [];
+            for (const uuid of targetLeaderboard.leaders) {
+                const username = await this.getUsernameFromUUID(uuid);
+                if (username) {
+                    leaders.push(username);
+                } else {
+                    leaders.push(uuid); // Fallback to UUID if username not found
+                }
+            }
+            return { success: true, title: `${targetLeaderboard.prefix} ${targetLeaderboard.title} for ${game}`, leaders: leaders };
+
+        } catch (err) {
+            formatter.log(`getLeaderboard Error: ${err.message}`);
+            return { error: 'An internal error occurred while fetching leaderboards.' };
+        }
+    }
+
+    async getUsernameFromUUID(uuid) {
+        const apiKey = await this.getApiKey();
+        if (!apiKey) return null;
+        try {
+            const response = await fetch(`https://api.hypixel.net/v2/player?key=${apiKey}&uuid=${uuid}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            if (!data.success || !data.player) return null;
+            return data.player.displayname;
+        } catch (err) {
+            formatter.log(`getUsernameFromUUID Error: ${err.message}`);
+            return null;
+        }
+    }
+
     async getMojangUUID(username) {
         try {
             const response = await fetch(`https://api.mojang.com/users/profiles/minecraft/${username}`);

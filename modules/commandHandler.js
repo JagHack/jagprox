@@ -100,6 +100,47 @@ class CommandHandler {
             case 'gt':
                 this.handleGametrackCommand(args);
                 return true;
+            case 'leaderboard': {
+                const gameMode = args.shift()?.toLowerCase();
+                const statType = args.join(' ').toLowerCase(); // e.g., "monthly wins"
+
+                if (gameMode !== 'duels') {
+                    this.proxy.proxyChat("§cCurrently, leaderboards are only available for 'duels'.");
+                    this.proxy.proxyChat("§cUsage: /leaderboard duels <monthly wins|weekly wins>");
+                    return true;
+                }
+
+                let leaderboardType = '';
+                if (statType === 'monthly wins') {
+                    leaderboardType = 'Monthly Wins';
+                } else if (statType === 'weekly wins') {
+                    leaderboardType = 'Weekly Wins';
+                } else {
+                    this.proxy.proxyChat("§cInvalid leaderboard type. Supported types for Duels: 'monthly wins', 'weekly wins'.");
+                    this.proxy.proxyChat("§cUsage: /leaderboard duels <monthly wins|weekly wins>");
+                    return true;
+                }
+
+                this.proxy.proxyChat(`§eFetching ${leaderboardType} leaderboard for Duels...`);
+                this.proxy.hypixel.getLeaderboard('DUELS', leaderboardType).then(result => {
+                    if (result.error) {
+                        this.proxy.proxyChat(`§cError: ${result.error}`);
+                    } else {
+                        let message = `§d§m----------------------------------------------------\n`;
+                        message += `  §d§l${result.title}\n \n`;
+                        if (result.leaders.length === 0) {
+                            message += `    §7No leaders found for this category.`;
+                        } else {
+                            result.leaders.slice(0, 10).forEach((player, index) => {
+                                message += `  §e${index + 1}. §f${player}\n`;
+                            });
+                        }
+                        message += `\n§d§m----------------------------------------------------`;
+                        this.proxy.proxyChat(message);
+                    }
+                });
+                return true;
+            }
             default:
                 return false;
         }
@@ -352,6 +393,7 @@ class CommandHandler {
             { syntax: '/nickname <add|rem|list> [args]', desc: 'Sets local nicknames for players.' },
             { syntax: '/superf <add|rem|list> [args]', desc: "Tracks friends' game activity." },
             { syntax: '/drpc', desc: 'Toggles the Discord Rich Presence.' },
+            { syntax: '/leaderboard <game> <type>', desc: 'Displays top players for a game leaderboard (e.g., duels monthly wins|weekly wins).' },
             { syntax: '/link', desc: 'Generates a link to connect your Minecraft account with your JagProx account.' },
             { syntax: '/jagprox', desc: 'Displays this help message.' }
         ];
