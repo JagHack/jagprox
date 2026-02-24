@@ -419,11 +419,16 @@ ipcMain.on('toggle-proxy', (event, { start, token }) => {
         const appPath = app.getAppPath();
         const mainScriptPath = path.join(appPath, 'main.js');
 
+        const iconPath = app.isPackaged
+            ? path.join(process.resourcesPath, "server-icon.png")
+            : path.join(__dirname, "..", "server-icon.png");
+
         const childEnv = {
             ...process.env,
             ELECTRON_RUN_AS_NODE: '1',
             USER_DATA_PATH: userDataPath,
             JAGPROX_JWT: token,
+            ICON_PATH: iconPath
         };
 
         proxyProcess = spawn(electronExecutable, [mainScriptPath], {

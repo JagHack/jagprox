@@ -12,8 +12,9 @@ const GametrackClientHandler = require("./modules/gametrackClientHandler.js");
 const path = require("path");
 const fs = require("fs");
 const discordRpc = require('./modules/discordRpcHandler.js');
-const icon = fs.readFileSync("./server-icon.png")
-const favicon = "data:image/png;base64," + icon.toString("base64")
+const iconPath = process.env.ICON_PATH || path.join(__dirname, "server-icon.png");
+const icon = fs.readFileSync(iconPath);
+const favicon = "data:image/png;base64," + icon.toString("base64");
 
 function replaceNamesInComponent(component, nicknames) {
     if (!component) return;
