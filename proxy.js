@@ -12,6 +12,8 @@ const GametrackClientHandler = require("./modules/gametrackClientHandler.js");
 const path = require("path");
 const fs = require("fs");
 const discordRpc = require('./modules/discordRpcHandler.js');
+const icon = fs.readFileSync("./server-icon.png")
+const favicon = "data:image/png;base64," + icon.toString("base64")
 
 function replaceNamesInComponent(component, nicknames) {
     if (!component) return;
@@ -53,7 +55,8 @@ class JagProx {
             "online-mode": true,
             port: this.config.port || 25565,
             version: '1.8.9',
-            motd: ' '.repeat(20) + '§a§lJagProx §c§l[1.8-1.21]\n' + ' '.repeat(13) + '§6§lHypixel Proxy §c§l- made by JagHack'
+            motd: ' '.repeat(20) + '§a§lJagProx §c§l[1.8-1.21]\n' + ' '.repeat(13) + '§6§lHypixel Proxy §c§l- made by JagHack',
+            favicon: favicon
         });
 
         this.server.on("login", (client) => {
