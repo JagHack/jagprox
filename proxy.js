@@ -110,9 +110,10 @@ class JagProx {
         });
 
         this.target.on("connect", () => formatter.log(`Client connected to target: ${this.target.username}`));
-       this.client.on("packet", (data, meta) => {
+       this.client.on("packet", async (data, meta) => {
             if (meta.name === "chat" && data.message && data.message.startsWith("/")) {
-                if (this.commands.handle(data.message)) {
+                const handledByJagProx = await this.commands.handle(data.message);
+                if (handledByJagProx) {
                     return;
                 }
                 if (data.message.toLowerCase().startsWith('/play ')) {
