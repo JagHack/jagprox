@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('yaml');
+const fetch = require('node-fetch');
 const aliasManager = require('../aliasManager.js');
 const formatter = require('../formatter.js');
 const { gameModeMap, quickQueueMap } = require('../utils/constants.js');
@@ -13,7 +14,7 @@ class CommandHandler {
         this.proxy = proxy;
     }
 
-    handle(message) {
+    async handle(message) {
         const aliases = aliasManager.getAliases();
         const aliasedCommand = aliases[message.toLowerCase()];
 
@@ -48,7 +49,62 @@ class CommandHandler {
                     return true;
                 }
                 const realName = this.proxy.hypixel.resolveNickname(username);
-                this.proxy.hypixel.statcheck(gamemode, realName);
+                this.proxy.hypixel.statcheck(gamemode, realName); // Keep original statcheck functionality
+
+                // --- New Telemetry Dispatch Logic ---
+                (async () => { // Immediately invoked async function for non-blocking dispatch
+                    try {
+                        const gameInfo = gameModeMap[gamemode.toLowerCase()];
+                        if (!gameInfo) {
+                            // If game mode is unknown, we can't get stats, so silently exit telemetry
+                            return;
+                        }
+
+                        const cleanUsername = this.proxy.hypixel.cleanRankPrefix(username);
+                        const mojangData = await this.proxy.hypixel.getMojangUUID(cleanUsername);
+                        if (!mojangData) {
+                            // Player not found, silently exit telemetry
+                            return;
+                        }
+
+                        const stats = await this.proxy.hypixel.getStats(mojangData.uuid);
+                        if (!stats || !stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
+                            // No stats found for this game mode, silently exit telemetry
+                            return;
+                        }
+
+                        const win_count = this.getWinCount(stats, gameInfo);
+
+                        const backendApiUrl = 'https://jagprox.jaghack.com';
+                        if (!backendApiUrl) {
+                            console.warn("backend_api_url is not configured in config.yml. Skipping telemetry dispatch.");
+                            return;
+                        }
+
+                        const ingestUrl = `${backendApiUrl}/api/ingest`;
+                        const payload = {
+                            username: mojangData.username,
+                            mode: gameInfo.displayName, // Use display name for mode as per API docs
+                            win_count: win_count
+                        };
+
+                        const response = await fetch(ingestUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.error(`Telemetry dispatch failed: ${response.status} - ${errorText}`);
+                        } else {
+                            console.log(`Telemetry dispatched for ${mojangData.username} (${gameInfo.displayName}): ${win_count} wins`);
+                        }
+                    } catch (error) {
+                        // Silent failure as per requirements
+                        console.error("Error dispatching telemetry:", error);
+                    }
+                })();
                 return true;
             }
             case 'status': {
@@ -617,6 +673,38 @@ class CommandHandler {
             }
             default:
                 this.proxy.proxyChat("§cInvalid action. Use 'add', 'remove', or 'list'.");
+        }
+    }
+
+    getWinCount(stats, gameInfo) {
+        const d = stats.player.stats[gameInfo.apiName] || {};
+        switch (gameInfo.apiName) {
+            case "Bedwars":
+                return d.wins_bedwars || 0;
+            case "SkyWars":
+                return d.wins || 0;
+            case "Duels":
+                const prefix = gameInfo.prefix || '';
+                const winsKey = prefix ? `${prefix}_wins` : 'wins';
+                return d[winsKey] || 0;
+            case "Walls3":
+                return d.wins || 0;
+            case "Quake":
+                return d.wins || 0;
+            case "HungerGames":
+                return d.wins || 0;
+            case "UHC":
+                return d.wins || 0;
+            case "MurderMystery":
+                return d.wins || 0;
+            case "BuildBattle":
+                return d.wins || 0;
+            case "WoolGames":
+                const ww = d.wool_wars || {};
+                const wwStats = ww.stats || {};
+                return wwStats.wins || 0;
+            default:
+                return d.wins || 0;
         }
     }
 

@@ -71,7 +71,7 @@ ipcRenderer.on('auth-token-received', async (event, token) => {
                 updateLoginStatus('User');
             }
         } else {
-            console.log('User Profile:', profileData);
+        
             const displayName = profileData.username || profileData.email;
             localStorage.setItem('user_display_name', displayName);
             updateLoginStatus(displayName);
