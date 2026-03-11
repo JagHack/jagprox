@@ -98,7 +98,7 @@ class TabAlerter {
 
     triggerAlert(fullPlayerName, alertKey) {
         formatter.log(`Alerting for player: ${fullPlayerName}`);
-        this.proxy.proxyChat(`§aFound player §e${fullPlayerName}§a!`);
+        this.proxy.proxyChat(`§dFound player §5${fullPlayerName}§d!`);
         this.alertedThisSession.add(alertKey);
 
         this.playSoundEffect('entity.experience_orb.pickup');

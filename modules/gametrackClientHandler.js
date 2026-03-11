@@ -28,7 +28,7 @@ class GametrackClientHandler {
             });
         } catch (e) {
             console.error(`[GameTrack] Failed to start session:`, e);
-            this.proxy.proxyChat(`§c[GameTrack] Error starting session: ${e.message}`);
+            this.proxy.proxyChat(`§c[GameTrack] §8Error starting session: ${e.message}`);
         }
     }
 
@@ -88,9 +88,9 @@ class GametrackClientHandler {
                     mode: this.currentGame,
                     result: result
                 });
-                this.proxy.proxyChat(`§a[GameTrack] §7Recorded game result: §e${result.toUpperCase()}§7.`);
+                this.proxy.proxyChat(`§d[GameTrack] §8Recorded game result: §5${result.toUpperCase()}§8.`);
             } catch (e) {
-                this.proxy.proxyChat(`§c[GameTrack] Error recording event: ${e.message}`);
+                this.proxy.proxyChat(`§c[GameTrack] §8Error recording event: ${e.message}`);
                 console.error(`[GameTrack] Failed to send gametrack event:`, e);
             }
         }

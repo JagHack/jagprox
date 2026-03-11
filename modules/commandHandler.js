@@ -23,7 +23,7 @@ class CommandHandler {
                 this.proxy.lastPlayCommand = aliasedCommand;
                 formatter.log(`Captured last play command (from alias): ${this.proxy.lastPlayCommand}`);
             }
-            this.proxy.proxyChat(`§eAlias executing: §f${aliasedCommand}`);
+            this.proxy.proxyChat(`§dAlias §8» §f${aliasedCommand}`);
             this.proxy.target.write('chat', { message: aliasedCommand });
             return true;
         }
@@ -137,7 +137,7 @@ class CommandHandler {
                 return true;
             case 'rq':
                 if (this.proxy.lastPlayCommand) {
-                    this.proxy.proxyChat(`§eRe-queuing: §f${this.proxy.lastPlayCommand}`);
+                    this.proxy.proxyChat(`§dRe-queuing §8» §f${this.proxy.lastPlayCommand}`);
                     this.proxy.target.write('chat', { message: this.proxy.lastPlayCommand });
                 } else {
                     this.proxy.proxyChat("§cNo last game found to re-queue for.");
@@ -177,21 +177,21 @@ class CommandHandler {
                     return true;
                 }
 
-                this.proxy.proxyChat(`§eFetching ${leaderboardType} leaderboard for Duels...`);
+                this.proxy.proxyChat(`§dFetching §f${leaderboardType} §dleaderboard for §5Duels§d...`);
                 this.proxy.hypixel.getLeaderboard('DUELS', leaderboardType).then(result => {
                     if (result.error) {
                         this.proxy.proxyChat(`§cError: ${result.error}`);
                     } else {
-                        let message = `§d§m----------------------------------------------------\n`;
-                        message += `  §d§l${result.title}\n \n`;
+                        let message = `§5§m----------------------------------------------------\n`;
+                        message += `  §5§l${result.title}\n \n`;
                         if (result.leaders.length === 0) {
-                            message += `    §7No leaders found for this category.`;
+                            message += `    §8No leaders found for this category.`;
                         } else {
                             result.leaders.slice(0, 10).forEach((player, index) => {
-                                message += `  §e${index + 1}. §f${player}\n`;
+                                message += `  §d${index + 1}. §f${player}\n`;
                             });
                         }
-                        message += `\n§d§m----------------------------------------------------`;
+                        message += `\n§5§m----------------------------------------------------`;
                         this.proxy.proxyChat(message);
                     }
                 });
@@ -206,7 +206,7 @@ class CommandHandler {
         const subCommand = args[0] ? args[0].toLowerCase() : 'hour';
         const gametrackApiHandler = this.proxy.gametrackApiHandler;
 
-        const sendLine = () => this.proxy.proxyChat("§d§m----------------------------------------------------");
+        const sendLine = () => this.proxy.proxyChat("§5§m----------------------------------------------------");
 
         try {
             switch (subCommand) {
@@ -220,18 +220,18 @@ class CommandHandler {
                     const playerData = data[this.proxy.mc_uuid];
 
                     sendLine();
-                    this.proxy.proxyChat(`  §d§lGame Stats for the Last ${hours} Hour(s)`);
+                    this.proxy.proxyChat(`  §5§lGame Stats for the Last ${hours} Hour(s)`);
                     if (!playerData || Object.keys(playerData).length === 0) {
-                        this.proxy.proxyChat("    §7No game data found for your account in this period.");
+                        this.proxy.proxyChat("    §8No game data found for your account in this period.");
                     } else {
                         for (const [mode, stats] of Object.entries(playerData)) {
                             const formattedMode = mode.charAt(0).toUpperCase() + mode.slice(1);
                             const wlr = stats.losses === 0
                                 ? (stats.wins > 0 ? 'Infinite' : 'N/A')
                                 : (stats.wins / stats.losses).toFixed(2);
-                            const wlrString = `| ${wlr} WLR`;
+                            const wlrString = `§8| §d${wlr} WLR`;
 
-                            this.proxy.proxyChat(`  §e${formattedMode}: §a${stats.wins} Wins §8- §c${stats.losses} Losses ${wlrString}`);
+                            this.proxy.proxyChat(`  §d${formattedMode} §8- §f${stats.wins} Wins §8| §f${stats.losses} Losses ${wlrString}`);
                         }
                     }
                     sendLine();
@@ -242,17 +242,17 @@ class CommandHandler {
                     const data = await gametrackApiHandler.getStats('day');
                     const playerData = data[this.proxy.mc_uuid];
                     sendLine();
-                    this.proxy.proxyChat("  §d§lGame Stats For Today");
+                    this.proxy.proxyChat("  §5§lGame Stats For Today");
                      if (!playerData || Object.keys(playerData).length === 0) {
-                        this.proxy.proxyChat("    §7No game data found for your account today.");
+                        this.proxy.proxyChat("    §8No game data found for your account today.");
                     } else {
                         for (const [mode, stats] of Object.entries(playerData)) {
                             const formattedMode = mode.charAt(0).toUpperCase() + mode.slice(1);
                             const wlr = stats.losses === 0
                                 ? (stats.wins > 0 ? 'Infinite' : 'N/A')
                                 : (stats.wins / stats.losses).toFixed(2);
-                            const wlrString = `| ${wlr} WLR`;
-                            this.proxy.proxyChat(`  §e${formattedMode}: §a${stats.wins} Wins §8- §c${stats.losses} Losses ${wlrString}`);
+                            const wlrString = `§8| §d${wlr} WLR`;
+                            this.proxy.proxyChat(`  §d${formattedMode} §8- §f${stats.wins} Wins §8| §f${stats.losses} Losses ${wlrString}`);
                         }
                     }
                     sendLine();
@@ -262,15 +262,15 @@ class CommandHandler {
                 case 'log': {
                     const logData = await gametrackApiHandler.getStats('log');
                     sendLine();
-                    this.proxy.proxyChat("  §d§lRecent Game Log");
+                    this.proxy.proxyChat("  §5§lRecent Game Log");
                     if (!logData || logData.length === 0) {
-                        this.proxy.proxyChat("    §7No recent games found.");
+                        this.proxy.proxyChat("    §8No recent games found.");
                     } else {
                         logData.slice(0, 10).forEach(entry => {
-                            const resultColor = entry.result === 'win' ? '§a' : '§c';
+                            const resultColor = entry.result === 'win' ? '§d' : '§8';
                             const timestamp = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                             const formattedMode = entry.mode.charAt(0).toUpperCase() + entry.mode.slice(1);
-                            this.proxy.proxyChat(`  §7[${timestamp}] §e${formattedMode}: ${resultColor}${entry.result.toUpperCase()}`);
+                            this.proxy.proxyChat(`  §8[${timestamp}] §d${formattedMode} §8» ${resultColor}${entry.result.toUpperCase()}`);
                         });
                     }
                     sendLine();
@@ -295,13 +295,13 @@ class CommandHandler {
         }
 
         if (mode === '?') {
-            let helpMessage = "§d§m----------------------------------------------------\n";
-            helpMessage += "§r  §d§lAvailable Quick Queue Commands (/q)\n \n";
+            let helpMessage = "§5§m----------------------------------------------------\n";
+            helpMessage += "§r  §5§lAvailable Quick Queue Commands (/q)\n \n";
             for (const alias in quickQueueMap) {
                 const modeInfo = quickQueueMap[alias];
-                helpMessage += `§r  §e${alias} §8- §b${modeInfo.name}\n`;
+                helpMessage += `§r  §d${alias} §8- §f${modeInfo.name}\n`;
             }
-            helpMessage += "\n§d§m----------------------------------------------------";
+            helpMessage += "\n§5§m----------------------------------------------------";
             this.proxy.proxyChat(helpMessage);
             return;
         }
@@ -384,15 +384,15 @@ class CommandHandler {
                 
                 const progressBarLength = 20;
                 const filledLength = Math.round((progressBarLength * percentage) / 100);
-                const bar = `§a${'█'.repeat(filledLength)}§7${'█'.repeat(progressBarLength - filledLength)}`;
+                const bar = `§d${'█'.repeat(filledLength)}§8${'█'.repeat(progressBarLength - filledLength)}`;
     
-                this.proxy.proxyChat(`§d§m----------------------------------------------------`);
-                this.proxy.proxyChat(`  §d§lGoal: ${goal.name} in ${goal.gamemode}`);
-                this.proxy.proxyChat(`  §7${goal.initial.toLocaleString()} §f-> §6${goal.target.toLocaleString()}`);
+                this.proxy.proxyChat(`§5§m----------------------------------------------------`);
+                this.proxy.proxyChat(`  §5§lGoal: ${goal.name} in ${goal.gamemode}`);
+                this.proxy.proxyChat(`  §7${goal.initial.toLocaleString()} §8» §f${goal.target.toLocaleString()}`);
                 this.proxy.proxyChat(` `);
-                this.proxy.proxyChat(`  §fProgress: ${bar} §e${percentage.toFixed(2)}%`);
-                this.proxy.proxyChat(`  §aCurrent: ${currentValue.toLocaleString()} §c(Remaining: ${remaining.toLocaleString()})`);
-                this.proxy.proxyChat(`§d§m----------------------------------------------------`);
+                this.proxy.proxyChat(`  §fProgress: ${bar} §d${percentage.toFixed(2)}%`);
+                this.proxy.proxyChat(`  §dCurrent: §f${currentValue.toLocaleString()} §8(Remaining: §f${remaining.toLocaleString()}§8)`);
+                this.proxy.proxyChat(`§5§m----------------------------------------------------`);
                 break;
             }
             
@@ -419,17 +419,17 @@ class CommandHandler {
             modesByCategory[modeInfo.displayName].push(alias);
         }
 
-        let helpMessage = "§d§m----------------------------------------------------\n";
-        helpMessage += "§r  §d§lAvailable Statcheck Gamemodes\n \n";
+        let helpMessage = "§5§m----------------------------------------------------\n";
+        helpMessage += "§r  §5§lAvailable Statcheck Gamemodes\n \n";
 
         const sortedCategories = Object.keys(modesByCategory).sort();
 
         for (const category of sortedCategories) {
             const aliases = modesByCategory[category].join(', ');
-            helpMessage += `§r  §e${category}: §b${aliases}\n`;
+            helpMessage += `§r  §d${category} §8- §f${aliases}\n`;
         }
         
-        helpMessage += "\n§d§m----------------------------------------------------";
+        helpMessage += "\n§5§m----------------------------------------------------";
         this.proxy.proxyChat(helpMessage);
     }
 
@@ -454,21 +454,21 @@ class CommandHandler {
             { syntax: '/jagprox', desc: 'Displays this help message.' }
         ];
 
-        let helpMessage = "§d§m----------------------------------------------------\n";
-        helpMessage += "§r  §d§lJagProx §8- §7Available Commands\n \n";
+        let helpMessage = "§5§m----------------------------------------------------\n";
+        helpMessage += "§r  §5§lJagProx §8- §7Available Commands\n \n";
 
         commandList.sort((a,b) => a.syntax.localeCompare(b.syntax)).forEach(c => {
             const parts = c.syntax.split(' ');
             const cmd = parts.shift();
             const args = parts.join(' ');
-            const coloredSyntax = `§d${cmd} §e${args}`;
+            const coloredSyntax = `§5${cmd} §d${args}`;
 
             helpMessage += `§r  ${coloredSyntax}\n`;
             helpMessage += `§r    §8- §7${c.desc}\n \n`;
         });
 
         helpMessage = helpMessage.trimEnd();
-        helpMessage += "\n§r\n§d§m----------------------------------------------------";
+        helpMessage += "\n§r\n§5§m----------------------------------------------------";
 
         this.proxy.proxyChat(helpMessage);
     }
@@ -546,11 +546,11 @@ class CommandHandler {
                 const nicknames = this.proxy.config.nicknames;
                 const keys = Object.keys(nicknames);
                 if (keys.length === 0) {
-                    this.proxy.proxyChat("§eYou have no nicknames set.");
+                    this.proxy.proxyChat("§dYou have no nicknames set.");
                 } else {
-                    this.proxy.proxyChat("§aYour nicknames:");
+                    this.proxy.proxyChat("§5Your nicknames:");
                     keys.forEach(realName => {
-                        this.proxy.proxyChat(`§8- §f${realName} §7-> §e${nicknames[realName]}`);
+                        this.proxy.proxyChat(`§8- §d${realName} §8» §f${nicknames[realName]}`);
                     });
                 }
                 break;
@@ -570,10 +570,10 @@ class CommandHandler {
 
         if (action === 'list') {
             if (alertList.length === 0) {
-                this.proxy.proxyChat("§eYour alert list is empty.");
+                this.proxy.proxyChat("§dYour alert list is empty.");
             } else {
-                this.proxy.proxyChat("§aPlayers on your alert list:");
-                alertList.forEach(name => this.proxy.proxyChat(`§8- §f${name}`));
+                this.proxy.proxyChat("§5Players on your alert list:");
+                alertList.forEach(name => this.proxy.proxyChat(`§8- §d${name}`));
             }
             return;
         }
@@ -621,11 +621,11 @@ class CommandHandler {
             const friends = this.proxy.config.super_friends;
             const keys = Object.keys(friends);
             if (keys.length === 0) {
-                this.proxy.proxyChat("§eYou have no super friends set.");
+                this.proxy.proxyChat("§dYou have no super friends set.");
             } else {
-                this.proxy.proxyChat("§aYour super friends:");
+                this.proxy.proxyChat("§5Your super friends:");
                 keys.forEach(name => {
-                    this.proxy.proxyChat(`§8- §f${name} §7(${friends[name].join(', ')})`);
+                    this.proxy.proxyChat(`§8- §d${name} §7(${friends[name].join(', ')})`);
                 });
             }
             return;
@@ -733,7 +733,7 @@ class CommandHandler {
             return;
         }
 
-        this.proxy.proxyChat("§eGenerating account linking code...");
+        this.proxy.proxyChat("§dGenerating account linking code...");
 
         const apiUrl = `${API_BASE_URL}/generate-link-code`;
         console.log(`Attempting to generate link code from: ${apiUrl}`);
@@ -757,8 +757,8 @@ class CommandHandler {
 
             if (response.ok) {
                 const linkUrl = data.link_url || `${WEB_LINK_BASE_URL}/link.html?code=${data.code}`;
-                this.proxy.proxyChat(`§aYour account linking URL: §b${linkUrl}`);
-                this.proxy.proxyChat("§ePlease open this URL in your browser to complete the linking process.");
+                this.proxy.proxyChat(`§5Link §8» §f${linkUrl}`);
+                this.proxy.proxyChat("§dPlease open this URL in your browser to complete the linking process.");
             } else {
                 this.proxy.proxyChat(`§cError generating link: ${data.message || 'Unknown error.'}`);
             }

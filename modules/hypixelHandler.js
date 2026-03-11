@@ -188,7 +188,7 @@ class HypixelHandler {
 
         let gameInfo = gameModeMap[gamemode] || gameModeMap[this.proxy.queueStats.currentGameKey] || gameModeMap.bedwars;
 
-        this.proxy.proxyChat(`§aFound ${partyMembers.length} members. Fetching stats for §e${gameInfo.displayName}§a...`);
+        this.proxy.proxyChat(`§dFound §f${partyMembers.length} §dmembers. Fetching stats for §5${gameInfo.displayName}§d...`);
 
         const statBlocks = [];
         for (const username of partyMembers) {
@@ -199,10 +199,10 @@ class HypixelHandler {
             await new Promise(resolve => setTimeout(resolve, 300)); // Add a delay between requests
         }
 
-        let finalMessage = `§d§m----------------------------------------------------\n`;
-        finalMessage += `  §d§lParty Stats for ${gameInfo.displayName}\n \n`;
+        let finalMessage = `§5§m----------------------------------------------------\n`;
+        finalMessage += `  §5§lParty Stats for §d${gameInfo.displayName}\n \n`;
         finalMessage += statBlocks.filter(block => block).join('\n \n');
-        finalMessage += `\n§d§m----------------------------------------------------`;
+        finalMessage += `\n§5§m----------------------------------------------------`;
         this.proxy.proxyChat(finalMessage);
     }
 
@@ -236,27 +236,27 @@ class HypixelHandler {
 
             switch (gameInfo.apiName) {
                 case "Bedwars":
-                    header += ` §7[§f${a.bedwars_level || 0}✫§7]`;
-                    statLines.push(`    §fFKDR: §6${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}`);
+                    header += ` §8[§d${a.bedwars_level || 0}✫§8]`;
+                    statLines.push(`    §dFKDR §8» §f${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)} §8| §dWLR §8» §f${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}`);
                     break;
                 case "SkyWars":
-                    header += ` §7[§f${p.stats.SkyWars.levelFormatted || '0✫'}§7]`;
-                    statLines.push(`    §fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
+                    header += ` §8[§d${p.stats.SkyWars.levelFormatted || '0✫'}§8]`;
+                    statLines.push(`    §dKDR §8» §f${((d.kills || 0) / (d.deaths || 1)).toFixed(2)} §8| §dWLR §8» §f${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
                     break;
                 case "Walls3":
-                    statLines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fFKDR: §6${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)}`);
+                    statLines.push(`    §dWins §8» §f${(d.wins || 0).toLocaleString()} §8| §dFKDR §8» §f${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)}`);
                     break;
                 case "Duels":
                      const wins = d.wins || 0; const losses = d.losses || 1;
                      const kills = d.kills || 0; const deaths = d.deaths || 1;
-                     statLines.push(`    §fWLR: §6${(wins/losses).toFixed(2)} §8| §fKDR: §6${(kills/deaths).toFixed(2)}`);
+                     statLines.push(`    §dWLR §8» §f${(wins/losses).toFixed(2)} §8| §dKDR §8» §f${(kills/deaths).toFixed(2)}`);
                      break;
                 case "UHC":
-                    header += ` §7[§f${(a.uhc_champion || 0)}✫§7]`;
-                    statLines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
+                    header += ` §8[§d${(a.uhc_champion || 0)}✫§8]`;
+                    statLines.push(`    §dWins §8» §f${(d.wins || 0).toLocaleString()} §8| §dKDR §8» §f${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
                     break;
                 default:
-                    statLines.push(`    §fWins: §a${(d.wins || 'N/A').toLocaleString()} §8| §fKills: §a${(d.kills || 'N/A').toLocaleString()}`);
+                    statLines.push(`    §dWins §8» §f${(d.wins || 'N/A').toLocaleString()} §8| §dKills §8» §f${(d.kills || 'N/A').toLocaleString()}`);
             }
             
             return `${header}\n${statLines.join('\n')}`;
@@ -357,7 +357,8 @@ class HypixelHandler {
             const response = await fetch(`https://api.hypixel.net/v2/guild?key=${apiKey}&player=${uuid}`);
             if (!response.ok) return null;
             const data = await response.json();
-            return data.guild ? data.guild.name : null;
+            if (!data.guild) return null;
+            return data.guild.tag ? `[${data.guild.tag}]` : `[${data.guild.name}]`;
         } catch (err) {
             formatter.log(`getGuild Error: ${err.message}`);
             return null;
@@ -371,20 +372,20 @@ class HypixelHandler {
             if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${username}' not found.`);
             const status = await this.getHypixelStatus(mojangData.uuid);
             if (!status) return this.proxy.proxyChat(`§cCould not retrieve status for '${mojangData.username}'.`);
-            this.proxy.proxyChat("§7§m----------------------------------------");
+            this.proxy.proxyChat("§5§m----------------------------------------");
             if (status.online) {
-                this.proxy.proxyChat(`${formatter.formatRank(status.rank)} ${mojangData.username} §ais Online.`);
+                this.proxy.proxyChat(`${formatter.formatRank(status.rank)} ${mojangData.username} §dOnline`);
                 if (status.hidden) {
-                    this.proxy.proxyChat(`§7(Status is hidden, game info unavailable)`);
+                    this.proxy.proxyChat(`§8(Status is hidden, game info unavailable)`);
                 } else {
-                    this.proxy.proxyChat(`§fGame: §b${status.gameType}`);
-                    if (status.mode) this.proxy.proxyChat(`§fMode: §e${status.mode}`);
-                    if (status.map) this.proxy.proxyChat(`§fMap: §e${status.map}`);
+                    this.proxy.proxyChat(`§dGame §8» §f${status.gameType}`);
+                    if (status.mode) this.proxy.proxyChat(`§dMode §8» §f${status.mode}`);
+                    if (status.map) this.proxy.proxyChat(`§dMap §8» §f${status.map}`);
                 }
             } else {
-                this.proxy.proxyChat(`${formatter.formatRank(status.rank)} ${mojangData.username} §cis Offline.`);
+                this.proxy.proxyChat(`${formatter.formatRank(status.rank)} ${mojangData.username} §8Offline`);
             }
-            this.proxy.proxyChat("§7§m----------------------------------------");
+            this.proxy.proxyChat("§5§m----------------------------------------");
         } catch (err) {
             formatter.log(`Status check error: ${err.message}`);
             this.proxy.proxyChat(`§cAn error occurred.`);
@@ -516,101 +517,71 @@ class HypixelHandler {
 
             const p = stats.player;
             const d = p.stats[gameInfo.apiName] || {};
-            const a = p.achievements || {};
 
-            const rank = formatter.formatRank(stats.rank);
-            const guild = stats.guild ? ` §e[${stats.guild}]` : "";
-            this.proxy.proxyChat("§7§m----------------------------------------");
-            asciiLines.forEach(line => this.proxy.client.write("chat", { message: JSON.stringify({ text: line }), position: 1 }));
-            this.proxy.proxyChat(" ");
-            
-            let lines = [];
+            const rank = formatter.formatRank(p);
+            const guild = stats.guild ? ` §5${stats.guild}` : "";
+            const prefix = "§8[§5jag§dprox§8] §r";
+
+            // 1. Skin lines with prefix
+            asciiLines.forEach(line => {
+                this.proxy.client.write("chat", { 
+                    message: JSON.stringify({ text: prefix + line }), 
+                    position: 1 
+                });
+            });
+
+            // 2. [MODE]
+            this.proxy.proxyChat(`§8[§5${gameInfo.displayName}§8]`);
+
+            // 3. [Rank] Name [Guild]
+            const nameColor = formatter.getPlayerNameColor(p);
+            this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
+
+            let wins = 0, losses = 1, kills = 0, deaths = 1;
+
             switch (gameInfo.apiName) {
                 case "Bedwars":
-                    lines.push(`${rank} ${username} §7[§f${a.bedwars_level || 0}✫§7]${guild}`);
-                    lines.push(`§fWins: §a${(d.wins_bedwars || 0).toLocaleString()} §8| §fLosses: §c${(d.losses_bedwars || 1).toLocaleString()}`);
-                    lines.push(`§fFinal Kills: §a${(d.final_kills_bedwars || 0).toLocaleString()} §8| §fFinal Deaths: §c${(d.final_deaths_bedwars || 1).toLocaleString()}`);
-                    lines.push(`§fFKDR: §6${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}`);
+                    wins = d.wins_bedwars || 0;
+                    losses = d.losses_bedwars || 1;
+                    kills = d.final_kills_bedwars || 0;
+                    deaths = d.final_deaths_bedwars || 1;
                     break;
                 case "SkyWars":
-                    lines.push(`${rank} ${username} §7[§f${p.stats.SkyWars.levelFormatted || '0✫'}§7]${guild}`);
-                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fLosses: §c${(d.losses || 1).toLocaleString()}`);
-                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
-                    lines.push(`§fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
+                    wins = d.wins || 0;
+                    losses = d.losses || 1;
+                    kills = d.kills || 0;
+                    deaths = d.deaths || 1;
                     break;
                 case "Duels":
-                    const prefix = gameInfo.prefix || '';
-                    const winsKey = prefix ? `${prefix}_wins` : 'wins';
-                    const lossesKey = prefix ? `${prefix}_losses` : 'losses';
-                    const killsKey = prefix ? `${prefix}_kills` : 'kills';
-                    const deathsKey = prefix ? `${prefix}_deaths` : 'deaths';
-                    const wins = d[winsKey] || 0;
-                    lines.push(`§f[${gameInfo.displayName}] ${rank} ${username} §7[§f${wins.toLocaleString()} Wins§7]${guild}`);
-                    lines.push(`§fWins: §a${wins.toLocaleString()} §8| §fLosses: §c${(d[lossesKey] || 1).toLocaleString()}`);
-                    lines.push(`§fKills: §a${(d[killsKey] || 0).toLocaleString()} §8| §fDeaths: §c${(d[deathsKey] || 1).toLocaleString()}`);
-                    lines.push(`§fWLR: §6${(wins / (d[lossesKey] || 1)).toFixed(2)} §8| §fKDR: §6${((d[killsKey] || 0) / (d[deathsKey] || 1)).toFixed(2)}`);
+                    const dgPrefix = gameInfo.prefix || '';
+                    wins = d[dgPrefix ? `${dgPrefix}_wins` : 'wins'] || 0;
+                    losses = d[dgPrefix ? `${dgPrefix}_losses` : 'losses'] || 1;
+                    kills = d[dgPrefix ? `${dgPrefix}_kills` : 'kills'] || 0;
+                    deaths = d[dgPrefix ? `${dgPrefix}_deaths` : 'deaths'] || 1;
                     break;
                 case "Walls3":
-                    lines.push(`${rank} ${username}${guild}`);
-                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fLosses: §c${(d.losses || 1).toLocaleString()}`);
-                    lines.push(`§fFinal Kills: §a${(d.final_kills || 0).toLocaleString()} §8| §fFinal Deaths: §c${(d.final_deaths || 1).toLocaleString()}`);
-                    lines.push(`§fFKDR: §6${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
-                    break;
-                case "Quake":
-                    lines.push(`${rank} ${username}${guild}`);
-                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fHeadshots: §e${(d.headshots || 0).toLocaleString()}`);
-                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
-                    lines.push(`§fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
-                    break;
-                case "HungerGames":
-                    lines.push(`${rank} ${username}${guild}`);
-                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()}`);
-                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
-                    lines.push(`§fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
-                    break;
-                case "UHC":
-                    lines.push(`${rank} ${username} §7[§f${(a.uhc_champion || 0)}✫§7]${guild}`);
-                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fScore: §6${(d.score || 0).toLocaleString()}`);
-                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
-                    lines.push(`§fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
-                    break;
-                case "MurderMystery":
-                    lines.push(`${rank} ${username} §7[§f${(d.wins || 0).toLocaleString()} Wins§7]${guild}`);
-                    lines.push(`§fGames: §a${(d.games || 0).toLocaleString()}`);
-                    lines.push(`§fKills: §a${(d.kills || 0).toLocaleString()} §8| §fDeaths: §c${(d.deaths || 1).toLocaleString()}`);
-                    lines.push(`§fWin Rate: §6${(((d.wins || 0) / (d.games || 1)) * 100).toFixed(2)}%`);
-                    break;
-                case "BuildBattle":
-                    lines.push(`${rank} ${username} §7[§fScore: ${(d.score || 0).toLocaleString()}§7]${guild}`);
-                    lines.push(`§fWins: §a${(d.wins || 0).toLocaleString()} §8| §fGames Played: §e${(d.games_played || 0).toLocaleString()}`);
-                    lines.push(`§fWin Rate: §6${(((d.wins || 0) / (d.games_played || 1)) * 100).toFixed(2)}%`);
-                    break;
-                 case "WoolGames":
-                    lines.push(`${rank} ${username}${guild}`);
-                    const ww = d.wool_wars || {};
-                    const stats = ww.stats || {};
-                    lines.push(`§fWins: §a${(stats.wins || 0).toLocaleString()} §8| §fGames: §e${(stats.games_played || 0).toLocaleString()}`);
-                    lines.push(`§fKills: §a${(stats.kills || 0).toLocaleString()} §8| §fAssists: §b${(stats.assists || 0).toLocaleString()}`);
-                    lines.push(`§fWLR: §6${((stats.wins || 0) / ((stats.games_played - (stats.wins || 0)) || 1)).toFixed(2)}`);
-                    break;
-                case "Pit":
-                    const pitProfile = p.stats.Pit ? p.stats.Pit.profile : {};
-                    const pitStats = p.stats.Pit ? p.stats.Pit.pit_stats_ptl : {};
-                    const prestige = pitProfile.prestiges ? pitProfile.prestiges.length : 0;
-                    lines.push(`${rank} ${username} §7[§e${prestige}✫§7]${guild}`);
-                    lines.push(`§fKills: §a${(pitStats.kills || 0).toLocaleString()} §8| §fDeaths: §c${(pitStats.deaths || 1).toLocaleString()}`);
-                    lines.push(`§fKDR: §6${((pitStats.kills || 0) / (pitStats.deaths || 1)).toFixed(2)}`);
+                    wins = d.wins || 0;
+                    losses = d.losses || 1;
+                    kills = d.final_kills || 0;
+                    deaths = d.final_deaths || 1;
                     break;
                 default:
-                    lines.push(`${rank} ${username}${guild}`);
-                    lines.push(`§fWins: §a${(d.wins || 'N/A').toLocaleString()}`);
-                    lines.push(`§fKills: §a${(d.kills || 'N/A').toLocaleString()} §8| §fDeaths: §c${(d.deaths || 'N/A').toLocaleString()}`);
+                    wins = d.wins || 0;
+                    losses = d.losses || 1;
+                    kills = d.kills || 0;
+                    deaths = d.deaths || 1;
             }
-            lines.forEach(line => this.proxy.proxyChat(line));
-            this.proxy.proxyChat("§7§m----------------------------------------");
+
+            const wlr = (wins / losses).toFixed(2);
+            const kdr = (kills / deaths).toFixed(2);
+
+            this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()} §8| §5Losses §5» §f${losses.toLocaleString()}`);
+            this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()} §8| §5Deaths §5» §f${deaths.toLocaleString()}`);
+            this.proxy.proxyChat(`§dWLR §5» §f${wlr} §8| §dKDR §5» §f${kdr}`);
+
         } catch (err) {
             formatter.log(`displayFormattedStats Error: ${err.message}`);
-            this.proxy.proxyChat(`§cError displaying stats (could not load avatar?).`);
+            this.proxy.proxyChat(`§cError displaying stats.`);
         }
     }
 }

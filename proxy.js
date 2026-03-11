@@ -56,7 +56,7 @@ class JagProx {
             "online-mode": true,
             port: this.config.port || 25565,
             version: '1.8.9',
-            motd: ' '.repeat(20) + '§a§lJagProx §c§l[1.8-1.21]\n' + ' '.repeat(13) + '§6§lHypixel Proxy §c§l- made by JagHack',
+            motd: ' '.repeat(20) + '§8[§5jag§dprox§8] §d1.8-1.21\n' + ' '.repeat(13) + '§5§lHypixel Proxy §8- §7by §dJagHack',
             favicon: favicon
         });
 
@@ -248,7 +248,7 @@ class JagProx {
     proxyChat(message) {
         if (!this.client) return;
         this.client.write("chat", {
-            message: JSON.stringify({ text: `§dJagProx §8» §r${message}` }),
+            message: JSON.stringify({ text: `§8[§5jag§dprox§8] §r${message}` }),
             position: 0
         });
     }

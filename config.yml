@@ -27,7 +27,7 @@ ping_benchmarks:
   high: 250
 show_tag: true
 tag: JagProxy
-tag_prefix: §8[§d
+tag_prefix: "§8[§5"
 bypasses:
   enabled: true
   lunar: true
