@@ -206,6 +206,59 @@ const duelsDivisions = {
 
 const romanNumerals = ["I", "II", "III", "IV", "V"];
 
+const duelsPlayerCountMap = {
+    "bed wars duel": "BEDWARS_TWO_ONE_DUELS",
+    "bed wars": "BEDWARS_TWO_ONE_DUELS",
+    "bw": "BEDWARS_TWO_ONE_DUELS",
+    "bed rush duel": "BEDWARS_TWO_ONE_DUELS_RUSH",
+    "bed rush": "BEDWARS_TWO_ONE_DUELS_RUSH",
+    "blitz duel": "DUELS_BLITZ_DUEL",
+    "blitz": "DUELS_BLITZ_DUEL",
+    "bow duel": "DUELS_BOW_DUEL",
+    "bow": "DUELS_BOW_DUEL",
+    "bow spleef duel": "DUELS_BOWSPLEEF_DUEL",
+    "bow spleef": "DUELS_BOWSPLEEF_DUEL",
+    "boxing duel": "DUELS_BOXING_DUEL",
+    "boxing": "DUELS_BOXING_DUEL",
+    "bridge duel": "DUELS_BRIDGE_DUEL",
+    "bridge": "DUELS_BRIDGE_DUEL",
+    "classic duel": "DUELS_CLASSIC_DUEL",
+    "classic": "DUELS_CLASSIC_DUEL",
+    "combo duel": "DUELS_COMBO_DUEL",
+    "combo": "DUELS_COMBO_DUEL",
+    "mega walls duel": "DUELS_MW_DUEL",
+    "mw": "DUELS_MW_DUEL",
+    "nodebuff duel": "DUELS_POTION_DUEL",
+    "nodebuff": "DUELS_POTION_DUEL",
+    "potion": "DUELS_POTION_DUEL",
+    "ndb": "DUELS_POTION_DUEL",
+    "op duel": "DUELS_OP_DUEL",
+    "op": "DUELS_OP_DUEL",
+    "quake duel": "DUELS_QUAKE_DUEL",
+    "quake": "DUELS_QUAKE_DUEL",
+    "skywars duel": "DUELS_SW_DUEL",
+    "sw": "DUELS_SW_DUEL",
+    "spleef duel": "DUELS_SPLEEF_DUEL",
+    "spleef": "DUELS_SPLEEF_DUEL",
+    "sumo duel": "DUELS_SUMO_DUEL",
+    "sumo": "DUELS_SUMO_DUEL",
+    "uhc duel": "DUELS_UHC_DUEL",
+    "uhc": "DUELS_UHC_DUEL",
+    "bridge doubles": "DUELS_BRIDGE_DOUBLES",
+    "bridge 3v3": "DUELS_BRIDGE_THREES",
+    "bridge teams": "DUELS_BRIDGE_FOUR",
+    "classic doubles": "DUELS_CLASSIC_DOUBLES",
+    "op doubles": "DUELS_OP_DOUBLES",
+    "skywars doubles": "DUELS_SW_DOUBLES",
+    "uhc teams": "DUELS_UHC_FOUR",
+    "duel arena": "DUELS_DUEL_ARENA",
+    "arena": "DUELS_DUEL_ARENA",
+    "parkour duels": "DUELS_PARKOUR_EIGHT",
+    "parkour": "DUELS_PARKOUR_EIGHT",
+    "uhc deathmatch": "DUELS_UHC_MEETUP",
+    "meetup": "DUELS_UHC_MEETUP"
+};
+
 module.exports = {
     mcColors,
     findClosestMinecraftColor,
@@ -213,5 +266,6 @@ module.exports = {
     gameModeMap,
     quickQueueMap,
     duelsDivisions,
-    romanNumerals
+    romanNumerals,
+    duelsPlayerCountMap
 };

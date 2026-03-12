@@ -4,7 +4,7 @@ const yaml = require('yaml');
 const fetch = require('node-fetch');
 const aliasManager = require('../aliasManager.js');
 const formatter = require('../formatter.js');
-const { gameModeMap, quickQueueMap } = require('../utils/constants.js');
+const { gameModeMap, quickQueueMap, duelsPlayerCountMap } = require('../utils/constants.js');
 const { getStatValue, statAliases } = require('../utils/stat-helper.js');
 const discordRpc = require('./discordRpcHandler.js');
 const { API_BASE_URL, WEB_LINK_BASE_URL } = require('../utils/api_constants.js');
@@ -107,6 +107,9 @@ class CommandHandler {
                 })();
                 return true;
             }
+            case 'playercount':
+                this.handlePlayerCountCommand(args);
+                return true;
             case 'status': {
                 const username = args[0];
                 if (!username) {
@@ -200,6 +203,51 @@ class CommandHandler {
             default:
                 return false;
         }
+    }
+
+    async handlePlayerCountCommand(args) {
+        const queryMode = args.join(' ').toLowerCase();
+
+        if (!queryMode || queryMode === '?') {
+            let helpMessage = "§5§m----------------------------------------------------\n";
+            helpMessage += "§r  §5§lAvailable Duels Modes for /playercount\n \n";
+            
+            const uniqueModes = [...new Set(Object.values(duelsPlayerCountMap))];
+            const displayNames = {};
+            
+            for (const [alias, apiKey] of Object.entries(duelsPlayerCountMap)) {
+                if (!displayNames[apiKey] || alias.length > displayNames[apiKey].length) {
+                    displayNames[apiKey] = alias;
+                }
+            }
+
+            const sortedKeys = Object.keys(displayNames).sort((a, b) => displayNames[a].localeCompare(displayNames[b]));
+            
+            sortedKeys.forEach(apiKey => {
+                helpMessage += `§r  §d${displayNames[apiKey].split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}\n`;
+            });
+
+            helpMessage += "\n§5§m----------------------------------------------------";
+            this.proxy.proxyChat(helpMessage);
+            return;
+        }
+
+        const apiKeyMap = duelsPlayerCountMap[queryMode];
+        if (!apiKeyMap) {
+            this.proxy.proxyChat(`§cUnknown duels mode: ${queryMode}`);
+            this.proxy.proxyChat("§eUse /playercount ? to see all modes.");
+            return;
+        }
+
+        const games = await this.proxy.hypixel.getPlayerCounts();
+        
+        if (!games || !games.DUELS || !games.DUELS.modes) {
+            this.proxy.proxyChat("§cCould not retrieve player counts from Hypixel.");
+            return;
+        }
+
+        const count = games.DUELS.modes[apiKeyMap] || 0;
+        this.proxy.proxyChat(`§5Duels §8» §f${count.toLocaleString()} Players §8(§d${queryMode}§8)`);
     }
 
     async handleGametrackCommand(args) {
@@ -449,6 +497,7 @@ class CommandHandler {
             { syntax: '/nickname <add|rem|list> [args]', desc: 'Sets local nicknames for players.' },
             { syntax: '/superf <add|rem|list> [args]', desc: "Tracks friends' game activity." },
             { syntax: '/drpc', desc: 'Toggles the Discord Rich Presence.' },
+            { syntax: '/playercount <duelsmode>', desc: 'Checks how many players are queuing in a duels mode.' },
             { syntax: '/leaderboard <game> <type>', desc: 'Displays top players for a game leaderboard (e.g., duels monthly wins|weekly wins).' },
             { syntax: '/link', desc: 'Generates a link to connect your Minecraft account with your JagProx account.' },
             { syntax: '/jagprox', desc: 'Displays this help message.' }

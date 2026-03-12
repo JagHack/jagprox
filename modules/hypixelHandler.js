@@ -447,6 +447,21 @@ class HypixelHandler {
         }
     }
 
+    async getPlayerCounts() {
+        const apiKey = await this.getApiKey();
+        if (!apiKey) return null;
+        try {
+            const response = await fetch(`https://api.hypixel.net/v2/counts?key=${apiKey}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            if (!data.success) return null;
+            return data.games;
+        } catch (err) {
+            formatter.log(`getPlayerCounts Error: ${err.message}`);
+            return null;
+        }
+    }
+
     async getStats(uuid) {
         const apiKey = await this.getApiKey();
         if (!apiKey) return null;
