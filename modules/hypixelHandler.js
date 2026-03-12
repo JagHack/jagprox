@@ -430,9 +430,10 @@ class HypixelHandler {
         }
 
         try {
-            const cleanUsername = this.cleanRankPrefix(username); // Clean rank prefix for statcheck
-            const mojangData = await this.getMojangUUID(cleanUsername);
-            if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${username}' not found.`);
+            const cleanUsername = this.cleanRankPrefix(username);
+            const resolvedName = this.resolveNickname(cleanUsername);
+            const mojangData = await this.getMojangUUID(resolvedName);
+            if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${resolvedName}' not found.`);
             const stats = await this.getStats(mojangData.uuid);
             if (!stats) {
                 return this.proxy.proxyChat(`§cCould not retrieve data for '${mojangData.username}'.`);

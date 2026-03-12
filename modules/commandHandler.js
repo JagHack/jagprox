@@ -48,8 +48,7 @@ class CommandHandler {
                     this.proxy.proxyChat("§eUse /sc ? to see all available gamemodes.");
                     return true;
                 }
-                const realName = this.proxy.hypixel.resolveNickname(username);
-                this.proxy.hypixel.statcheck(gamemode, realName); // Keep original statcheck functionality
+                this.proxy.hypixel.statcheck(gamemode, username); // Keep original statcheck functionality
 
                 // --- New Telemetry Dispatch Logic ---
                 (async () => { // Immediately invoked async function for non-blocking dispatch
