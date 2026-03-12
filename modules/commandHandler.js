@@ -4,7 +4,7 @@ const yaml = require('yaml');
 const fetch = require('node-fetch');
 const aliasManager = require('../aliasManager.js');
 const formatter = require('../formatter.js');
-const { gameModeMap, quickQueueMap, duelsPlayerCountMap } = require('../utils/constants.js');
+const { gameModeMap, quickQueueMap, duelsPlayerCountMap, duelsStatMap, duelsDivisions, romanNumerals, duelsTitleColors } = require('../utils/constants.js');
 const { getStatValue, statAliases } = require('../utils/stat-helper.js');
 const discordRpc = require('./discordRpcHandler.js');
 const { API_BASE_URL, WEB_LINK_BASE_URL } = require('../utils/api_constants.js');
@@ -106,6 +106,9 @@ class CommandHandler {
                 })();
                 return true;
             }
+            case 'jtitles':
+                this.handleJTitlesCommand(args);
+                return true;
             case 'playercount':
                 this.handlePlayerCountCommand(args);
                 return true;
@@ -119,6 +122,9 @@ class CommandHandler {
                 this.proxy.hypixel.getPlayerStatus(realName);
                 return true;
             }
+            case 'spread':
+                this.handleSpreadCommand();
+                return true;
             case 'q':
                 this.handleQuickQueue(args);
                 return true;
@@ -202,6 +208,121 @@ class CommandHandler {
             default:
                 return false;
         }
+    }
+
+    async handleJTitlesCommand(args) {
+        let username = args[0];
+        let uuid = this.proxy.client.uuid;
+        let displayName = this.proxy.client.username;
+
+        if (username) {
+            this.proxy.proxyChat(`§eFetching titles for §d${username}§e...`);
+            const resolvedName = this.proxy.hypixel.resolveNickname(username);
+            const mojangData = await this.proxy.hypixel.getMojangUUID(resolvedName);
+            if (!mojangData) return this.proxy.proxyChat("§cInvalid playername!");
+            uuid = mojangData.uuid;
+            displayName = mojangData.username;
+        }
+
+        if (!uuid) return this.proxy.proxyChat("§cInvalid playername!");
+
+        const stats = await this.proxy.hypixel.getStats(uuid);
+        if (!stats || !stats.player || !stats.player.stats || !stats.player.stats.Duels) {
+            return this.proxy.proxyChat(`§cCould not fetch Duels stats for ${displayName}.`);
+        }
+
+        const d = stats.player.stats.Duels;
+        const activeTitles = [];
+        let maxModeLen = 0;
+
+        for (const [modeDisplayName, prefix] of Object.entries(duelsStatMap)) {
+            const wins = d[`${prefix}_wins`] || 0;
+            if (wins >= 50) {
+                let bestRank = "No Title";
+                let bestDivision = "";
+                let bestColor = "§7";
+
+                for (const [rank, data] of Object.entries(duelsDivisions)) {
+                    if (wins >= data.wins) {
+                        bestRank = rank.charAt(0).toUpperCase() + rank.slice(1);
+                        bestColor = duelsTitleColors[rank] || "§7";
+                        
+                        const winsInRank = wins - data.wins;
+                        const divisionIndex = Math.floor(winsInRank / data.step);
+                        const actualDivision = Math.min(divisionIndex, data.levels - 1);
+                        bestDivision = romanNumerals[actualDivision];
+                    }
+                }
+
+                if (bestRank !== "No Title") {
+                    const formattedTitle = `${bestColor}${bestRank} ${bestDivision}`;
+                    activeTitles.push({
+                        name: modeDisplayName,
+                        title: formattedTitle
+                    });
+                    if (modeDisplayName.length > maxModeLen) maxModeLen = modeDisplayName.length;
+                }
+            }
+        }
+
+        if (activeTitles.length === 0) {
+            return this.proxy.proxyChat(`§c${displayName} doesn't have any Duels titles yet (minimum 50 wins in a mode).`);
+        }
+
+        this.proxy.proxyChat("§5§m----------------------------------------------------");
+        this.proxy.proxyChat(`  §5§lDuels Mode Titles for ${displayName}`);
+
+        for (const entry of activeTitles) {
+            const paddedName = entry.name.padEnd(maxModeLen, ' ');
+            this.proxy.proxyChat(`  §5${paddedName} §8: ${entry.title}`);
+        }
+
+        this.proxy.proxyChat("§5§m----------------------------------------------------");
+    }
+
+    async handleSpreadCommand() {
+        const uuid = this.proxy.client.uuid;
+        if (!uuid) return this.proxy.proxyChat("§cInvalid playername!");
+
+        const stats = await this.proxy.hypixel.getStats(uuid);
+        if (!stats || !stats.player || !stats.player.stats || !stats.player.stats.Duels) {
+            return this.proxy.proxyChat("§cCould not fetch your Duels stats.");
+        }
+
+        const d = stats.player.stats.Duels;
+        const activeModes = [];
+        let maxModeLen = 0;
+        let maxWinsLen = 0;
+
+        for (const [displayName, prefix] of Object.entries(duelsStatMap)) {
+            const wins = d[`${prefix}_wins`] || 0;
+            const losses = d[`${prefix}_losses`] || 0;
+            if (wins > 0 || losses > 0) {
+                const winsStr = wins.toLocaleString();
+                activeModes.push({
+                    name: displayName,
+                    wins: winsStr,
+                    losses: losses.toLocaleString()
+                });
+                if (displayName.length > maxModeLen) maxModeLen = displayName.length;
+                if (winsStr.length > maxWinsLen) maxWinsLen = winsStr.length;
+            }
+        }
+
+        if (activeModes.length === 0) {
+            return this.proxy.proxyChat("§cNo Duels stats found for any mode.");
+        }
+
+        this.proxy.proxyChat("§5§m----------------------------------------------------");
+        this.proxy.proxyChat("  §5§lDuels Mode Spread");
+
+        for (const mode of activeModes) {
+            const paddedName = mode.name.padEnd(maxModeLen, ' ');
+            const paddedWins = mode.wins.padStart(maxWinsLen, ' ');
+            this.proxy.proxyChat(`  §5${paddedName} §8: §a${paddedWins} §8| §4${mode.losses}`);
+        }
+
+        this.proxy.proxyChat("§5§m----------------------------------------------------");
     }
 
     async handlePlayerCountCommand(args) {
@@ -393,7 +514,7 @@ class CommandHandler {
     
                 this.proxy.proxyChat("§eFetching your current stats to set the goal...");
                 const uuid = this.proxy.client.uuid;
-                if (!uuid) return this.proxy.proxyChat("§cCould not identify your UUID. Please relog.");
+                if (!uuid) return this.proxy.proxyChat("§cInvalid playername! Please relog.");
     
                 const stats = await this.proxy.hypixel.getStats(uuid);
                 if (!stats || !stats.player) return this.proxy.proxyChat("§cCould not fetch your Hypixel stats.");
@@ -416,7 +537,7 @@ class CommandHandler {
     
                 this.proxy.proxyChat("§eChecking your goal progress...");
                 const uuid = this.proxy.client.uuid;
-                if (!uuid) return this.proxy.proxyChat("§cCould not identify your UUID. Please relog.");
+                if (!uuid) return this.proxy.proxyChat("§cInvalid playername! Please relog.");
                 
                 const stats = await this.proxy.hypixel.getStats(uuid);
                 if (!stats || !stats.player) return this.proxy.proxyChat("§cCould not fetch your Hypixel stats.");
@@ -496,7 +617,9 @@ class CommandHandler {
             { syntax: '/nickname <add|rem|list> [args]', desc: 'Sets local nicknames for players.' },
             { syntax: '/superf <add|rem|list> [args]', desc: "Tracks friends' game activity." },
             { syntax: '/drpc', desc: 'Toggles the Discord Rich Presence.' },
-            { syntax: '/playercount <duelsmode>', desc: 'Checks how many players are queuing in a duels mode.' },
+            { syntax: '/playercount <mode>', desc: 'Checks how many players are queuing in a mode. Use /playercount ? for list.' },
+            { syntax: '/spread', desc: 'Shows your Duels wins and losses spread for all modes.' },
+            { syntax: '/jtitles [player]', desc: 'Shows Duels mode-specific titles for you or another player.' },
             { syntax: '/leaderboard <game> <type>', desc: 'Displays top players for a game leaderboard (e.g., duels monthly wins|weekly wins).' },
             { syntax: '/link', desc: 'Generates a link to connect your Minecraft account with your JagProx account.' },
             { syntax: '/jagprox', desc: 'Displays this help message.' }

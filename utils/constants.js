@@ -259,6 +259,50 @@ const duelsPlayerCountMap = {
     "meetup": "DUELS_UHC_MEETUP"
 };
 
+const duelsStatMap = {
+    "Bed Wars Duel": "bw_duel_doubles",
+    "Bed Rush Duel": "bw_duel_rush",
+    "Blitz Duel": "blitz_duel",
+    "Bow Duel": "bow_duel",
+    "Bow Spleef Duel": "bowspleef_duel",
+    "Boxing Duel": "boxing_duel",
+    "Bridge Duel": "bridge_duel",
+    "Classic Duel": "classic_duel",
+    "Combo Duel": "combo_duel",
+    "Mega Walls Duel": "mega_walls_duel",
+    "NoDebuff Duel": "potion_duel",
+    "OP Duel": "op_duel",
+    "Quake Duel": "quake_duel",
+    "SkyWars Duel": "sw_duel",
+    "Spleef Duel": "spleef_duel",
+    "Sumo Duel": "sumo_duel",
+    "UHC Duel": "uhc_duel",
+    "Bridge Doubles": "bridge_doubles",
+    "Bridge 3v3": "bridge_3v3",
+    "Bridge Teams": "bridge_four",
+    "Classic Doubles": "classic_doubles",
+    "OP Doubles": "op_doubles",
+    "SkyWars Doubles": "sw_doubles",
+    "UHC Teams": "uhc_four",
+    "Duel Arena": "duel_arena",
+    "Parkour Duels": "parkour_eight",
+    "UHC Deathmatch": "uhc_meetup"
+};
+
+const duelsTitleColors = {
+    rookie: "§8",
+    iron: "§f",
+    gold: "§6",
+    diamond: "§b",
+    master: "§2",
+    legend: "§4",
+    grandmaster: "§e",
+    godlike: "§5",
+    celestial: "§3",
+    divine: "§d",
+    ascended: "§c"
+};
+
 module.exports = {
     mcColors,
     findClosestMinecraftColor,
@@ -267,5 +311,7 @@ module.exports = {
     quickQueueMap,
     duelsDivisions,
     romanNumerals,
-    duelsPlayerCountMap
+    duelsPlayerCountMap,
+    duelsStatMap,
+    duelsTitleColors
 };
