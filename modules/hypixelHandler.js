@@ -538,6 +538,7 @@ class HypixelHandler {
             this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
 
             let wins = 0, losses = 1, kills = 0, deaths = 1;
+            let currentWinstreak = 0, bestWinstreak = 0;
 
             switch (gameInfo.apiName) {
                 case "Bedwars":
@@ -545,12 +546,16 @@ class HypixelHandler {
                     losses = d.losses_bedwars || 1;
                     kills = d.final_kills_bedwars || 0;
                     deaths = d.final_deaths_bedwars || 1;
+                    currentWinstreak = d.winstreak || 0;
+                    bestWinstreak = d.winstreak_best || 0;
                     break;
                 case "SkyWars":
                     wins = d.wins || 0;
                     losses = d.losses || 1;
                     kills = d.kills || 0;
                     deaths = d.deaths || 1;
+                    currentWinstreak = d.winstreak || 0;
+                    bestWinstreak = d.winstreak_best || 0;
                     break;
                 case "Duels":
                     const dgPrefix = gameInfo.prefix || '';
@@ -558,6 +563,13 @@ class HypixelHandler {
                     losses = d[dgPrefix ? `${dgPrefix}_losses` : 'losses'] || 1;
                     kills = d[dgPrefix ? `${dgPrefix}_kills` : 'kills'] || 0;
                     deaths = d[dgPrefix ? `${dgPrefix}_deaths` : 'deaths'] || 1;
+                    if (dgPrefix) {
+                        currentWinstreak = d[`current_winstreak_mode_${dgPrefix}`] || 0;
+                        bestWinstreak = d[`best_winstreak_mode_${dgPrefix}`] || 0;
+                    } else {
+                        currentWinstreak = d.current_winstreak || 0;
+                        bestWinstreak = d.best_winstreak || 0;
+                    }
                     break;
                 case "Walls3":
                     wins = d.wins || 0;
@@ -578,6 +590,12 @@ class HypixelHandler {
             this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()} §8| §5Losses §5» §f${losses.toLocaleString()}`);
             this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()} §8| §5Deaths §5» §f${deaths.toLocaleString()}`);
             this.proxy.proxyChat(`§dWLR §5» §f${wlr} §8| §dKDR §5» §f${kdr}`);
+            
+            if (bestWinstreak === 0 && parseFloat(wlr) > 1.01) {
+                this.proxy.proxyChat(`§cWINSTREAK DISABLED`);
+            } else {
+                this.proxy.proxyChat(`§dWinstreak §5» §f${currentWinstreak.toLocaleString()} §8| §5Best §5» §f${bestWinstreak.toLocaleString()}`);
+            }
 
         } catch (err) {
             formatter.log(`displayFormattedStats Error: ${err.message}`);
