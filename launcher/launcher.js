@@ -12,6 +12,7 @@ const { gameModeMap } = require('../utils/constants.js');
 const discordRpc = require('../modules/discordRpcHandler.js');
 const formatter = require('../formatter.js');
 const ApiHandler = require('../utils/apiHandler.js');
+const { initUpdater } = require('./updater.js');
 
 let mainWindow;
 let proxyProcess;
@@ -131,6 +132,7 @@ app.whenReady().then(() => {
 
     createWindow();
     startAuthServer();
+    initUpdater(mainWindow);
 });
 function initializeFile(filePath, defaultContent) {
     try {
@@ -211,64 +213,6 @@ ipcMain.on('get-app-version', (event) => {
     event.reply('app-version', app.getVersion());
 });
 
-ipcMain.on('check-for-updates', () => {
-    mainWindow.webContents.send('update-status', 'Checking for updates...');
-    autoUpdater.checkForUpdates();
-});
-
-autoUpdater.on('update-not-available', () => {
-    mainWindow.webContents.send('update-status', `You are on the latest version: v${app.getVersion()}`);
-    new Notification({
-        title: 'JagProx Updater',
-        body: 'You are already running the latest version.'
-    }).show();
-});
-
-autoUpdater.on('update-available', (info) => {
-    mainWindow.webContents.send('update-status', `Update v${info.version} found!`);
-    const notification = new Notification({
-        title: 'Update available!',
-        body: `JagProx v${info.version} is available. Click to download.`,
-        actions: [{ type: 'button', text: 'Download' }]
-    });
-    
-    notification.on('click', () => {
-        mainWindow.webContents.send('update-status', 'Downloading update...');
-        autoUpdater.downloadUpdate();
-    });
-    
-    notification.show();
-});
-
-autoUpdater.on('download-progress', (progressObj) => {
-    const percent = progressObj.percent.toFixed(2);
-    const transferred = (progressObj.transferred / 1024 / 1024).toFixed(2);
-    const total = (progressObj.total / 1024 / 1024).toFixed(2);
-    mainWindow.webContents.send('update-status', `Downloading... ${percent}% (${transferred}MB / ${total}MB)`);
-});
-
-autoUpdater.on('update-downloaded', (info) => {
-    mainWindow.webContents.send('update-status', `Update v${info.version} downloaded. Ready to install.`);
-    const notification = new Notification({
-        title: 'Download complete!',
-        body: 'Click to install the update now. The application will restart.',
-        actions: [{ type: 'button', text: 'Install & Restart' }]
-    });
-
-    notification.on('click', () => {
-        autoUpdater.quitAndInstall();
-    });
-
-    notification.show();
-});
-
-autoUpdater.on('error', (err) => {
-    mainWindow.webContents.send('update-status', 'Error checking for updates.');
-    new Notification({
-        title: 'Update Error',
-        body: `An error occurred: ${err.message}`
-    }).show();
-});
 ipcMain.on('get-config', (event) => {
     try {
         if (fs.existsSync(configPath)) {
