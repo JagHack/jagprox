@@ -547,70 +547,96 @@ class HypixelHandler {
             });
 
             // 2. [MODE]
-            this.proxy.proxyChat(`§8[§5${gameInfo.displayName}§8]`);
+            if (gameInfo.apiName === "Bedwars") {
+                const wins = d.wins_bedwars || 0;
+                const losses = d.losses_bedwars || 0;
+                const kills = d.kills_bedwars || 0;
+                const deaths = d.deaths_bedwars || 0;
+                const finals = d.final_kills_bedwars || 0;
+                const fdeaths = d.final_deaths_bedwars || 0;
+                const bedsBroken = d.beds_broken_bedwars || 0;
+                const bedsLost = d.beds_lost_bedwars || 0;
+                const winstreak = d.winstreak || 0;
+                let bestWinstreak = d.winstreak_best || 0;
+                if (winstreak > bestWinstreak) bestWinstreak = winstreak;
 
-            // 3. [Rank] Name [Guild]
-            const nameColor = formatter.getPlayerNameColor(p);
-            this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
+                const wlr = (wins / (losses || 1)).toFixed(2);
+                const kdr = (kills / (deaths || 1)).toFixed(2);
+                const fkdr = (finals / (fdeaths || 1)).toFixed(2);
+                const bblr = (bedsBroken / (bedsLost || 1)).toFixed(2);
 
-            let wins = 0, losses = 1, kills = 0, deaths = 1;
-            let currentWinstreak = 0, bestWinstreak = 0;
-
-            switch (gameInfo.apiName) {
-                case "Bedwars":
-                    wins = d.wins_bedwars || 0;
-                    losses = d.losses_bedwars || 1;
-                    kills = d.final_kills_bedwars || 0;
-                    deaths = d.final_deaths_bedwars || 1;
-                    currentWinstreak = d.winstreak || 0;
-                    bestWinstreak = d.winstreak_best || 0;
-                    break;
-                case "SkyWars":
-                    wins = d.wins || 0;
-                    losses = d.losses || 1;
-                    kills = d.kills || 0;
-                    deaths = d.deaths || 1;
-                    currentWinstreak = d.winstreak || 0;
-                    bestWinstreak = d.winstreak_best || 0;
-                    break;
-                case "Duels":
-                    const dgPrefix = gameInfo.prefix || '';
-                    wins = d[dgPrefix ? `${dgPrefix}_wins` : 'wins'] || 0;
-                    losses = d[dgPrefix ? `${dgPrefix}_losses` : 'losses'] || 1;
-                    kills = d[dgPrefix ? `${dgPrefix}_kills` : 'kills'] || 0;
-                    deaths = d[dgPrefix ? `${dgPrefix}_deaths` : 'deaths'] || 1;
-                    if (dgPrefix) {
-                        currentWinstreak = d[`current_winstreak_mode_${dgPrefix}`] || 0;
-                        bestWinstreak = d[`best_winstreak_mode_${dgPrefix}`] || 0;
-                    } else {
-                        currentWinstreak = d.current_winstreak || 0;
-                        bestWinstreak = d.best_winstreak || 0;
-                    }
-                    break;
-                case "Walls3":
-                    wins = d.wins || 0;
-                    losses = d.losses || 1;
-                    kills = d.final_kills || 0;
-                    deaths = d.final_deaths || 1;
-                    break;
-                default:
-                    wins = d.wins || 0;
-                    losses = d.losses || 1;
-                    kills = d.kills || 0;
-                    deaths = d.deaths || 1;
-            }
-
-            const wlr = (wins / losses).toFixed(2);
-            const kdr = (kills / deaths).toFixed(2);
-
-            this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()} §8| §5Losses §5» §f${losses.toLocaleString()}`);
-            this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()} §8| §5Deaths §5» §f${deaths.toLocaleString()}`);
-            this.proxy.proxyChat(`§dWLR §5» §f${wlr} §8| §dKDR §5» §f${kdr}`);
-            
-            if (bestWinstreak === 0 && parseFloat(wlr) > 1.01) {
-                this.proxy.proxyChat(`§cWINSTREAK DISABLED`);
+                this.proxy.proxyChat(`§8[§dBedwars§8]`);
+                const nameColor = formatter.getPlayerNameColor(p);
+                this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
+                this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()}    §8| §dLosses §5» §f${losses.toLocaleString()}`);
+                this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()}   §8| §dDeaths §5» §f${deaths.toLocaleString()}`);
+                this.proxy.proxyChat(`§dFinals §5» §f${finals.toLocaleString()}   §8| §dF-Deaths §5» §f${fdeaths.toLocaleString()}`);
+                this.proxy.proxyChat(`§dWLR   §5» §f${wlr} | §dKDR §5» §f${kdr}`);
+                this.proxy.proxyChat(`§dFKDR  §5» §f${fkdr} | §dBBLR §5» §f${bblr}`);
+                if (parseFloat(wlr) > 1.01 && bestWinstreak === 0) {
+                    this.proxy.proxyChat(`§cWINSTREAK API DISABLED`);
+                } else {
+                    this.proxy.proxyChat(`§dWinstreak §5» §f${winstreak.toLocaleString()} | §dBest §5» §f${bestWinstreak.toLocaleString()}`);
+                }
             } else {
-                this.proxy.proxyChat(`§dWinstreak §5» §f${currentWinstreak.toLocaleString()} §8| §5Best §5» §f${bestWinstreak.toLocaleString()}`);
+                this.proxy.proxyChat(`§8[§5${gameInfo.displayName}§8]`);
+
+                // 3. [Rank] Name [Guild]
+                const nameColor = formatter.getPlayerNameColor(p);
+                this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
+
+                let wins = 0, losses = 1, kills = 0, deaths = 1;
+                let currentWinstreak = 0, bestWinstreak = 0;
+
+                switch (gameInfo.apiName) {
+                    case "SkyWars":
+                        wins = d.wins || 0;
+                        losses = d.losses || 1;
+                        kills = d.kills || 0;
+                        deaths = d.deaths || 1;
+                        currentWinstreak = d.winstreak || 0;
+                        bestWinstreak = d.winstreak_best || 0;
+                        break;
+                    case "Duels":
+                        const dgPrefix = gameInfo.prefix || '';
+                        wins = d[dgPrefix ? `${dgPrefix}_wins` : 'wins'] || 0;
+                        losses = d[dgPrefix ? `${dgPrefix}_losses` : 'losses'] || 1;
+                        kills = d[dgPrefix ? `${dgPrefix}_kills` : 'kills'] || 0;
+                        deaths = d[dgPrefix ? `${dgPrefix}_deaths` : 'deaths'] || 1;
+                        if (dgPrefix) {
+                            currentWinstreak = d[`current_winstreak_mode_${dgPrefix}`] || 0;
+                            bestWinstreak = d[`best_winstreak_mode_${dgPrefix}`] || 0;
+                        } else {
+                            currentWinstreak = d.current_winstreak || 0;
+                            bestWinstreak = d.best_winstreak || 0;
+                        }
+                        break;
+                    case "Walls3":
+                        wins = d.wins || 0;
+                        losses = d.losses || 1;
+                        kills = d.final_kills || 0;
+                        deaths = d.final_deaths || 1;
+                        break;
+                    default:
+                        wins = d.wins || 0;
+                        losses = d.losses || 1;
+                        kills = d.kills || 0;
+                        deaths = d.deaths || 1;
+                }
+
+                const wlr = (wins / losses).toFixed(2);
+                const kdr = (kills / deaths).toFixed(2);
+                if (currentWinstreak > bestWinstreak) bestWinstreak = currentWinstreak;
+
+                this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()} §8| §5Losses §5» §f${losses.toLocaleString()}`);
+                this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()} §8| §5Deaths §5» §f${deaths.toLocaleString()}`);
+                this.proxy.proxyChat(`§dWLR §5» §f${wlr} §8| §dKDR §5» §f${kdr}`);
+                
+                if (bestWinstreak === 0 && parseFloat(wlr) > 1.01) {
+                    this.proxy.proxyChat(`§cWINSTREAK API DISABLED`);
+                } else {
+                    this.proxy.proxyChat(`§dWinstreak §5» §f${currentWinstreak.toLocaleString()} §8| §5Best §5» §f${bestWinstreak.toLocaleString()}`);
+                }
             }
 
         } catch (err) {
