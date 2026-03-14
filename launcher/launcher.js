@@ -12,9 +12,10 @@ const { gameModeMap } = require('../utils/constants.js');
 const discordRpc = require('../modules/discordRpcHandler.js');
 const formatter = require('../formatter.js');
 const ApiHandler = require('../utils/apiHandler.js');
-const { initUpdater } = require('./updater.js');
 
 let mainWindow;
+let splashWindow;
+let updatePromptWindow;
 let proxyProcess;
 let statsHandler;
 let userDataPath;
@@ -26,26 +27,6 @@ let jwtToken = null;
 
 let config = {};
 let localAuthCallbackUrl = null;
-
-function createWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1000,
-        height: 650,
-        frame: false,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-        },
-        autoHideMenuBar: true,
-        icon: path.join(__dirname, 'icon.ico')
-    });
-
-    mainWindow.loadFile(path.join(__dirname, 'index.html'));
-    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        shell.openExternal(url);
-        return { action: 'deny' };
-    });
-}
 
 function startAuthServer() {
     let port = 8080;
@@ -101,6 +82,161 @@ function startAuthServer() {
     });
 }
 
+function createSplashWindow() {
+    splashWindow = new BrowserWindow({
+        width: 400,
+        height: 350,
+        frame: false,
+        resizable: false,
+        show: false,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+        },
+        backgroundColor: '#1e1e2e',
+        icon: path.join(__dirname, 'icon.png')
+    });
+
+    splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+    splashWindow.once('ready-to-show', () => {
+        splashWindow.show();
+    });
+}
+
+function createUpdatePromptWindow(version) {
+    if (updatePromptWindow) return;
+
+    updatePromptWindow = new BrowserWindow({
+        width: 450,
+        height: 220,
+        frame: false,
+        resizable: false,
+        parent: splashWindow,
+        modal: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+        },
+        backgroundColor: '#1e1e2e'
+    });
+
+    updatePromptWindow.loadFile(path.join(__dirname, 'update-prompt.html'));
+    updatePromptWindow.webContents.on('did-finish-load', () => {
+        updatePromptWindow.webContents.send('version-info', version);
+    });
+
+    ipcMain.once('update-response', (event, response) => {
+        if (response === 'update') {
+            autoUpdater.downloadUpdate();
+            if (splashWindow) splashWindow.webContents.send('update-status', 'Downloading update...');
+        } else {
+            launchApp(true); // Close immediately on skip
+        }
+        if (updatePromptWindow) {
+            updatePromptWindow.close();
+            updatePromptWindow = null;
+        }
+    });
+}
+
+function launchApp(immediate = false) {
+    if (mainWindow) return;
+
+    createWindow();
+    startAuthServer();
+
+    if (splashWindow) {
+        if (immediate) {
+            mainWindow.once('ready-to-show', () => {
+                if (splashWindow) {
+                    splashWindow.close();
+                    splashWindow = null;
+                }
+                mainWindow.show();
+            });
+        } else {
+            splashWindow.webContents.send('update-status', 'Launching JagProx...');
+            setTimeout(() => {
+                if (mainWindow && mainWindow.isVisible()) return; // Already shown
+                if (splashWindow) {
+                    splashWindow.close();
+                    splashWindow = null;
+                }
+                if (mainWindow) mainWindow.show();
+            }, 1500);
+        }
+    } else {
+        mainWindow.once('ready-to-show', () => {
+            mainWindow.show();
+        });
+    }
+}
+
+function createWindow() {
+    mainWindow = new BrowserWindow({
+        width: 1000,
+        height: 650,
+        frame: false,
+        show: false, 
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+        },
+        autoHideMenuBar: true,
+        icon: path.join(__dirname, 'icon.png')
+    });
+
+    mainWindow.loadFile(path.join(__dirname, 'index.html'));
+    
+    mainWindow.once('ready-to-show', () => {
+        // If splash is already closed or we are in immediate mode, show now
+        // Otherwise wait for the launchApp timeout
+    });
+
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        shell.openExternal(url);
+        return { action: 'deny' };
+    });
+}
+
+function handleUpdates() {
+    autoUpdater.on('checking-for-update', () => {
+        if (splashWindow) splashWindow.webContents.send('update-status', 'Checking for updates...');
+    });
+
+    autoUpdater.on('update-available', (info) => {
+        if (splashWindow) splashWindow.webContents.send('update-status', 'Update available!');
+        createUpdatePromptWindow(info.version);
+    });
+
+    autoUpdater.on('update-not-available', () => {
+        launchApp();
+    });
+
+    autoUpdater.on('error', (err) => {
+        log.error('Update error:', err);
+        launchApp();
+    });
+
+    autoUpdater.on('download-progress', (progressObj) => {
+        if (splashWindow) {
+            splashWindow.webContents.send('update-status', `Downloading update (${Math.round(progressObj.percent)}%)`);
+            splashWindow.webContents.send('update-progress', progressObj.percent);
+        }
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+        if (splashWindow) splashWindow.webContents.send('update-status', 'Restarting...');
+        autoUpdater.quitAndInstall(false, true);
+    });
+
+    if (app.isPackaged) {
+        autoUpdater.checkForUpdates();
+    } else {
+        setTimeout(launchApp, 2000); // Simulate splash in dev
+    }
+}
+
 app.whenReady().then(() => {
     userDataPath = app.getPath('userData');
     aliasesPath = path.join(userDataPath, 'aliases.json');
@@ -130,9 +266,8 @@ app.whenReady().then(() => {
         log.error('Failed to load initial config.yml for Discord RPC:', e);
     }
 
-    createWindow();
-    startAuthServer();
-    initUpdater(mainWindow);
+    createSplashWindow();
+    handleUpdates();
 });
 function initializeFile(filePath, defaultContent) {
     try {

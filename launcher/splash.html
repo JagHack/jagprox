@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>JagProx</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            -webkit-app-region: drag;
+            user-select: none;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .icon {
+            width: 120px;
+            height: 120px;
+            animation: float 2s ease-in-out infinite;
+            -webkit-app-region: no-drag;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .loader-container {
+            width: 250px;
+            height: 4px;
+            background-color: #313244;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .loader-bar {
+            height: 100%;
+            width: 40%;
+            background-color: #cba6f7;
+            border-radius: 4px;
+            position: absolute;
+            animation: shimmer 1.5s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% { left: -40%; }
+            100% { left: 100%; }
+        }
+
+        #status {
+            font-size: 13px;
+            color: #a6adc8;
+            margin-top: 10px;
+        }
+
+        /* Progress mode */
+        .loader-bar.progress {
+            animation: none;
+            left: 0;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="icon.png" class="icon" alt="JagProx Logo">
+        <div class="loader-container">
+            <div id="loader-bar" class="loader-bar"></div>
+        </div>
+        <div id="status">Checking for updates...</div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const statusText = document.getElementById('status');
+        const loaderBar = document.getElementById('loader-bar');
+
+        ipcRenderer.on('update-status', (event, text) => {
+            statusText.innerText = text;
+        });
+
+        ipcRenderer.on('update-progress', (event, percent) => {
+            loaderBar.classList.add('progress');
+            loaderBar.style.width = percent + '%';
+        });
+    </script>
+</body>
+</html>
