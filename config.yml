@@ -42,4 +42,10 @@ auto_gg:
   delay: 1500
 discord_rpc: 
   enabled: true
+queue_stats:
+  bedwars: true
+  bw: true
+  skywars: false
+  sw: false
+  duels: false
 cache_folder: ./cache/profiles

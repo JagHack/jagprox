@@ -138,16 +138,17 @@ class QueueStatsHandler {
 
             if (this.isCapturingWho) {
                 if (cleanMessage.startsWith('ONLINE: ')) {
-                    const players = cleanMessage.replace('ONLINE: ', '').split(', ');
-                    this.whoPlayers.push(...players.map(p => p.trim().replace('.', '')));
-                    if (cleanMessage.endsWith('.')) this.finishWhoCapture();
+                    const players = cleanMessage.replace('ONLINE: ', '').split(/,\s*/);
+                    this.whoPlayers.push(...players.map(p => p.trim().replace(/\.$/, '')));
+                    // Finish immediately if it starts with ONLINE: as it's usually a single-line list
+                    this.finishWhoCapture();
                     return true;
                 }
                 if (cleanMessage.startsWith('Team #')) {
                     const parts = cleanMessage.split(':');
                     if (parts.length > 1) {
-                        const players = parts.slice(1).join(':').trim().split(', ');
-                        this.whoPlayers.push(...players.map(p => p.trim()));
+                        const players = parts.slice(1).join(':').trim().split(/,\s*/);
+                        this.whoPlayers.push(...players.map(p => p.trim().replace(/\.$/, '')));
                     }
                     return true;
                 }

@@ -3,79 +3,140 @@ const formatter = require('../formatter.js');
 class TabManager {
     constructor(proxy) {
         this.proxy = proxy;
-        this.playerMap = new Map();
+        this.uuidToNameMap = new Map();
+        this.playerTeamMap = new Map();
+        this.teamSuffixMap = new Map();
         this.teamCounter = 0;
     }
 
     reset() {
         formatter.log(`Player Tag Manager and UUID cache reset.`);
-        this.playerMap.clear();
+        this.uuidToNameMap.clear();
+        this.playerTeamMap.clear();
+        this.teamSuffixMap.clear();
         this.teamCounter = 0;
     }
 
-    handlePacket(data, meta) {
-        if (meta.name !== 'player_info') return;
+    normalizeUUID(uuid) {
+        if (!uuid) return null;
+        if (Buffer.isBuffer(uuid)) return uuid;
+        if (typeof uuid === 'string') {
+            const clean = uuid.replace(/-/g, '');
+            if (clean.length === 32) return Buffer.from(clean, 'hex');
+        }
+        return uuid;
+    }
 
-        if (data.action === 'add_player') {
-            for (const player of data.data) {
-                if (player.name) {
-                    this.playerMap.set(player.UUID, player.name);
+    handlePacket(data, meta) {
+        if (meta.name === 'player_info') {
+            const action = data.action;
+            const players = data.data;
+            if (!players || !Array.isArray(players)) return;
+
+            for (const player of players) {
+                const rawUUID = player.UUID || player.uuid;
+                if (!rawUUID) continue;
+
+                const uuidBuffer = this.normalizeUUID(rawUUID);
+                if (!uuidBuffer || uuidBuffer.length !== 16) continue;
+                
+                const uuidHex = uuidBuffer.toString('hex');
+
+                if (action === 'add_player' || action === 0) {
+                    if (player.name) {
+                        this.uuidToNameMap.set(uuidHex, player.name);
+                    }
+                } else if (action === 'remove_player' || action === 4) {
+                    this.uuidToNameMap.delete(uuidHex);
                 }
             }
         }
-        else if (data.action === 'remove_player') {
-            for (const player of data.data) {
-                this.playerMap.delete(player.UUID);
+
+        if (meta.name === 'scoreboard_team') {
+            if ((data.mode === 0 || data.mode === 3) && data.players) {
+                for (const player of data.players) {
+                    this.playerTeamMap.set(player, data.team);
+                }
+            }
+            if (data.mode === 4 && data.players) {
+                for (const player of data.players) {
+                    this.playerTeamMap.delete(player);
+                }
+            }
+
+            if ((data.mode === 0 || data.mode === 2) && this.teamSuffixMap.has(data.team)) {
+                data.suffix = this.teamSuffixMap.get(data.team);
             }
         }
     }
 
     getPlayerNameByUUID(uuid) {
-        return this.playerMap.get(uuid) || null;
+        if (!uuid) return null;
+        const normalized = this.normalizeUUID(uuid);
+        if (!normalized || normalized.length !== 16) return null;
+        return this.uuidToNameMap.get(normalized.toString('hex')) || null;
     }
 
     async updatePlayerTags(playerNames, gamemodeKey) {
-        formatter.log(`Updating player name tags for ${playerNames.length} players...`);
         if (!this.proxy.client || this.proxy.client.state !== 'play') return;
+        formatter.log(`Updating player tab display for ${playerNames.length} players...`);
 
         for (const name of playerNames) {
             await this.createOrUpdatePlayerTag(name, gamemodeKey);
-            await new Promise(resolve => setTimeout(resolve, 50));
+            await new Promise(r => setTimeout(r, 100));
         }
-
-        formatter.log(`Finished processing player name tags.`);
     }
 
     async createOrUpdatePlayerTag(name, gamemodeKey) {
+        if (!this.proxy.client || this.proxy.client.state !== 'play') return;
+
         try {
-            if (!name || typeof name !== 'string' || name.length < 3) return;
+            if (!name || typeof name !== 'string') return;
 
             const playerData = await this.proxy.hypixel.getTabDataForPlayer(name, gamemodeKey);
-            const suffix = (playerData && playerData.suffix) ? playerData.suffix : '';
-            if (!suffix) return;
+            if (!playerData || !playerData.suffix || typeof playerData.suffix !== 'string') return;
 
-            const teamName = `jp${this.teamCounter++}`;
+            const suffix = playerData.suffix.substring(0, 16);
+            const hypixelTeam = this.playerTeamMap.get(name);
 
-            this.proxy.client.write('scoreboard_team', {
-                team: teamName,
-                mode: 0,
-                name: teamName,
-                friendlyFire: 0,
-                nameTagVisibility: 'always',
-                color: 7,
-                prefix: '',
-                suffix: suffix,
-                players: []
-            });
+            if (hypixelTeam) {
+                this.teamSuffixMap.set(hypixelTeam, suffix);
 
-            this.proxy.client.write('scoreboard_team', {
-                team: teamName,
-                mode: 3,
-                players: [name]
-            });
+                this.proxy.client.write('scoreboard_team', {
+                    team: hypixelTeam,
+                    mode: 2,
+                    name: hypixelTeam,
+                    prefix: '',
+                    suffix: suffix,
+                    friendlyFire: 0,
+                    nameTagVisibility: 'always',
+                    color: 15,
+                    players: []
+                });
+            } else {
+                const teamName = `jp${this.teamCounter++}`.substring(0, 16);
+                this.proxy.client.write('scoreboard_team', {
+                    team: teamName,
+                    mode: 0,
+                    name: teamName,
+                    prefix: '',
+                    suffix: suffix,
+                    friendlyFire: 0,
+                    nameTagVisibility: 'always',
+                    color: 15,
+                    players: []
+                });
+                this.proxy.client.write('scoreboard_team', {
+                    team: teamName,
+                    mode: 3,
+                    players: [name]
+                });
+            }
+
+            formatter.log(`Updated tag for ${name} (team: ${hypixelTeam || 'fallback'}) suffix: ${suffix}`);
 
         } catch (error) {
-            console.error(`A non-fatal error occurred while updating tag for player "${name}":`, error.message, error.code || '');
+            formatter.log(`Error updating team for "${name}": ${error.message}`);
         }
     }
 }
