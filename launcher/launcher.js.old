@@ -254,8 +254,7 @@ app.whenReady().then(() => {
 
     log.info('App is ready.');
     initializeFile(aliasesPath, '{}');
-    const defaultConfigPath = path.join(app.getAppPath(), 'config.yml');
-    syncConfig(configPath, defaultConfigPath);
+    initializeFile(configPath, 'discord_rpc:\n  enabled: false');
     try {
         if (fs.existsSync(configPath)) {
             config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
@@ -270,62 +269,6 @@ app.whenReady().then(() => {
     createSplashWindow();
     handleUpdates();
 });
-
-function syncConfig(userPath, defaultPath) {
-    try {
-        if (!fs.existsSync(defaultPath)) {
-            log.warn(`Default config not found at ${defaultPath}`);
-            return;
-        }
-
-        const defaultYaml = fs.readFileSync(defaultPath, 'utf8');
-        const defaultConfig = yaml.parse(defaultYaml);
-
-        let userConfig = {};
-        if (fs.existsSync(userPath)) {
-            const userYaml = fs.readFileSync(userPath, 'utf8');
-            try {
-                userConfig = yaml.parse(userYaml) || {};
-            } catch (e) {
-                log.error(`Failed to parse user config at ${userPath}:`, e);
-                userConfig = {};
-            }
-        }
-
-        let updated = false;
-
-        function deepMerge(target, source) {
-            for (const key in source) {
-                if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-                    if (target[key] === undefined || target[key] === null || typeof target[key] !== 'object' || Array.isArray(target[key])) {
-                        target[key] = {};
-                        updated = true;
-                    }
-                    if (deepMerge(target[key], source[key])) {
-                        updated = true;
-                    }
-                } else {
-                    if (target[key] === undefined) {
-                        target[key] = source[key];
-                        updated = true;
-                    }
-                }
-            }
-            return updated;
-        }
-
-        if (deepMerge(userConfig, defaultConfig)) {
-            log.info(`Syncing config.yml with new/default keys...`);
-            fs.writeFileSync(userPath, yaml.stringify(userConfig), 'utf8');
-        } else if (!fs.existsSync(userPath)) {
-            log.info(`Initializing config.yml from default...`);
-            fs.writeFileSync(userPath, yaml.stringify(defaultConfig), 'utf8');
-        }
-    } catch (e) {
-        log.error('Failed to sync config.yml:', e);
-    }
-}
-
 function initializeFile(filePath, defaultContent) {
     try {
         const dir = path.dirname(filePath);

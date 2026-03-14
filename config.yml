@@ -26,26 +26,25 @@ ping_benchmarks:
   medium: 150
   high: 250
 show_tag: true
-tag: JagProxy
-tag_prefix: "§8[§5"
+tag: JagProx
+tag_prefix: §8[§d
 bypasses:
   enabled: true
   lunar: true
   forge: false
 aliases: {}
 super_friends: {}
-tab_alerts: []
+tab_alerts: {}
 nicknames: {}
 auto_gg:
   enabled: false
-  message: "gg"
+  message: gg
   delay: 1500
-discord_rpc: 
-  enabled: true
 queue_stats:
   bedwars: true
   bw: true
-  skywars: false
-  sw: false
-  duels: false
-cache_folder: ./cache/profiles
+  skywars: true
+  sw: true
+  duels: true
+discord_rpc:
+  enabled: false
