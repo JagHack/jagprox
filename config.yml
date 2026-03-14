@@ -34,7 +34,7 @@ bypasses:
   forge: false
 aliases: {}
 super_friends: {}
-tab_alerts: {}
+tab_alerts: 
 nicknames: {}
 auto_gg:
   enabled: false
