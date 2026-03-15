@@ -4,4 +4,3 @@ module.exports = {
 
     WEB_LINK_BASE_URL: 'https://jagprox.jaghack.com'
 };
-

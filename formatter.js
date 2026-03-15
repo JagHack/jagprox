@@ -78,8 +78,6 @@ function formatRank(player) {
 
   const rank = (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || player.rank || "NONE");
 
-  // https://api.hypixel.net/v2/player?uuid=...
-  // rankPlusColor, monthlyRankColor
   const plusMap = {
     'RED': '§c',
     'GOLD': '§6',
@@ -178,4 +176,3 @@ module.exports = {
   formatRank,
   getPlayerNameColor,
 };
-

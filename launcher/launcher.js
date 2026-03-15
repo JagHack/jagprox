@@ -130,7 +130,7 @@ function createUpdatePromptWindow(version) {
             autoUpdater.downloadUpdate();
             if (splashWindow) splashWindow.webContents.send('update-status', 'Downloading update...');
         } else {
-            launchApp(true); // Close immediately on skip
+            launchApp(true); 
         }
         if (updatePromptWindow) {
             updatePromptWindow.close();
@@ -157,7 +157,7 @@ function launchApp(immediate = false) {
         } else {
             splashWindow.webContents.send('update-status', 'Launching JagProx...');
             setTimeout(() => {
-                if (mainWindow && mainWindow.isVisible()) return; // Already shown
+                if (mainWindow && mainWindow.isVisible()) return; 
                 if (splashWindow) {
                     splashWindow.close();
                     splashWindow = null;
@@ -189,8 +189,7 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     
     mainWindow.once('ready-to-show', () => {
-        // If splash is already closed or we are in immediate mode, show now
-        // Otherwise wait for the launchApp timeout
+
     });
 
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -233,7 +232,7 @@ function handleUpdates() {
     if (app.isPackaged) {
         autoUpdater.checkForUpdates();
     } else {
-        setTimeout(launchApp, 2000); // Simulate splash in dev
+        setTimeout(launchApp, 2000); 
     }
 }
 

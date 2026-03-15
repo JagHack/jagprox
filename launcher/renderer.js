@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('logout-button').addEventListener('click', async () => {
         localStorage.removeItem('jwt_token');
         localStorage.removeItem('user_display_name');
-        ipcRenderer.send('clear-jwt'); // Tell main process to clear its session state
+        ipcRenderer.send('clear-jwt'); 
         updateLoginStatus(null);
         switchPage('home');
         document.body.classList.remove('sidebar-open');
@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     ipcRenderer.on('player-stats-result', (event, result) => {
         const resultsDiv = document.getElementById('stat-search-results');
-        resultsDiv.innerHTML = ''; // Clear previous results
+        resultsDiv.innerHTML = ''; 
         if (result.error) {
             resultsDiv.innerHTML = `<p class="error">${formatMinecraftString(result.error)}</p>`;
             return;
@@ -324,9 +324,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         outputHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §d§lPlayer Stats for ${result.game.displayName}`)}</p>`;
         outputHtml += `<p class="mc-chat-line">${formatMinecraftString(`  ${result.stats.rank} ${result.username} §7${result.stats.guild ? `[§e${result.stats.guild}§7]` : ''}`)}</p>`;
         
-        const p = result.stats.player; // Full player object from Hypixel
-        const d = p.stats?.[result.game.apiName] || {}; // Game mode specific stats
-        const a = p.achievements || {}; // Player achievements
+        const p = result.stats.player; 
+        const d = p.stats?.[result.game.apiName] || {}; 
+        const a = p.achievements || {}; 
     
         const statLines = formatGameStatsLines(p, d, a, result.game.apiName, result.game.prefix);
         statLines.forEach(line => {
@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     ipcRenderer.on('player-status-result', (event, result) => {
         const resultsDiv = document.getElementById('status-check-results');
-        resultsDiv.innerHTML = ''; // Clear previous results
+        resultsDiv.innerHTML = ''; 
         if (result.error) {
             resultsDiv.innerHTML = `<p class="error">${formatMinecraftString(result.error)}</p>`;
             return;
@@ -375,7 +375,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusHtml += sendLine();
         resultsDiv.innerHTML = statusHtml;
     });
-
 
     ipcRenderer.on('proxy-status', (event, status) => {
         const toggleProxyBtn = document.getElementById('toggle-proxy-btn');
@@ -407,7 +406,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     ipcRenderer.on('gamemode-list-response', (event, gamemodes) => {
         const selector = document.getElementById('stat-search-gamemode');
         if (selector) {
-            selector.innerHTML = ''; // Clear existing options
+            selector.innerHTML = ''; 
             gamemodes.forEach(mode => {
                 const option = document.createElement('option');
                 option.value = mode.value;
@@ -417,7 +416,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    ipcRenderer.send('get-gamemode-list'); // Request gamemodes on startup
+    ipcRenderer.send('get-gamemode-list'); 
 
     initializeSettingsPage();
 });
@@ -440,5 +439,3 @@ function initializeSettingsPage() {
 
     ipcRenderer.send('get-app-version');
 }
-
-

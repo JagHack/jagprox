@@ -158,19 +158,19 @@ class JagProx {
                     const nickname = nicknames[player.name];
                     if (nickname) {
                         if (player.displayName) {
-                            // Only proceed if the player's real name is present in the display name
+                            
                             if (player.displayName.includes(player.name)) {
                                 try {
                                     let component = JSON.parse(player.displayName);
                                     replaceNamesInComponent(component, { [player.name]: nickname });
                                     player.displayName = JSON.stringify(component);
                                 } catch (e) {
-                                    // If JSON parsing fails, assume it's a plain string and replace globally
+                                    
                                     player.displayName = player.displayName.replace(new RegExp(player.name, 'g'), nickname);
                                 }
                             }
                         } else {
-                            // If displayName is null/undefined, set it to the nickname
+                            
                             player.displayName = JSON.stringify({ text: nickname });
                         }
                     }
@@ -234,14 +234,13 @@ class JagProx {
         if (this.gametrackClientHandler) {
             this.gametrackClientHandler.onGameChanged(newGameKey);
         }
-        // Reset relevant modules on game/lobby change
-        this.queueStats.resetTrigger(); // Use resetTrigger to preserve currentGameKey
+        
+        this.queueStats.resetTrigger(); 
         this.entityManager.reset();
         this.tabManager.reset();
         this.tabAlerter.reset();
         this.autoGG.reset();
-        // hypixel.reset() should be handled carefully as it clears apiKeyCache.
-        // For now, we'll assume avatarCache is the only part that needs clearing on game change.
+
         this.hypixel.reset();
     }
 

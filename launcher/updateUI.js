@@ -1,7 +1,7 @@
 const { ipcRenderer } = require('electron');
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Inject the update banner if it doesn't exist
+    
     const updateBanner = document.createElement('div');
     updateBanner.id = 'update-banner';
     updateBanner.className = 'update-banner hidden';
@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (status) {
             case 'update-available':
                 console.log(`Update v${version} found. Downloading...`);
-                // We show the banner when downloaded, or we can show it now
+                
                 break;
 
             case 'update-downloaded':
@@ -53,11 +53,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             case 'error':
                 console.error('Update error:', message);
-                // Optional: show error message to user
+                
                 break;
 
             case 'download-progress':
-                // Optional: update UI with progress if desired
+                
                 break;
         }
     });

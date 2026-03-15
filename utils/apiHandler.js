@@ -66,4 +66,3 @@ class ApiHandler {
 }
 
 module.exports = ApiHandler;
-

@@ -10,7 +10,7 @@ class QueueStatsHandler {
 
         this.isCapturingWho = false;
         this.whoPlayers = [];
-        this.lastOpponentStatCheckTime = 0; // New property for cooldown
+        this.lastOpponentStatCheckTime = 0; 
 
         this.titleToKeyMap = new Map();
         for (const [key, modeInfo] of Object.entries(gameModeMap)) {
@@ -35,7 +35,6 @@ class QueueStatsHandler {
             formatter.log(`Game over detected. Re-arming queue stats trigger for the next game.`);
             this.hasTriggeredForGame = false;
             this.awaitingTeleportForWho = false;
-
         }
     }
 
@@ -72,6 +71,9 @@ class QueueStatsHandler {
 		    if (foundGameKey && this.currentGameKey !== foundGameKey) {
 			this.resetForNewGame(foundGameKey);
 		    }
+		    if (foundGameKey) {
+			this.hasTriggeredForGame = false;
+		    }
 		}
 
 		if (meta.name === 'chat') {
@@ -91,16 +93,11 @@ class QueueStatsHandler {
 			this.resetTrigger();
 		    }
 
-
-				const COOLDOWN_MS = 0; // Temporarily disabled for debugging. Set to 5000 (5 seconds) for normal operation.
+				const COOLDOWN_MS = 0; 
 
 				if (Date.now() - this.lastOpponentStatCheckTime > COOLDOWN_MS) {
 
-
-
                             let opponentNameMatch = cleanMessage.match(/Opponent: (.+)/);
-
-                            
 
                             if (opponentNameMatch) {
 
@@ -116,11 +113,9 @@ class QueueStatsHandler {
 
                                     formatter.log('DEBUG: Extracted name: "' + extractedName + '"');
 
-            
-
                                     if (extractedName.length > 0 && extractedName !== this.proxy.client.username) {
 
-                                        this.lastOpponentStatCheckTime = Date.now(); // Set cooldown
+                                        this.lastOpponentStatCheckTime = Date.now(); 
 
                                         formatter.log('DEBUG: Current game key: "' + this.currentGameKey + '"');
 
@@ -136,14 +131,23 @@ class QueueStatsHandler {
 
                         }
 
-            if (this.isCapturingWho) {
-                if (cleanMessage.startsWith('ONLINE: ')) {
-                    const players = cleanMessage.replace('ONLINE: ', '').split(/,\s*/);
-                    this.whoPlayers.push(...players.map(p => p.trim().replace(/\.$/, '')));
-                    // Finish immediately if it starts with ONLINE: as it's usually a single-line list
+            if (cleanMessage.startsWith('ONLINE: ')) {
+                const players = cleanMessage.replace('ONLINE: ', '').split(/,\s*/);
+                const cleanedPlayers = players.map(p => p.trim().replace(/\.$/, '')).filter(Boolean);
+                if (this.isCapturingWho) {
+                    this.whoPlayers.push(...cleanedPlayers);
                     this.finishWhoCapture();
-                    return true;
+                } else if (this.currentGameKey === 'bw') {
+                    
+                    formatter.log(`ONLINE: update received, refreshing tab display for ${cleanedPlayers.length} players.`);
+                    if (this.proxy.hypixel && cleanedPlayers.length > 0) {
+                        this.proxy.tabManager.updatePlayerTags(cleanedPlayers, this.currentGameKey);
+                    }
                 }
+                return true;
+            }
+
+            if (this.isCapturingWho) {
                 if (cleanMessage.startsWith('Team #')) {
                     const parts = cleanMessage.split(':');
                     if (parts.length > 1) {
@@ -158,21 +162,18 @@ class QueueStatsHandler {
                 }
             }
 
-            if (this.hasTriggeredForGame || !this.currentGameKey) {
-                return false;
-            }
+            if (!this.hasTriggeredForGame && this.currentGameKey) {
+                const isBedwarsStart = cleanMessage.includes('Protect your bed and destroy the enemy beds.');
+                const isDuelsStart = cleanMessage.includes('Eliminate your opponents!');
+                const isSkywarsStart = cleanMessage.includes('Gather resources and equipment on your');
 
-            const isBedwarsStart = cleanMessage.includes('Protect your bed and destroy the enemy beds.');
-            const isDuelsStart = cleanMessage.includes('Eliminate your opponents!');
-            const isSkywarsStart = cleanMessage.includes('Gather resources and equipment on your');
-
-            if (isBedwarsStart || isDuelsStart || isSkywarsStart) {
-                const isEnabled = this.proxy.config.queue_stats && this.proxy.config.queue_stats[this.currentGameKey];
-
-                if (isEnabled) {
-                    this.hasTriggeredForGame = true;
-                    this.awaitingTeleportForWho = true;
-                    formatter.log(`Game start message detected for '${this.currentGameKey}'. Awaiting teleport to execute /who.`);
+                if (isBedwarsStart || isDuelsStart || isSkywarsStart) {
+                    const isEnabled = this.proxy.config.queue_stats && this.proxy.config.queue_stats[this.currentGameKey];
+                    if (isEnabled) {
+                        this.hasTriggeredForGame = true;
+                        this.awaitingTeleportForWho = true;
+                        formatter.log(`Game start message detected for '${this.currentGameKey}'. Awaiting teleport to execute /who.`);
+                    }
                 }
             }
         }

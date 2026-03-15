@@ -55,7 +55,6 @@ class AutoGGHandler {
                     this.proxy.gametrack.recordEvent(result);
                 }
 
-
                 this.ggSentInGame = true;
                 const delay = this.proxy.config.auto_gg.delay || 1500;
                 const message = this.proxy.config.auto_gg.message || "gg";

@@ -1,6 +1,6 @@
 {
   "name": "jagprox-launcher",
-  "version": "2.5.3",
+  "version": "2.5.5",
   "description": "Launcher for JagProx",
   "main": "launcher/launcher.js",
   "scripts": {
@@ -15,12 +15,10 @@
   },
   "dependencies": {
     "discord-rpc": "^4.0.1",
-    "dotenv": "^16.4.5",
     "electron-log": "^5.1.4",
     "electron-updater": "^6.1.8",
     "jimp": "^0.22.12",
     "minecraft-protocol": "^1.47.0",
-    "prismarine-auth": "^2.2.0",
     "node-fetch": "^2.7.0",
     "yaml": "^2.4.1"
   },

@@ -77,7 +77,8 @@ class TabAlerter {
     checkForAlert(uuid) {
         if (!this.lobbyPlayers.has(uuid)) return;
 
-        const alertList = this.proxy.config.tab_alerts || [];
+        const rawAlertList = this.proxy.config.tab_alerts;
+        const alertList = Array.isArray(rawAlertList) ? rawAlertList : [];
         if (alertList.length === 0) return;
 
         const playerData = this.lobbyPlayers.get(uuid);

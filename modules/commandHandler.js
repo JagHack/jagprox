@@ -48,27 +48,26 @@ class CommandHandler {
                     this.proxy.proxyChat("§eUse /sc ? to see all available gamemodes.");
                     return true;
                 }
-                this.proxy.hypixel.statcheck(gamemode, username); // Keep original statcheck functionality
+                this.proxy.hypixel.statcheck(gamemode, username); 
 
-                // --- New Telemetry Dispatch Logic ---
-                (async () => { // Immediately invoked async function for non-blocking dispatch
+                (async () => { 
                     try {
                         const gameInfo = gameModeMap[gamemode.toLowerCase()];
                         if (!gameInfo) {
-                            // If game mode is unknown, we can't get stats, so silently exit telemetry
+                            
                             return;
                         }
 
                         const cleanUsername = this.proxy.hypixel.cleanRankPrefix(username);
                         const mojangData = await this.proxy.hypixel.getMojangUUID(cleanUsername);
                         if (!mojangData) {
-                            // Player not found, silently exit telemetry
+                            
                             return;
                         }
 
                         const stats = await this.proxy.hypixel.getStats(mojangData.uuid);
                         if (!stats || !stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
-                            // No stats found for this game mode, silently exit telemetry
+                            
                             return;
                         }
 
@@ -83,7 +82,7 @@ class CommandHandler {
                         const ingestUrl = `${backendApiUrl}/api/ingest`;
                         const payload = {
                             username: mojangData.username,
-                            mode: gameInfo.displayName, // Use display name for mode as per API docs
+                            mode: gameInfo.displayName, 
                             win_count: win_count
                         };
 
@@ -100,7 +99,7 @@ class CommandHandler {
                             console.log(`Telemetry dispatched for ${mojangData.username} (${gameInfo.displayName}): ${win_count} wins`);
                         }
                     } catch (error) {
-                        // Silent failure as per requirements
+                        
                         console.error("Error dispatching telemetry:", error);
                     }
                 })();
@@ -166,7 +165,7 @@ class CommandHandler {
                 return true;
             case 'leaderboard': {
                 const gameMode = args.shift()?.toLowerCase();
-                const statType = args.join(' ').toLowerCase(); // e.g., "monthly wins"
+                const statType = args.join(' ').toLowerCase(); 
 
                 if (gameMode !== 'duels') {
                     this.proxy.proxyChat("§cCurrently, leaderboards are only available for 'duels'.");
