@@ -376,7 +376,8 @@ class HypixelHandler {
             if (!status) return this.proxy.proxyChat(`§cCould not retrieve status for '${mojangData.username}'.`);
             this.proxy.proxyChat("§5§m----------------------------------------");
             if (status.online) {
-                this.proxy.proxyChat(`${formatter.formatRank(status.rank)} ${mojangData.username} §dOnline`);
+                const nameColor = formatter.getPlayerNameColor(status.player);
+                this.proxy.proxyChat(`${formatter.formatRank(status.player)} ${nameColor}${mojangData.username} §dOnline`);
                 if (status.hidden) {
                     this.proxy.proxyChat(`§8(Status is hidden, game info unavailable)`);
                 } else {
@@ -385,7 +386,8 @@ class HypixelHandler {
                     if (status.map) this.proxy.proxyChat(`§dMap §8» §f${status.map}`);
                 }
             } else {
-                this.proxy.proxyChat(`${formatter.formatRank(status.rank)} ${mojangData.username} §8Offline`);
+                const nameColor = formatter.getPlayerNameColor(status.player);
+                this.proxy.proxyChat(`${formatter.formatRank(status.player)} ${nameColor}${mojangData.username} §8Offline`);
             }
             this.proxy.proxyChat("§5§m----------------------------------------");
         } catch (err) {
@@ -406,14 +408,14 @@ class HypixelHandler {
             const playerData = await playerResponse.json();
             if (!playerData.success || !playerData.player) return null;
             const player = playerData.player;
-            const rank = (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || "NONE");
+            const rank = (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || player.rank || "NONE");
             if (statusData.success && statusData.session.online) {
-                return { online: true, hidden: false, gameType: statusData.session.gameType, mode: statusData.session.mode, map: statusData.session.map, rank };
+                return { online: true, hidden: false, gameType: statusData.session.gameType, mode: statusData.session.mode, map: statusData.session.map, rank, player };
             }
             if ((player.lastLogin || 0) > (player.lastLogout || 0)) {
-                return { online: true, hidden: true, rank };
+                return { online: true, hidden: true, rank, player };
             }
-            return { online: false, rank };
+            return { online: false, rank, player };
         } catch (err) {
             formatter.log(`getHypixelStatus Error: ${err.message}`);
             return null;
