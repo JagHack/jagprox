@@ -41,10 +41,8 @@ auto_gg:
   message: gg
   delay: 1500
 queue_stats:
-  bedwars: true
   bw: true
-  skywars: true
-  sw: true
-  duels: true
+  skywars: false
+  duels: false
 discord_rpc:
   enabled: false
