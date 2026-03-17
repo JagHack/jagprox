@@ -87,7 +87,10 @@ class HypixelHandler {
             if (player.rank && player.rank !== 'NORMAL') rank = player.rank;
             else if (player.monthlyPackageRank === 'SUPERSTAR') rank = 'MVP_PLUS_PLUS';
             else if (player.newPackageRank) rank = player.newPackageRank;
-            return { player, rank, properties: player.properties || [] };
+            
+            const guild = await this.getGuild(uuid);
+
+            return { player, rank, guild, properties: player.properties || [] };
         } catch (err) {
             return null;
         }
@@ -166,6 +169,206 @@ class HypixelHandler {
         const cleanNames = playerNames.map(n => n.replace(/§./g, '').replace(/\[.*?\]/g, '').trim()).filter(n => n);
         this.proxy.proxyChat(`§dAuto-checking §f${cleanNames.length} §dplayers...`);
         this.proxy.tabManager.updatePlayerTags(cleanNames, gamemodeKey);
+    }
+
+    async getGuild(uuid) {
+        const apiKey = await this.getApiKey();
+        if (!apiKey) return null;
+        try {
+            const response = await fetch(`https://api.hypixel.net/v2/guild?key=${apiKey}&player=${uuid}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            if (!data.guild) return null;
+            return data.guild.tag ? `[${data.guild.tag}]` : `[${data.guild.name}]`;
+        } catch (err) {
+            formatter.log(`getGuild Error: ${err.message}`);
+            return null;
+        }
+    }
+
+    async autoStatCheckDuels(username, gamemode) {
+        formatter.log(`Auto-checking Duels stats for ${username}...`);
+        return this.statcheck(gamemode, username);
+    }
+
+    async statcheck(gamemode, username) {
+        if (!gamemode || !username) {
+            this.proxy.proxyChat("§cUsage: /sc <gamemode> <username>");
+            return;
+        }
+
+        const gameInfo = gameModeMap[gamemode.toLowerCase()];
+        if (!gameInfo) {
+            return this.proxy.proxyChat(`§cUnknown game mode: ${gamemode}`);
+        }
+
+        try {
+            const cleanUsername = this.cleanRankPrefix(username);
+            const resolvedName = this.resolveNickname(cleanUsername);
+            const mojangData = await this.getMojangUUID(resolvedName);
+            if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${resolvedName}' not found.`);
+            
+            const stats = await this.getStats(mojangData.uuid);
+            if (!stats) {
+                return this.proxy.proxyChat(`§cCould not retrieve data for '${mojangData.username}'.`);
+            }
+
+            if (!stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
+                return this.proxy.proxyChat(`§cNo ${gameInfo.displayName} stats found for '${mojangData.username}'.`);
+            }
+            this.displayFormattedStats(mojangData.username, mojangData.uuid, stats, gameInfo);
+        } catch (err) {
+            formatter.log(`Statcheck error: ${err.message}`);
+            this.proxy.proxyChat(`§cAn error occurred.`);
+        }
+    }
+
+    async displayFormattedStats(username, uuid, stats, gameInfo) {
+        try {
+            let asciiLines;
+            if (this.avatarCache.has(uuid)) {
+                asciiLines = this.avatarCache.get(uuid);
+            } else {
+                let image;
+                try {
+                    const texturesProp = stats.properties.find(p => p.name === 'textures');
+                    if (!texturesProp) throw new Error("No texture property found");
+
+                    const texturesJson = Buffer.from(texturesProp.value, 'base64').toString('utf8');
+                    const textures = JSON.parse(texturesJson);
+                    const skinUrl = textures.textures?.SKIN?.url;
+                    if (!skinUrl) throw new Error("No skin URL found");
+
+                    const skin = await Jimp.read(skinUrl);
+                    image = new Jimp(8, 8);
+                    image.blit(skin, 0, 0, 8, 8, 8, 8);
+                    image.blit(skin, 0, 0, 40, 8, 8, 8);
+                } catch (err) {
+                    formatter.log(`Manual skin processing failed: ${err.message}. Falling back to Crafatar.`);
+                    image = await Jimp.read(`https://minotar.net/avatar/${uuid}/8.png`);
+                }
+
+                asciiLines = [];
+                for (let y = 0; y < 8; y++) {
+                    let line = "";
+                    for (let x = 0; x < 8; x++) {
+                        const pixel = Jimp.intToRGBA(image.getPixelColor(x, y));
+                        line += (pixel.a > 128) ? findClosestMinecraftColor(pixel.r, pixel.g, pixel.b) + '█' : " ";
+                    }
+                    asciiLines.push(line);
+                }
+                this.avatarCache.set(uuid, asciiLines);
+            }
+
+            const p = stats.player;
+            const d = p.stats[gameInfo.apiName] || {};
+
+            const rank = formatter.formatRank(p);
+            const guild = stats.guild ? ` §5${stats.guild}` : "";
+            const prefix = "§8[§5jag§dprox§8] §r";
+
+            asciiLines.forEach(line => {
+                this.proxy.client.write("chat", { 
+                    message: JSON.stringify({ text: prefix + line }), 
+                    position: 1 
+                });
+            });
+
+            if (gameInfo.apiName === "Bedwars") {
+                const wins = d.wins_bedwars || 0;
+                const losses = d.losses_bedwars || 0;
+                const kills = d.kills_bedwars || 0;
+                const deaths = d.deaths_bedwars || 0;
+                const finals = d.final_kills_bedwars || 0;
+                const fdeaths = d.final_deaths_bedwars || 0;
+                const bedsBroken = d.beds_broken_bedwars || 0;
+                const bedsLost = d.beds_lost_bedwars || 0;
+                const winstreak = d.winstreak || 0;
+                let bestWinstreak = d.winstreak_best || 0;
+                if (winstreak > bestWinstreak) bestWinstreak = winstreak;
+
+                const wlr = (wins / (losses || 1)).toFixed(2);
+                const kdr = (kills / (deaths || 1)).toFixed(2);
+                const fkdr = (finals / (fdeaths || 1)).toFixed(2);
+                const bblr = (bedsBroken / (bedsLost || 1)).toFixed(2);
+
+                this.proxy.proxyChat(`§8[§dBedwars§8]`);
+                const nameColor = formatter.getPlayerNameColor(p);
+                this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
+                this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()}    §8| §dLosses §5» §f${losses.toLocaleString()}`);
+                this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()}   §8| §dDeaths §5» §f${deaths.toLocaleString()}`);
+                this.proxy.proxyChat(`§dFinals §5» §f${finals.toLocaleString()}   §8| §dF-Deaths §5» §f${fdeaths.toLocaleString()}`);
+                this.proxy.proxyChat(`§dWLR   §5» §f${wlr} | §dKDR §5» §f${kdr}`);
+                this.proxy.proxyChat(`§dFKDR  §5» §f${fkdr} | §dBBLR §5» §f${bblr}`);
+                if (parseFloat(wlr) > 1.01 && bestWinstreak === 0) {
+                    this.proxy.proxyChat(`§cWINSTREAK API DISABLED`);
+                } else {
+                    this.proxy.proxyChat(`§dWinstreak §5» §f${winstreak.toLocaleString()} | §dBest §5» §f${bestWinstreak.toLocaleString()}`);
+                }
+            } else {
+                this.proxy.proxyChat(`§8[§5${gameInfo.displayName}§8]`);
+
+                const nameColor = formatter.getPlayerNameColor(p);
+                this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
+
+                let wins = 0, losses = 1, kills = 0, deaths = 1;
+                let currentWinstreak = 0, bestWinstreak = 0;
+
+                switch (gameInfo.apiName) {
+                    case "SkyWars":
+                        wins = d.wins || 0;
+                        losses = d.losses || 1;
+                        kills = d.kills || 0;
+                        deaths = d.deaths || 1;
+                        currentWinstreak = d.winstreak || 0;
+                        bestWinstreak = d.winstreak_best || 0;
+                        break;
+                    case "Duels":
+                        const dgPrefix = gameInfo.prefix || '';
+                        wins = d[dgPrefix ? `${dgPrefix}_wins` : 'wins'] || 0;
+                        losses = d[dgPrefix ? `${dgPrefix}_losses` : 'losses'] || 1;
+                        kills = d[dgPrefix ? `${dgPrefix}_kills` : 'kills'] || 0;
+                        deaths = d[dgPrefix ? `${dgPrefix}_deaths` : 'deaths'] || 1;
+                        if (dgPrefix) {
+                            currentWinstreak = d[`current_winstreak_mode_${dgPrefix}`] || 0;
+                            bestWinstreak = d[`best_winstreak_mode_${dgPrefix}`] || 0;
+                        } else {
+                            currentWinstreak = d.current_winstreak || 0;
+                            bestWinstreak = d.best_winstreak || 0;
+                        }
+                        break;
+                    case "Walls3":
+                        wins = d.wins || 0;
+                        losses = d.losses || 1;
+                        kills = d.final_kills || 0;
+                        deaths = d.final_deaths || 1;
+                        break;
+                    default:
+                        wins = d.wins || 0;
+                        losses = d.losses || 1;
+                        kills = d.kills || 0;
+                        deaths = d.deaths || 1;
+                }
+
+                const wlr = (wins / losses).toFixed(2);
+                const kdr = (kills / deaths).toFixed(2);
+                if (currentWinstreak > bestWinstreak) bestWinstreak = currentWinstreak;
+
+                this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()} §8| §5Losses §5» §f${losses.toLocaleString()}`);
+                this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()} §8| §5Deaths §5» §f${deaths.toLocaleString()}`);
+                this.proxy.proxyChat(`§dWLR §5» §f${wlr} §8| §dKDR §5» §f${kdr}`);
+                
+                if (bestWinstreak === 0 && parseFloat(wlr) > 1.01) {
+                    this.proxy.proxyChat(`§cWINSTREAK API DISABLED`);
+                } else {
+                    this.proxy.proxyChat(`§dWinstreak §5» §f${currentWinstreak.toLocaleString()} §8| §5Best §5» §f${bestWinstreak.toLocaleString()}`);
+                }
+            }
+
+        } catch (err) {
+            formatter.log(`displayFormattedStats Error: ${err.message}`);
+            this.proxy.proxyChat(`§cError displaying stats.`);
+        }
     }
 }
 
