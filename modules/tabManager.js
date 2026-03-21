@@ -73,7 +73,7 @@ class TabManager {
             'A': '\u00A7b',
             'W': '\u00A7f',
             'P': '\u00A7d',
-            'S': '\u00A77',
+            'S': '\u00A78',
         };
         return map[letter] || '\u00A7f';
     }
@@ -93,7 +93,7 @@ class TabManager {
             'A': 11,
             'W': 15,
             'P': 13,
-            'S': 7,
+            'S': 8,
         };
         return map[letter] ?? 15;
     }

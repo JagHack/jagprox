@@ -664,38 +664,37 @@ class HypixelHandler {
                 const fkdrValue = (fk / fd).toFixed(2);
                 const fkdrColor = this.getFkdrColor(parseFloat(fkdrValue));
                 const level = stats.player?.achievements?.bedwars_level ?? 0;
+                const lvlColor = this.getLevelColor(level);
 
-                let lvlColor;
-                if      (level >= 500) lvlColor = '\u00A75';
-                else if (level >= 350) lvlColor = '\u00A74';
-                else if (level >= 200) lvlColor = '\u00A7c';
-                else if (level >= 100) lvlColor = '\u00A7e';
-                else if (level >= 50)  lvlColor = '\u00A7f';
-                else                   lvlColor = '\u00A77';
-
-                const prefix = lvlColor + '[' + level + '\u2605] ';
-                const suffix = ' \u00A78|' + fkdrColor + fkdrValue;
+                const prefix = lvlColor + '[' + level + '✫] ';
+                const suffix = ' §8|' + fkdrColor + fkdrValue;
 
                 return {
                     suffix: suffix.substring(0, 16),
-                    prefix: prefix.substring(0, 16),
-                    level,
-                    fkdr: fkdrValue,
-                    fkdrColor
+                    prefix: prefix.substring(0, 16)
                 };
             }
              if (gameInfo.apiName === 'SkyWars') {
                 const k = d.kills || 0;
                 const de = d.deaths || 1;
                 const kdr = (k / de).toFixed(2);
-                const suffix = `§8|§e${kdr}`;
-                return { suffix, prefix: '' };
+                const kdrColor = this.getFkdrColor(parseFloat(kdr));
+                
+                const rawLevel = stats.player?.stats?.SkyWars?.levelFormatted || '0✫';
+                const levelInt = parseInt(rawLevel.replace(/[^0-9]/g, '')) || 0;
+                const lvlColor = this.getLevelColor(levelInt);
+                
+                const prefix = lvlColor + '[' + rawLevel + '] ';
+                const suffix = ' §8|' + kdrColor + kdr;
+                
+                return { suffix: suffix.substring(0, 16), prefix: prefix.substring(0, 16) };
             } else if (gameInfo.apiName === 'Duels') {
                 const w = d.wins || 0;
                 const l = d.losses || 1;
                 const wlr = (w / l).toFixed(2);
-                const suffix = `§8|§d${wlr}`;
-                return { suffix, prefix: '' };
+                const wlrColor = this.getFkdrColor(parseFloat(wlr));
+                const suffix = ' §8|' + wlrColor + wlr;
+                return { suffix: suffix.substring(0, 16), prefix: '' };
             }
 
             return null;
@@ -704,12 +703,21 @@ class HypixelHandler {
         }
     }
 
+    getLevelColor(level) {
+        if (level >= 500) return '§5';
+        if (level >= 350) return '§4';
+        if (level >= 200) return '§c';
+        if (level >= 100) return '§e';
+        if (level >= 50)  return '§f';
+        return '§7';
+    }
+
     getFkdrColor(fkdr) {
-        const benchmarks = this.proxy.config.fkdr_benchmarks || { high: 2.5, medium: 1.5 };
-        if (fkdr >= benchmarks.high * 2) return '§4';
-        if (fkdr >= benchmarks.high)     return '§c';
-        if (fkdr >= benchmarks.medium)   return '§6';
-        if (fkdr >= 1.0)                 return '§e';
+        if (fkdr >= 20) return '§5';
+        if (fkdr >= 10) return '§4';
+        if (fkdr >= 5)  return '§c';
+        if (fkdr >= 3)  return '§e';
+        if (fkdr >= 1)  return '§f';
         return '§7';
     }
 

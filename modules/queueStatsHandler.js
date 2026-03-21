@@ -8,6 +8,8 @@ class QueueStatsHandler {
         this.hasTriggeredForGame = false;
         this.awaitingTeleportForWho = false;
 
+        this.currentMapName = null;
+
         this.isCapturingWho = false;
         this.whoPlayers = [];
         this.lastOpponentStatCheckTime = 0; 
@@ -28,6 +30,7 @@ class QueueStatsHandler {
         this.isCapturingWho = false;
         this.whoPlayers = [];
         this.lastOpponentStatCheckTime = 0;
+        this.currentMapName = null;
     }
 
     resetTrigger() {
@@ -35,6 +38,7 @@ class QueueStatsHandler {
             formatter.log(`Game over detected. Re-arming queue stats trigger for the next game.`);
             this.hasTriggeredForGame = false;
             this.awaitingTeleportForWho = false;
+            this.currentMapName = null;
         }
     }
 
@@ -43,6 +47,7 @@ class QueueStatsHandler {
         this.currentGameKey = newGameKey;
         this.hasTriggeredForGame = false;
         this.awaitingTeleportForWho = false;
+        this.currentMapName = null;
         this.proxy.onGameChanged(newGameKey);
     }
 
@@ -90,11 +95,17 @@ class QueueStatsHandler {
 		    } catch (e) { }
 		    const gameOverKeywords = ['VICTORY!', 'GAME END', 'You died!', 'You have been eliminated!', 'You won!', 'Draw!'];
 		    if (gameOverKeywords.some(keyword => cleanMessage.includes(keyword))) {
-			this.resetTrigger();
+		    this.resetTrigger();
 		    }
 
-				const COOLDOWN_MS = 0; 
+		    const mapMatch = cleanMessage.match(/You are currently playing on (?:map: )?(.+)/);
+		    if (mapMatch) {
+		        this.currentMapName = mapMatch[1].trim();
+		        formatter.log(`Captured map name: "${this.currentMapName}"`);
+		        return true;
+		    }
 
+		    const COOLDOWN_MS = 0; 
 				if (Date.now() - this.lastOpponentStatCheckTime > COOLDOWN_MS) {
 
                             let opponentNameMatch = cleanMessage.match(/Opponent: (.+)/);
@@ -173,6 +184,13 @@ class QueueStatsHandler {
                         this.hasTriggeredForGame = true;
                         this.awaitingTeleportForWho = true;
                         formatter.log(`Game start message detected for '${this.currentGameKey}'. Awaiting teleport to execute /who.`);
+                        
+                        setTimeout(() => {
+                            if (this.proxy.target) {
+                                this.proxy.target.write('chat', { message: '/wtfmap' });
+                                formatter.log(`Game start detected. Sending /wtfmap to capture map name.`);
+                            }
+                        }, 100);
                     }
                 }
             }

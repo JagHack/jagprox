@@ -178,6 +178,32 @@ class JagProx {
             }
 
             this.queueStats.handlePacket(data, meta);
+
+            if (meta.name === 'playerlist_header') {
+                try {
+                    const q = this.queueStats;
+                    if (q.currentMapName) {
+                        let footerObj;
+                        try {
+                            footerObj = JSON.parse(data.footer);
+                        } catch(e) {
+                            footerObj = { text: data.footer || '' };
+                        }
+
+                        const myLine = { text: '\n§7You are currently playing on §5' + q.currentMapName };
+
+                        if (footerObj.extra && Array.isArray(footerObj.extra)) {
+                            footerObj.extra.push(myLine);
+                        } else {
+                            footerObj = { text: '', extra: [footerObj, myLine] };
+                        }
+                        data.footer = JSON.stringify(footerObj);
+                    }
+                } catch(e) {
+                    formatter.log(`Error injecting into tab footer: ${e.message}`);
+                }
+            }
+
             this.entityManager.handlePacket(data, meta);
             this.tabManager.handlePacket(data, meta);
             this.tabAlerter.handlePacket(data, meta);
