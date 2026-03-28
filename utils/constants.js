@@ -313,5 +313,6 @@ module.exports = {
     romanNumerals,
     duelsPlayerCountMap,
     duelsStatMap,
-    duelsTitleColors
+    duelsTitleColors,
+    duelsModes
 };

@@ -37,6 +37,7 @@ class JagProx {
         this.target = null;
         this.lastPlayCommand = null;
         this.mc_uuid = null;
+        this.ownJagproxRank = null;
         this.gametrackApiHandler = new GametrackApiHandler(this.env.jwt);
         this.gametrackClientHandler = null;
 
@@ -76,9 +77,35 @@ class JagProx {
     handleLogin() {
         formatter.log(`Client connected to proxy: ${this.client.username}`);
         this.mc_uuid = this.client.uuid;
-        this.gametrackClientHandler = new GametrackClientHandler(this, this.client.uuid, this.client.username); 
+        this.gametrackClientHandler = new GametrackClientHandler(this, this.client.uuid, this.client.username);
         this.lastPlayCommand = null;
         this.autoGG.reset();
+
+        if (this.env.jwt && this.hypixel.apiHandler) {
+            this.hypixel.apiHandler.getOwnProfile().then(profile => {
+                this.ownJagproxRank = profile?.globalRank || null;
+                formatter.log(`[JAGPROX] Own jagprox rank loaded: ${this.ownJagproxRank || 'null (no rank)'}`);
+                formatter.log(`[JAGPROX] Profile data: ${JSON.stringify(profile)}`);
+
+                if (this.ownJagproxRank && this.client) {
+                    if (this.queueStats.currentGameKey) {
+                        formatter.log(`[JAGPROX] Updating tab with jagprox rank for game: ${this.queueStats.currentGameKey}`);
+                        setTimeout(() => {
+                            if (this.client && this.queueStats.currentGameKey) {
+                                this.tabManager.updatePlayerTags([this.client.username], this.queueStats.currentGameKey);
+                            }
+                        }, 500);
+                    } else {
+                        formatter.log(`[JAGPROX] Jagprox rank loaded but not in a game yet. Will apply when game starts.`);
+                    }
+                }
+            }).catch(e => {
+                formatter.log(`[JAGPROX] Could not fetch own jagprox rank: ${e.message}`);
+                this.ownJagproxRank = null;
+            });
+        } else {
+            formatter.log(`[JAGPROX] Skipping jagprox rank fetch: jwt=${!!this.env.jwt}, apiHandler=${!!this.hypixel.apiHandler}`);
+        }
 
         discordRpc.setActivity({
             details: 'Playing',
@@ -260,14 +287,30 @@ class JagProx {
         if (this.gametrackClientHandler) {
             this.gametrackClientHandler.onGameChanged(newGameKey);
         }
-        
-        this.queueStats.resetTrigger(); 
+
+        this.queueStats.resetTrigger();
         this.entityManager.reset();
         this.tabManager.reset();
         this.tabAlerter.reset();
         this.autoGG.reset();
 
         this.hypixel.reset();
+
+        if (this.ownJagproxRank && this.client && newGameKey) {
+            formatter.log(`[JAGPROX] Game changed to ${newGameKey}, applying jagprox tag to own player`);
+            setTimeout(() => {
+                if (this.client && this.queueStats.currentGameKey) {
+                    this.tabManager.updatePlayerTags([this.client.username], this.queueStats.currentGameKey);
+                }
+            }, 1000);
+        }
+    }
+
+    getOwnJagproxTag() {
+        const formatter = require('./formatter.js');
+        const tag = formatter.getJagproxRank(this.ownJagproxRank);
+        formatter.log(`[JAGPROX] getOwnJagproxTag called: rank="${this.ownJagproxRank}", tag="${tag}"`);
+        return tag;
     }
 
     proxyChat(message) {

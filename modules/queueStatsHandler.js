@@ -105,7 +105,7 @@ class QueueStatsHandler {
 		        return true;
 		    }
 
-		    const COOLDOWN_MS = 0; 
+		    const COOLDOWN_MS = 0;
 				if (Date.now() - this.lastOpponentStatCheckTime > COOLDOWN_MS) {
 
                             let opponentNameMatch = cleanMessage.match(/Opponent: (.+)/);
@@ -126,7 +126,7 @@ class QueueStatsHandler {
 
                                     if (extractedName.length > 0 && extractedName !== this.proxy.client.username) {
 
-                                        this.lastOpponentStatCheckTime = Date.now(); 
+                                        this.lastOpponentStatCheckTime = Date.now();
 
                                         formatter.log('DEBUG: Current game key: "' + this.currentGameKey + '"');
 
@@ -148,10 +148,14 @@ class QueueStatsHandler {
                 if (this.isCapturingWho) {
                     this.whoPlayers.push(...cleanedPlayers);
                     this.finishWhoCapture();
-                } else if (this.currentGameKey === 'bw') {
-                    
-                    formatter.log(`ONLINE: update received, refreshing tab display for ${cleanedPlayers.length} players.`);
+                } else if (this.currentGameKey) {
+
+                    formatter.log(`[ONLINE] update received for ${this.currentGameKey}, refreshing tab display for ${cleanedPlayers.length} players.`);
                     if (this.proxy.hypixel && cleanedPlayers.length > 0) {
+                        if (this.proxy.client && !cleanedPlayers.includes(this.proxy.client.username)) {
+                            cleanedPlayers.push(this.proxy.client.username);
+                            formatter.log(`[ONLINE] Added own player to list: ${this.proxy.client.username}`);
+                        }
                         this.proxy.tabManager.updatePlayerTags(cleanedPlayers, this.currentGameKey);
                     }
                 }
@@ -175,16 +179,15 @@ class QueueStatsHandler {
 
             if (!this.hasTriggeredForGame && this.currentGameKey) {
                 const isBedwarsStart = cleanMessage.includes('Protect your bed and destroy the enemy beds.');
-                const isDuelsStart = cleanMessage.includes('Eliminate your opponents!');
                 const isSkywarsStart = cleanMessage.includes('Gather resources and equipment on your');
 
-                if (isBedwarsStart || isDuelsStart || isSkywarsStart) {
+                if (isBedwarsStart || isSkywarsStart) {
                     const isEnabled = this.proxy.config.queue_stats && this.proxy.config.queue_stats[this.currentGameKey];
                     if (isEnabled) {
                         this.hasTriggeredForGame = true;
                         this.awaitingTeleportForWho = true;
                         formatter.log(`Game start message detected for '${this.currentGameKey}'. Awaiting teleport to execute /who.`);
-                        
+
                         setTimeout(() => {
                             if (this.proxy.target) {
                                 this.proxy.target.write('chat', { message: '/wtfmap' });
@@ -203,6 +206,9 @@ class QueueStatsHandler {
         this.isCapturingWho = false;
         formatter.log(`Captured ${this.whoPlayers.length} players from /who.`);
         if (this.proxy.hypixel && this.whoPlayers.length > 0) {
+            if (this.proxy.client && !this.whoPlayers.includes(this.proxy.client.username)) {
+                this.whoPlayers.push(this.proxy.client.username);
+            }
             this.proxy.hypixel.processQueueAndPrintBulk(this.whoPlayers, this.currentGameKey);
         }
         this.whoPlayers = [];

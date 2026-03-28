@@ -28,6 +28,14 @@ class HypixelHandler {
         return username.replace(/\[[A-Z+]+\]\s?|§./g, '').trim();
     }
 
+    _jagTag(username) {
+        if (!username || !this.proxy.client) return '';
+        if (username.toLowerCase() === this.proxy.client.username.toLowerCase()) {
+            return this.proxy.getOwnJagproxTag();
+        }
+        return '';
+    }
+
     async getApiKey() {
         if (this.proxy.env.apiKey) {
             return this.proxy.env.apiKey;
@@ -231,7 +239,7 @@ class HypixelHandler {
             const a = p.achievements || {};
 
             let statLines = [];
-            let header = `  ${rank} ${mojangData.username}`;
+            let header = `  ${this._jagTag(mojangData.username)}${rank} ${mojangData.username}`;
 
             switch (gameInfo.apiName) {
                 case "Bedwars":
@@ -377,7 +385,7 @@ class HypixelHandler {
             this.proxy.proxyChat("§5§m----------------------------------------");
             if (status.online) {
                 const nameColor = formatter.getPlayerNameColor(status.player);
-                this.proxy.proxyChat(`${formatter.formatRank(status.player)} ${nameColor}${mojangData.username} §dOnline`);
+                this.proxy.proxyChat(`${this._jagTag(mojangData.username)}${formatter.formatRank(status.player)} ${nameColor}${mojangData.username} §dOnline`);
                 if (status.hidden) {
                     this.proxy.proxyChat(`§8(Status is hidden, game info unavailable)`);
                 } else {
@@ -387,7 +395,7 @@ class HypixelHandler {
                 }
             } else {
                 const nameColor = formatter.getPlayerNameColor(status.player);
-                this.proxy.proxyChat(`${formatter.formatRank(status.player)} ${nameColor}${mojangData.username} §8Offline`);
+                this.proxy.proxyChat(`${this._jagTag(mojangData.username)}${formatter.formatRank(status.player)} ${nameColor}${mojangData.username} §8Offline`);
             }
             this.proxy.proxyChat("§5§m----------------------------------------");
         } catch (err) {
@@ -569,7 +577,7 @@ class HypixelHandler {
 
                 this.proxy.proxyChat(`§8[§dBedwars§8]`);
                 const nameColor = formatter.getPlayerNameColor(p);
-                this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
+                this.proxy.proxyChat(`${this._jagTag(username)}${rank} ${nameColor}${username}${guild}`);
                 this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()}    §8| §dLosses §5» §f${losses.toLocaleString()}`);
                 this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()}   §8| §dDeaths §5» §f${deaths.toLocaleString()}`);
                 this.proxy.proxyChat(`§dFinals §5» §f${finals.toLocaleString()}   §8| §dF-Deaths §5» §f${fdeaths.toLocaleString()}`);
@@ -584,7 +592,7 @@ class HypixelHandler {
                 this.proxy.proxyChat(`§8[§5${gameInfo.displayName}§8]`);
 
                 const nameColor = formatter.getPlayerNameColor(p);
-                this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
+                this.proxy.proxyChat(`${this._jagTag(username)}${rank} ${nameColor}${username}${guild}`);
 
                 let wins = 0, losses = 1, kills = 0, deaths = 1;
                 let currentWinstreak = 0, bestWinstreak = 0;
@@ -608,8 +616,21 @@ class HypixelHandler {
                             currentWinstreak = d[`current_winstreak_mode_${dgPrefix}`] || 0;
                             bestWinstreak = d[`best_winstreak_mode_${dgPrefix}`] || 0;
                         } else {
-                            currentWinstreak = d.current_winstreak || 0;
-                            bestWinstreak = d.best_winstreak || 0;
+                            // For general Duels mode, find the highest winstreak across all modes
+                            let highestCurrent = 0;
+                            let highestBest = 0;
+                            const duelsModes = require('../utils/constants').duelsModes;
+                            for (const [modeKey, modeInfo] of Object.entries(duelsModes)) {
+                                const modePrefix = modeInfo.prefix;
+                                if (modePrefix) {
+                                    const modeCurrent = d[`current_winstreak_mode_${modePrefix}`] || 0;
+                                    const modeBest = d[`best_winstreak_mode_${modePrefix}`] || 0;
+                                    if (modeCurrent > highestCurrent) highestCurrent = modeCurrent;
+                                    if (modeBest > highestBest) highestBest = modeBest;
+                                }
+                            }
+                            currentWinstreak = highestCurrent;
+                            bestWinstreak = highestBest;
                         }
                         break;
                     case "Walls3":
@@ -723,10 +744,10 @@ class HypixelHandler {
 
     async processQueueAndPrintBulk(playerNames, gamemodeKey) {
         const gameInfo = gameModeMap[gamemodeKey] || gameModeMap['bedwars'];
-        
-        const cleanPlayerNames = playerNames.map(name => 
+
+        const cleanPlayerNames = playerNames.map(name =>
             name.replace(/§[0-9a-fk-or]/g, '').replace(/\[.*?\]\s?/g, '').trim()
-        ).filter(name => name && name !== this.proxy.client?.username);
+        ).filter(name => name);
 
         if (cleanPlayerNames.length === 0) return;
 
@@ -736,6 +757,7 @@ class HypixelHandler {
 
         const statBlocks = [];
         for (const cleanName of cleanPlayerNames) {
+            if (cleanName === this.proxy.client?.username) continue;
             const block = await this.getAndFormatPartyPlayerStats(cleanName, gameInfo);
             if (block) statBlocks.push(block);
 

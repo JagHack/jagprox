@@ -9,6 +9,7 @@ class TabManager {
         this.teamSuffixMap  = new Map();
         this.teamOurPrefix  = new Map();
         this.teamOurSuffix  = new Map();
+        this.teamOurJagTag  = new Map();
         this.teamCounter    = 0;
     }
 
@@ -16,6 +17,7 @@ class TabManager {
         formatter.log('Player Tag Manager reset.');
         this.teamOurPrefix.clear();
         this.teamOurSuffix.clear();
+        this.teamOurJagTag.clear();
         this.teamCounter = 0;
     }
 
@@ -41,6 +43,7 @@ class TabManager {
 
                 const ourPrefix = this.teamOurPrefix.get(data.team);
                 const ourSuffix = this.teamOurSuffix.get(data.team);
+                const ourJagTag = this.teamOurJagTag.get(data.team);
 
                 if (ourSuffix) {
                     const base = this.teamSuffixMap.get(data.team) || '';
@@ -51,6 +54,12 @@ class TabManager {
                     data.prefix = ourPrefix.substring(0, 16);
                     const hypixelRawPrefix = this.teamPrefixMap.get(data.team) || '';
                     data.color = this.getBedColorInt(hypixelRawPrefix);
+                }
+
+                if (ourJagTag) {
+                    const currentPrefix = data.prefix || '';
+                    data.prefix = (ourJagTag + currentPrefix).substring(0, 16);
+                    formatter.log(`[PACKET] Applied jagTag in handlePacket: "${ourJagTag}" + "${currentPrefix}" = "${data.prefix}"`);
                 }
             }
         }
@@ -100,12 +109,13 @@ class TabManager {
 
     async updatePlayerTags(playerNames, gamemodeKey) {
         if (!this.proxy.client || this.proxy.client.state !== 'play') return;
-        formatter.log(`Updating player tab display for ${playerNames.length} players...`);
+        formatter.log(`[TAB] Updating player tab display for ${playerNames.length} players in ${gamemodeKey}...`);
+        formatter.log(`[TAB] Players: ${playerNames.join(', ')}`);
         for (const name of playerNames) {
             await this.createOrUpdatePlayerTag(name, gamemodeKey);
             await new Promise(r => setTimeout(r, 150));
         }
-        formatter.log('Finished updating player tags.');
+        formatter.log('[TAB] Finished updating player tags.');
     }
 
     async createOrUpdatePlayerTag(name, gamemodeKey) {
@@ -114,8 +124,17 @@ class TabManager {
 
         try {
             const playerData = await this.proxy.hypixel.getTabDataForPlayer(name, gamemodeKey);
-            if (!playerData) return;
+            const isOwnPlayer = this.proxy.client && name.toLowerCase() === this.proxy.client.username.toLowerCase();
+            const jagTag = isOwnPlayer ? this.proxy.getOwnJagproxTag() : '';
 
+            if (isOwnPlayer) {
+                formatter.log(`[DEBUG] Updating tab for own player: ${name}`);
+                formatter.log(`[DEBUG] jagTag="${jagTag}", ownJagproxRank="${this.proxy.ownJagproxRank}"`);
+            }
+
+            if (!playerData && !jagTag) return;
+
+            const effectiveData = playerData || { prefix: '', suffix: '' };
             const hypixelTeam = this.playerTeamMap.get(name.toLowerCase());
 
             if (hypixelTeam) {
@@ -124,16 +143,28 @@ class TabManager {
                     await new Promise(r => setTimeout(r, 500));
                     hypixelPrefix = this.teamPrefixMap.get(hypixelTeam) || '';
                 }
-                
+
                 const bedColorInt = this.getBedColorInt(hypixelPrefix);
                 const bedColorCode = this.getBedColorFromPrefix(hypixelPrefix);
-                
-                const finalPrefix = (playerData.prefix + bedColorCode).substring(0, 16);
-                const baseSuffix = this.teamSuffixMap.get(hypixelTeam) || '';
-                const finalSuffix = (baseSuffix + playerData.suffix).substring(0, 16);
 
-                this.teamOurPrefix.set(hypixelTeam, finalPrefix);
-                this.teamOurSuffix.set(hypixelTeam, playerData.suffix);
+                const basePrefix = (effectiveData.prefix + bedColorCode).substring(0, 16);
+                this.teamOurPrefix.set(hypixelTeam, basePrefix);
+                this.teamOurSuffix.set(hypixelTeam, effectiveData.suffix);
+
+                if (jagTag) {
+                    this.teamOurJagTag.set(hypixelTeam, jagTag);
+                } else {
+                    this.teamOurJagTag.delete(hypixelTeam);
+                }
+
+                const baseSuffix = this.teamSuffixMap.get(hypixelTeam) || '';
+                const finalSuffix = (baseSuffix + effectiveData.suffix).substring(0, 16);
+
+                let finalPrefix = basePrefix;
+                if (jagTag) {
+                    finalPrefix = (jagTag + basePrefix).substring(0, 16);
+                    formatter.log(`[TAB] Applied jagTag for ${name} (existing team): "${jagTag}" + "${basePrefix}" = "${finalPrefix}"`);
+                }
 
                 this.proxy.client.write('scoreboard_team', {
                     team:              hypixelTeam,
@@ -150,16 +181,26 @@ class TabManager {
                 formatter.log(`Tagged ${name}: prefix="${finalPrefix}" suffix="${finalSuffix}" color=${bedColorInt}`);
             } else {
                 const teamName = `jp${this.teamCounter++}`;
-                const finalPrefix = (playerData.prefix + '\u00A7f').substring(0, 16);
-                const finalSuffix = playerData.suffix.substring(0, 16);
 
-                this.teamOurPrefix.set(teamName, finalPrefix);
-                this.teamOurSuffix.set(teamName, playerData.suffix);
+                const basePrefix = (effectiveData.prefix + '\u00A7f').substring(0, 16);
+                this.teamOurPrefix.set(teamName, basePrefix);
+                this.teamOurSuffix.set(teamName, effectiveData.suffix);
 
+                if (jagTag) {
+                    this.teamOurJagTag.set(teamName, jagTag);
+                }
+
+                const finalSuffix = effectiveData.suffix.substring(0, 16);
                 const bedColorInt = 15;
+
+                let finalPrefix = basePrefix;
+                if (jagTag) {
+                    finalPrefix = (jagTag + basePrefix).substring(0, 16);
+                }
+
                 this.proxy.client.write('scoreboard_team', {
                     team: teamName, mode: 0, name: teamName,
-                    prefix: finalPrefix, 
+                    prefix: finalPrefix,
                     suffix: finalSuffix,
                     friendlyFire: 0, nameTagVisibility: 'always',
                     color: bedColorInt, players: []

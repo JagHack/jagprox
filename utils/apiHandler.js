@@ -63,6 +63,16 @@ class ApiHandler {
             throw error;
         }
     }
+
+    async getOwnProfile() {
+        if (!this.jwt) throw new Error('JWT not set.');
+        const response = await fetch(`${this.baseUrl}/user/profile`, {
+            headers: { 'Authorization': `Bearer ${this.jwt}` }
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data;
+    }
 }
 
 module.exports = ApiHandler;

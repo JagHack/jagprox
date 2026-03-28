@@ -23,6 +23,19 @@ const colorMap = {
   reset: "§r",
 };
 
+const jagproxRankColors = {
+  'OWNER':  '§4',
+  'DEV':    '§5',
+  'ADMIN':  '§c',
+  'MOD':    '§1',
+};
+
+function getJagproxRank(rankString) {
+  if (!rankString) return '';
+  const color = jagproxRankColors[rankString.toUpperCase()] || '§7';
+  return `${color}[${rankString.toUpperCase()}]§r `;
+}
+
 function log(message) {
   const timestamp = new Date().toLocaleTimeString();
   console.log(`[${timestamp}] ${message}`);
@@ -175,4 +188,5 @@ module.exports = {
   reconstructLegacyText,
   formatRank,
   getPlayerNameColor,
+  getJagproxRank,
 };
