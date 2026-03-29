@@ -927,8 +927,12 @@ class CommandHandler {
 
             if (response.ok) {
                 const linkUrl = data.link_url || `${WEB_LINK_BASE_URL}/link.html?code=${data.code}`;
-                this.proxy.proxyChat(`§5Link §8» §f${linkUrl}`);
-                this.proxy.proxyChat("§dPlease open this URL in your browser to complete the linking process.");
+                this.proxy.proxyChat("§5Link §8» §fClick here to connect your account", {
+                    action: 'open_url',
+                    value: linkUrl
+                });
+                this.proxy.proxyChat("§dAlternatively, you can manually open this URL in your browser:");
+                this.proxy.proxyChat(`§f${linkUrl}`);
             } else {
                 this.proxy.proxyChat(`§cError generating link: ${data.message || 'Unknown error.'}`);
             }

@@ -270,10 +270,21 @@ class JagProx {
         this.hypixel.reset();
     }
 
-    proxyChat(message) {
+    proxyChat(message, clickEvent) {
         if (!this.client) return;
+
+        const chatComponent = {
+            text: `§8[§5jag§dprox§8] §r${message}`
+        };
+
+        if (clickEvent) {
+            chatComponent.clickEvent = clickEvent;
+            chatComponent.underlined = true;
+            chatComponent.color = 'light_purple';
+        }
+
         this.client.write("chat", {
-            message: JSON.stringify({ text: `§8[§5jag§dprox§8] §r${message}` }),
+            message: JSON.stringify(chatComponent),
             position: 0
         });
     }

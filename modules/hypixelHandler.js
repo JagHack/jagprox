@@ -607,40 +607,44 @@ class HypixelHandler {
                         if (dgPrefix) {
                             // Map prefix to Hypixel API mode category for winstreak fields
                             const modeCategoryMap = {
-                                'bridge_duel': 'Bridge',
-                                'bridge_doubles': 'Bridge',
-                                'bridge_3v3': 'Bridge',
-                                'bridge_four': 'Bridge',
-                                'classic_duel': 'Classic',
-                                'classic_doubles': 'Classic',
-                                'uhc_duel': 'UHC',
-                                'uhc_doubles': 'UHC',
-                                'uhc_four': 'UHC',
-                                'uhc_meetup': 'UHC',
-                                'sw_duel': 'SkyWars',
-                                'sw_doubles': 'SkyWars',
-                                'sumo_duel': 'Sumo',
-                                'bow_duel': 'Bow',
-                                'combo_duel': 'Combo',
-                                'op_duel': 'OP',
-                                'op_doubles': 'OP',
-                                'spleef_duel': 'Spleef',
-                                'boxing_duel': 'Boxing',
-                                'potion_duel': 'Potion',
-                                'blitz_duel': 'Blitz',
-                                'mega_walls_duel': 'MegaWalls',
-                                'quake_duel': 'Quake',
-                                'parkour_duel': 'Parkour',
-                                'bowspleef_duel': 'BowSpleef',
-                                'bw_duel_rush': 'BedWars',
-                                'bw_duel_doubles': 'BedWars'
+                                'bridge_duel': 'bridge_duel',
+                                'bridge_doubles': 'bridge_doubles',
+                                'bridge_3v3': 'bridge_3v3',
+                                'bridge_four': 'bridge_four',
+                                'classic_duel': 'classic_duel',
+                                'classic_doubles': 'classic_doubles',
+                                'uhc_duel': 'uhc_duel',
+                                'uhc_doubles': 'uhc_doubles',
+                                'uhc_four': 'uhc_four',
+                                'uhc_meetup': 'uhc_meetup',
+                                'sw_duel': 'sw_duel',
+                                'sw_doubles': 'sw_doubles',
+                                'sumo_duel': 'sumo_duel',
+                                'bow_duel': 'bow_duel',
+                                'combo_duel': 'combo_duel',
+                                'op_duel': 'op_duel',
+                                'op_doubles': 'op_doubles',
+                                'spleef_duel': 'spleef_duel',
+                                'boxing_duel': 'boxing_duel',
+                                'potion_duel': 'potion_duel',
+                                'blitz_duel': 'blitz_duel',
+                                'mega_walls_duel': 'mega_walls_duel',
+                                'quake_duel': 'quake_duel',
+                                'parkour_duel': 'parkour_duel',
+                                'bowspleef_duel': 'bowspleef_duel',
+                                'bw_duel_rush': 'bw_duel_rush',
+                                'bw_duel_doubles': 'bw_duel_doubles'
                             };
-                            const modeCategory = modeCategoryMap[dgPrefix] || dgPrefix;
-                            currentWinstreak = d[`current_winstreak_mode_${modeCategory}`] || 0;
-                            bestWinstreak = d[`best_winstreak_mode_${modeCategory}`] || 0;
+                            const modeKey = modeCategoryMap[dgPrefix] || dgPrefix;
+                            // Current streak: key is missing when 0, so use || 0
+                            currentWinstreak = d[`current_${modeKey}_winstreak`] || 0;
+                            // Best streak: fall back to achievements if API doesn't provide it
+                            bestWinstreak = d[`best_${modeKey}_winstreak`] || a[`duels_${modeKey}_winstreak`] || 0;
                         } else {
+                            // Overall Duels streaks
                             currentWinstreak = d.current_winstreak || 0;
-                            bestWinstreak = d.best_winstreak || 0;
+                            // Fall back to achievements for best overall streak
+                            bestWinstreak = d.best_winstreak || a.duels_duels_win_streak || 0;
                         }
                         break;
                     case "Walls3":
