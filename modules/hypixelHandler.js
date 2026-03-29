@@ -605,8 +605,39 @@ class HypixelHandler {
                         kills = d[dgPrefix ? `${dgPrefix}_kills` : 'kills'] || 0;
                         deaths = d[dgPrefix ? `${dgPrefix}_deaths` : 'deaths'] || 1;
                         if (dgPrefix) {
-                            currentWinstreak = d[`current_winstreak_mode_${dgPrefix}`] || 0;
-                            bestWinstreak = d[`best_winstreak_mode_${dgPrefix}`] || 0;
+                            // Map prefix to Hypixel API mode category for winstreak fields
+                            const modeCategoryMap = {
+                                'bridge_duel': 'Bridge',
+                                'bridge_doubles': 'Bridge',
+                                'bridge_3v3': 'Bridge',
+                                'bridge_four': 'Bridge',
+                                'classic_duel': 'Classic',
+                                'classic_doubles': 'Classic',
+                                'uhc_duel': 'UHC',
+                                'uhc_doubles': 'UHC',
+                                'uhc_four': 'UHC',
+                                'uhc_meetup': 'UHC',
+                                'sw_duel': 'SkyWars',
+                                'sw_doubles': 'SkyWars',
+                                'sumo_duel': 'Sumo',
+                                'bow_duel': 'Bow',
+                                'combo_duel': 'Combo',
+                                'op_duel': 'OP',
+                                'op_doubles': 'OP',
+                                'spleef_duel': 'Spleef',
+                                'boxing_duel': 'Boxing',
+                                'potion_duel': 'Potion',
+                                'blitz_duel': 'Blitz',
+                                'mega_walls_duel': 'MegaWalls',
+                                'quake_duel': 'Quake',
+                                'parkour_duel': 'Parkour',
+                                'bowspleef_duel': 'BowSpleef',
+                                'bw_duel_rush': 'BedWars',
+                                'bw_duel_doubles': 'BedWars'
+                            };
+                            const modeCategory = modeCategoryMap[dgPrefix] || dgPrefix;
+                            currentWinstreak = d[`current_winstreak_mode_${modeCategory}`] || 0;
+                            bestWinstreak = d[`best_winstreak_mode_${modeCategory}`] || 0;
                         } else {
                             currentWinstreak = d.current_winstreak || 0;
                             bestWinstreak = d.best_winstreak || 0;

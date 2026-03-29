@@ -61,14 +61,26 @@ class QueueStatsHandler {
 
         if (meta.name === 'position' && this.awaitingTeleportForWho) {
             this.awaitingTeleportForWho = false;
-            formatter.log("Teleport confirmed. Executing /who after a short safety delay.");
 
-            setTimeout(() => {
-			this.isCapturingWho = true;
-			this.whoPlayers = [];
-			this.proxy.target.write('chat', { message: '/who' });
-		    }, 500);
-		}
+            // Skip /who for Duels modes - only run for Bedwars and SkyWars
+            const { duelsModes } = require('../utils/constants');
+            const isDuelsMode = this.currentGameKey && (
+                this.currentGameKey === 'duels' ||
+                Object.keys(duelsModes).includes(this.currentGameKey)
+            );
+
+            if (isDuelsMode) {
+                formatter.log("Skipping /who for Duels mode.");
+                this.hasTriggeredForGame = true;
+            } else {
+                formatter.log("Teleport confirmed. Executing /who after a short safety delay.");
+                setTimeout(() => {
+                    this.isCapturingWho = true;
+                    this.whoPlayers = [];
+                    this.proxy.target.write('chat', { message: '/who' });
+                }, 500);
+            }
+        }
 
 		if (meta.name === 'scoreboard_objective' && data.action === 0 && data.displayText) {
 		    const newTitle = data.displayText.replace(/§[0-9a-fk-or]/g, '').trim().toUpperCase();
