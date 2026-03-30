@@ -537,6 +537,7 @@ class HypixelHandler {
 
             const p = stats.player;
             const d = p.stats[gameInfo.apiName] || {};
+            const a = p.achievements || {};
 
             const rank = formatter.formatRank(p);
             const guild = stats.guild ? ` §5${stats.guild}` : "";
