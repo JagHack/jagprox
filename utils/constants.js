@@ -307,6 +307,7 @@ module.exports = {
     mcColors,
     findClosestMinecraftColor,
     commandAliases,
+    duelsModes,
     gameModeMap,
     quickQueueMap,
     duelsDivisions,
