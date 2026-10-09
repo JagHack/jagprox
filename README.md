@@ -70,7 +70,7 @@ npm install
 
 ### 4. Configuration
 
-On first launch, `config.yml` and `aliases.json` are created in the launcher's user-data folder (on Windows `%APPDATA%\JagProx`, on Linux `~/.config/JagProx`). The copies in this repository are only the defaults. Auto GG, Discord RPC, your API key and aliases can be edited from the launcher; changes reach a running proxy within a few seconds.
+On first launch, `config.yml` and `aliases.json` are created in the launcher's user-data folder (on Windows `%APPDATA%\jagprox-launcher`, on Linux `~/.config/jagprox-launcher`). The copies in this repository are only the defaults. Auto GG, Discord RPC, your API key and aliases can be edited from the launcher; changes reach a running proxy within a few seconds.
 
 Notable `config.yml` options:
 

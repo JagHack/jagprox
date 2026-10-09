@@ -232,6 +232,9 @@ body.sidebar-collapsed .sidebar {
     flex-direction: column;
     gap: 15px;
     font-family: 'Inter', sans-serif;
+    /* pre-wrap/break-all above are for the log and chat views, not form layout. */
+    white-space: normal;
+    word-break: normal;
 }
 
 .settings-group {
@@ -411,6 +414,16 @@ body.sidebar-collapsed #burger-menu-btn {
     flex-grow: 1;
 }
 
+.settings-content .api-key-container {
+    max-width: none;
+    margin-top: 0;
+}
+
+#save-api-key-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 #api-key-input {
     width: 100%;
     background-color: var(--bg-light);
@@ -551,6 +564,7 @@ body.sidebar-collapsed #burger-menu-btn {
 }
 
 .remove-alias-btn {
+    flex-shrink: 0;
     background-color: transparent;
     border: 1px solid var(--red-stop);
     color: var(--red-stop);
