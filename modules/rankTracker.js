@@ -1,15 +1,33 @@
+const formatter = require('../formatter.js');
+
+// "Name has joined (3/8)!" is printed in every Hypixel pre-game lobby, whatever the mode.
+const QUEUE_JOIN_REGEX = /has joined \(\d+\/\d+\)!$/;
+const GAME_START_MESSAGES = [
+    'The game starts in 1 second!',
+    'Protect your bed and destroy the enemy beds.',
+    'Eliminate your opponents!',
+    'Gather resources and equipment on your',
+];
+
 class RankTracker {
     constructor(proxy) {
         this.proxy = proxy;
         this.rankData = [];
+        this.inQueue = false;
     }
 
     reset() {
         this.rankData = [];
+        this.inQueue = false;
     }
 
     handlePacket(data, meta) {
-        if (meta.name === 'player_info') {
+        if (meta.name === 'login' || meta.name === 'respawn') {
+            // Hypixel sends a respawn on every server switch: new lobby, new player list.
+            this.reset();
+        } else if (meta.name === 'chat') {
+            this.handleChat(data);
+        } else if (meta.name === 'player_info') {
             if (data.action === 'add_player') {
                 for (const player of data.data) {
                     if (!player.name || !player.name.startsWith('§k')) continue;
@@ -37,18 +55,47 @@ class RankTracker {
             if (Array.isArray(data.players) && data.players.length !== 0 && data.team.startsWith('§')) {
                 for (const ign of data.players) {
                     if (!ign.startsWith('§r§k')) continue;
-                    const rankProfile = this.getRankProfileByIGN(ign);
+                    let rankProfile = this.getRankProfileByIGN(ign);
                     if (rankProfile) {
                         rankProfile.rank = data.team;
                     } else {
-                        this.rankData.push({ uuid: '', ign, rank: data.team, entityId: -1 });
+                        rankProfile = { uuid: '', ign, rank: data.team, entityId: -1, announced: false };
+                        this.rankData.push(rankProfile);
                     }
+                    if (this.inQueue) this.announce(rankProfile);
                 }
             }
         } else if (meta.name === 'entity_destroy') {
             const destroyed = new Set(data.entityIds);
             this.rankData = this.rankData.filter(r => !destroyed.has(r.entityId));
         }
+    }
+
+    handleChat(data) {
+        let cleanMessage;
+        try {
+            cleanMessage = formatter.extractText(JSON.parse(data.message)).replace(/§./g, '').trim();
+        } catch (e) {
+            return;
+        }
+
+        if (QUEUE_JOIN_REGEX.test(cleanMessage)) {
+            if (!this.inQueue) {
+                this.inQueue = true;
+                formatter.log('Rank tracker: queue lobby detected, tracking joining players.');
+                // Players already in the lobby were sent before our own join message.
+                this.rankData.forEach(r => this.announce(r));
+            }
+        } else if (this.inQueue && GAME_START_MESSAGES.some(msg => cleanMessage.includes(msg))) {
+            this.inQueue = false;
+            formatter.log('Rank tracker: game started, no longer tracking joining players.');
+        }
+    }
+
+    announce(rankProfile) {
+        if (rankProfile.announced || !rankProfile.rank) return;
+        rankProfile.announced = true;
+        this.proxy.proxyChat(`§7Hidden player in queue: ${rankProfile.rank}`);
     }
 
     updateRankData(uuid, ign, rank, entityId) {
@@ -59,7 +106,7 @@ class RankTracker {
             existing.entityId = entityId;
             return;
         }
-        this.rankData.push({ uuid, ign, rank, entityId });
+        this.rankData.push({ uuid, ign, rank, entityId, announced: false });
     }
 
     getRankProfileByIGN(ign) {

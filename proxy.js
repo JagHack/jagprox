@@ -270,7 +270,6 @@ class JagProx {
         this.tabManager.reset();
         this.tabAlerter.reset();
         this.autoGG.reset();
-        this.rankTracker.reset();
 
         this.hypixel.reset();
     }
