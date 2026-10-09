@@ -23,17 +23,64 @@ const colorMap = {
   reset: "§r",
 };
 
+// Hypixel's rankPlusColor / monthlyRankColor values.
+const plusMap = {
+  RED: "§c",
+  GOLD: "§6",
+  LIGHT_PURPLE: "§d",
+  DARK_PURPLE: "§5",
+  DARK_BLUE: "§1",
+  DARK_GREEN: "§2",
+  DARK_AQUA: "§3",
+  DARK_RED: "§4",
+  DARK_GRAY: "§8",
+  GRAY: "§7",
+  BLUE: "§9",
+  GREEN: "§a",
+  AQUA: "§b",
+  YELLOW: "§e",
+  WHITE: "§f",
+  BLACK: "§0",
+};
+
+let debugEnabled = false;
+
 function log(message) {
   const timestamp = new Date().toLocaleTimeString();
   console.log(`[${timestamp}] ${message}`);
 }
 
-function extractText(chatObj, fullText = "") {
+function setDebug(enabled) {
+  debugEnabled = !!enabled;
+}
+
+function debug(message) {
+  if (debugEnabled) log(`DEBUG: ${message}`);
+}
+
+function stripColors(text) {
+  return String(text).replace(/§./g, "");
+}
+
+// Plain text of a chat component (or string), including all `extra` children.
+function extractText(chatObj) {
+  if (chatObj === null || chatObj === undefined) return "";
   if (typeof chatObj === "string") return chatObj;
-  if (chatObj.text) fullText += chatObj.text;
-  if (chatObj.extra)
-    chatObj.extra.forEach((part) => (fullText += extractText(part)));
-  return fullText;
+  let text = chatObj.text || "";
+  if (Array.isArray(chatObj.extra)) {
+    text += chatObj.extra.map(extractText).join("");
+  }
+  return text;
+}
+
+// Parses a JSON chat string to plain text with color codes removed.
+// Returns null if the string isn't valid JSON.
+function chatToCleanText(json) {
+  try {
+    return stripColors(extractText(JSON.parse(json))).trim();
+  } catch (e) {
+    return null;
+  }
 }
 
 function reconstructLegacyText(component) {
@@ -45,24 +92,23 @@ function reconstructLegacyText(component) {
     }
   }
 
-  let fullText = "";
-
   function processPart(part) {
+    if (typeof part === "string") return part;
     let text = "";
     if (part.color && colorMap[part.color]) {
       text += colorMap[part.color];
     }
-    if (part.bold) text += colorMap["bold"];
-    if (part.italic) text += colorMap["italic"];
-    if (part.underline) text += colorMap["underline"];
-    if (part.strikethrough) text += colorMap["strikethrough"];
-    if (part.obfuscated) text += colorMap["obfuscated"];
+    if (part.bold) text += colorMap.bold;
+    if (part.italic) text += colorMap.italic;
+    if (part.underlined) text += colorMap.underline;
+    if (part.strikethrough) text += colorMap.strikethrough;
+    if (part.obfuscated) text += colorMap.obfuscated;
 
     if (part.text) {
       text += part.text;
     }
 
-    if (part.extra) {
+    if (Array.isArray(part.extra)) {
       part.extra.forEach((extraPart) => {
         text += processPart(extraPart);
       });
@@ -73,34 +119,24 @@ function reconstructLegacyText(component) {
   return processPart(component);
 }
 
+// The single source of truth for a Hypixel player's displayed rank.
+// Staff ranks (player.rank) win over purchased ranks.
+function getRank(player) {
+  if (!player) return "NONE";
+  if (player.rank && player.rank !== "NORMAL") return player.rank;
+  if (player.monthlyPackageRank === "SUPERSTAR") return "MVP_PLUS_PLUS";
+  if (player.newPackageRank && player.newPackageRank !== "NONE") return player.newPackageRank;
+  if (player.packageRank && player.packageRank !== "NONE") return player.packageRank;
+  return "NONE";
+}
+
 function formatRank(player) {
   if (!player) return "§7";
 
-  const rank = (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || player.rank || "NONE");
+  const plusColor = plusMap[player.rankPlusColor] || "§c";
+  const mvpPlusPlusColor = plusMap[player.monthlyRankColor] || "§6";
 
-  const plusMap = {
-    'RED': '§c',
-    'GOLD': '§6',
-    'LIGHT_PURPLE': '§d',
-    'DARK_PURPLE': '§5',
-    'DARK_BLUE': '§1',
-    'DARK_GREEN': '§2',
-    'DARK_AQUA': '§3',
-    'DARK_RED': '§4',
-    'DARK_GRAY': '§8',
-    'GRAY': '§7',
-    'BLUE': '§9',
-    'GREEN': '§a',
-    'AQUA': '§b',
-    'YELLOW': '§e',
-    'WHITE': '§f',
-    'BLACK': '§0'
-  };
-
-  const plusColor = plusMap[player.rankPlusColor] || '§c';
-  const mvpPlusPlusColor = plusMap[player.monthlyRankColor] || '§6';
-
-  switch (rank) {
+  switch (getRank(player)) {
     case "MVP_PLUS_PLUS":
       return `${mvpPlusPlusColor}[MVP${plusColor}++${mvpPlusPlusColor}]`;
     case "MVP_PLUS":
@@ -111,10 +147,13 @@ function formatRank(player) {
       return "§a[VIP§6+§a]";
     case "VIP":
       return "§a[VIP]";
+    case "YOUTUBER":
     case "YOUTUBE":
-      return "§f[§cYT§f]";
+      return "§c[§fYOUTUBE§c]";
     case "ADMIN":
       return "§c[ADMIN]";
+    case "GAME_MASTER":
+      return "§2[GM]";
     case "MODERATOR":
       return "§2[MOD]";
     case "HELPER":
@@ -127,39 +166,20 @@ function formatRank(player) {
 function getPlayerNameColor(player) {
   if (!player) return "§7";
 
-  const rank = (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || player.rank || "NONE");
-  
-  const plusMap = {
-    'RED': '§c',
-    'GOLD': '§6',
-    'LIGHT_PURPLE': '§d',
-    'DARK_PURPLE': '§5',
-    'DARK_BLUE': '§1',
-    'DARK_GREEN': '§2',
-    'DARK_AQUA': '§3',
-    'DARK_RED': '§4',
-    'DARK_GRAY': '§8',
-    'GRAY': '§7',
-    'BLUE': '§9',
-    'GREEN': '§a',
-    'AQUA': '§b',
-    'YELLOW': '§e',
-    'WHITE': '§f',
-    'BLACK': '§0'
-  };
-
-  switch (rank) {
+  switch (getRank(player)) {
     case "MVP_PLUS_PLUS":
-      return plusMap[player.monthlyRankColor] || '§6';
+      return plusMap[player.monthlyRankColor] || "§6";
     case "MVP_PLUS":
     case "MVP":
       return "§b";
     case "VIP_PLUS":
     case "VIP":
       return "§a";
+    case "YOUTUBER":
     case "YOUTUBE":
     case "ADMIN":
       return "§c";
+    case "GAME_MASTER":
     case "MODERATOR":
       return "§2";
     case "HELPER":
@@ -171,8 +191,13 @@ function getPlayerNameColor(player) {
 
 module.exports = {
   log,
+  setDebug,
+  debug,
+  stripColors,
   extractText,
+  chatToCleanText,
   reconstructLegacyText,
+  getRank,
   formatRank,
   getPlayerNameColor,
 };

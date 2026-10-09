@@ -10,6 +10,7 @@ This guide will walk you through the features of the Jagprox launcher.
 - [Player Stats](#player-stats)
 - [Player Status](#player-status)
 - [Logs](#logs)
+- [Aliases](#aliases)
 - [Settings](#settings)
 
 ## Installation and Launching
@@ -32,7 +33,7 @@ To log out, click the "Logout" button.
 
 The core feature of Jagprox is the proxy.
 
--   **Start Proxy:** On the home page, click the "Launch Proxy" button. You must be logged in to do this. The proxy will start, and you can connect to `localhost:25565` from Minecraft.
+-   **Start Proxy:** On the home page, click the "Launch Proxy" button. You must be logged in to do this. The proxy will start, and you can connect to `localhost:2107` from Minecraft (the `port` in `config.yml`).
 -   **Stop Proxy:** When the proxy is running, the button will change to "Stop Proxy". Click it to stop the proxy.
 
 ## Player Stats
@@ -61,9 +62,20 @@ The launcher provides logs for the proxy and other operations.
 -   **View Logs:** Logs are displayed in real-time on the "Logs" page.
 -   **Copy Logs:** Click the "Copy Logs" button (the clipboard icon) at the top of the logs page to copy all the logs to your clipboard.
 
+## Aliases
+
+Aliases turn a command you type into another one, e.g. `/q solobw` → `/play bedwars_eight_one`.
+
+-   Open the "Aliases" page, click "New Alias", fill in both commands (each starting with `/`) and click "Save Aliases".
+-   Remove an alias with the ✕ button next to it.
+-   Saved aliases reach a running proxy within a few seconds.
+
 ## Settings
 
 The settings page allows you to manage the launcher.
 
+-   **Auto GG:** Enable it, set the message and the delay, then click "Save Settings".
+-   **Hypixel API Key:** Paste your key and click "Save Key". The key is stored with your JagProx account.
+-   **Discord RPC:** Toggle the rich presence on or off.
 -   **Check for Updates:** Go to the "Settings" page and click "Check for Updates" to see if a new version of the launcher is available.
 -   **Current Version:** The settings page also displays the current version of the launcher.

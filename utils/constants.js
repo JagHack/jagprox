@@ -1,3 +1,12 @@
+const DEFAULT_PROXY_PORT = 2107;
+
+// Chat lines Hypixel prints when a match actually begins (after the pre-game lobby).
+const GAME_START_MESSAGES = [
+    'Protect your bed and destroy the enemy beds.',
+    'Eliminate your opponents!',
+    'Gather resources and equipment on your',
+];
+
 const mcColors = [
     { code: '§0', rgb: [0, 0, 0] }, { code: '§1', rgb: [0, 0, 170] },
     { code: '§2', rgb: [0, 170, 0] }, { code: '§3', rgb: [0, 170, 170] },
@@ -21,26 +30,6 @@ function findClosestMinecraftColor(r, g, b) {
     }
     return closest.code;
 }
-
-const commandAliases = {
-    "/play solobw": "/play bedwars_eight_one",
-    "/play doublesbw": "/play bedwars_eight_two",
-    "/play 3sbw": "/play bedwars_four_three",
-    "/play 4sbw": "/play bedwars_four_four",
-    "/play 4v4bw": "/play bedwars_two_four",
-    "/play castlebw": "/play bedwars_castle",
-    "/play solosw": "/play skywars_solo_normal",
-    "/play doublesinsanesw": "/play skywars_teams_insane",
-    "/play doublesnormalsw": "/play skywars_teams_normal",
-    "/play classicduels": "/play duels_classic_duel",
-    "/play bridgeduels": "/play duels_bridge_duel",
-    "/play uhcduels": "/play duels_uhc_duel",
-    "/play skywarsduels": "/play duels_sw_duel",
-    "/play sumoduels": "/play duels_sumo_duel",
-    "/play bowduels": "/play duels_bow_duel",
-    "/play comboduels": "/play duels_combo_duel",
-    "/play opduels": "/play duels_op_duel",
-};
 
 const duelsModes = {
   general: { apiName: "Duels", displayName: "Duels", prefix: "" },
@@ -304,9 +293,10 @@ const duelsTitleColors = {
 };
 
 module.exports = {
+    DEFAULT_PROXY_PORT,
+    GAME_START_MESSAGES,
     mcColors,
     findClosestMinecraftColor,
-    commandAliases,
     duelsModes,
     gameModeMap,
     quickQueueMap,

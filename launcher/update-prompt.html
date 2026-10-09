@@ -82,18 +82,16 @@
     </div>
 
     <script>
-        const { ipcRenderer } = require('electron');
-        
-        ipcRenderer.on('version-info', (event, version) => {
-            document.getElementById('version').innerText = 'v' + version;
+        window.jagprox.on('version-info', (version) => {
+            document.getElementById('version').textContent = 'v' + version;
         });
 
         function skip() {
-            ipcRenderer.send('update-response', 'skip');
+            window.jagprox.send('update-response', 'skip');
         }
 
         function update() {
-            ipcRenderer.send('update-response', 'update');
+            window.jagprox.send('update-response', 'update');
         }
     </script>
 </body>

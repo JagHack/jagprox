@@ -1,6 +1,5 @@
-const { ipcRenderer } = require("electron");
-const { WEB_LINK_BASE_URL } = require("../utils/api_constants.js");
-const { API_BASE_URL } = require("../utils/api_constants.js");
+// Runs without Node access. Talks to the main process only through window.jagprox (preload.js).
+const bridge = window.jagprox;
 
 function switchPage(pageId) {
     document.querySelectorAll('.page').forEach(page => {
@@ -18,11 +17,13 @@ function switchPage(pageId) {
 
     const authButtonsContainer = document.getElementById('auth-buttons-container');
     if (authButtonsContainer) {
-        if (pageId === 'home') {
-            authButtonsContainer.style.display = 'block';
-        } else {
-            authButtonsContainer.style.display = 'none';
-        }
+        authButtonsContainer.style.display = pageId === 'home' ? 'block' : 'none';
+    }
+
+    if (pageId === 'aliases') bridge.send('get-aliases');
+    if (pageId === 'settings') {
+        bridge.send('get-config');
+        bridge.send('get-api-key-status');
     }
 }
 
@@ -31,65 +32,38 @@ function updateLoginStatus(username) {
     const loginViaBrowserButton = document.getElementById('login-via-browser-button');
     const logoutButton = document.getElementById('logout-button');
 
+    const p = document.createElement('p');
     if (username) {
-        loginStatusDisplay.innerHTML = `<p>Logged in as: <strong>${username}</strong></p>`;
+        // textContent: the username comes from the server and must never be parsed as HTML.
+        p.append('Logged in as: ');
+        const strong = document.createElement('strong');
+        strong.textContent = username;
+        p.append(strong);
         loginStatusDisplay.classList.add('logged-in');
         loginViaBrowserButton.style.display = 'none';
         logoutButton.style.display = 'block';
     } else {
-        loginStatusDisplay.innerHTML = `<p>Not logged in</p>`;
+        p.textContent = 'Not logged in';
         loginStatusDisplay.classList.remove('logged-in');
         loginViaBrowserButton.style.display = 'block';
         logoutButton.style.display = 'none';
     }
+    loginStatusDisplay.replaceChildren(p);
 }
 
-ipcRenderer.on('auth-token-received', async (event, token) => {
-    localStorage.setItem('jwt_token', token);
-    ipcRenderer.send('set-jwt', token);
+function clearStoredSession() {
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('user_display_name');
+}
 
-    try {
-        const response = await fetch(`${API_BASE_URL}/user/profile`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const profileData = await response.json();
-
-        if (!response.ok) {
-            console.error('Failed to fetch user profile:', profileData.message);
-            try {
-                const decodedToken = JSON.parse(atob(token.split('.')[1]));
-                localStorage.setItem('user_display_name', decodedToken.email);
-                updateLoginStatus(decodedToken.email);
-            } catch (decodeError) {
-                console.error('Failed to decode token for fallback:', decodeError);
-                localStorage.setItem('user_display_name', 'User');
-                updateLoginStatus('User');
-            }
-        } else {
-        
-            const displayName = profileData.username || profileData.email;
-            localStorage.setItem('user_display_name', displayName);
-            updateLoginStatus(displayName);
-        }
-
-        switchPage('home');
-        document.body.classList.add('sidebar-open');
-
-    } catch (error) {
-        console.error('Critical Error during profile fetch:', error);
-        localStorage.removeItem('jwt_token');
-        localStorage.removeItem('user_display_name');
-        updateLoginStatus(null);
-        ipcRenderer.send('clear-jwt');
-    }
-});
-function formatMinecraftString(html) {
-    html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Escapes HTML first, then turns § codes into spans, so the result is safe for innerHTML.
+function formatMinecraftString(text) {
+    const html = String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     const colorMap = {
       '§0': 'mc-color-0', '§1': 'mc-color-1', '§2': 'mc-color-2', '§3': 'mc-color-3',
       '§4': 'mc-color-4', '§5': 'mc-color-5', '§6': 'mc-color-6', '§7': 'mc-color-7',
@@ -99,46 +73,228 @@ function formatMinecraftString(html) {
     const formatMap = {
       '§l': 'mc-format-l', '§o': 'mc-format-o', '§n': 'mc-format-n', '§m': 'mc-format-m'
     };
-  
-    let openSpans = [];
-    const parts = html.split(/(§[0-9a-fl-or])/g);
+
+    let openSpans = 0;
+    const parts = html.split(/(§[0-9a-fk-or])/g);
     let result = '';
-  
+
     for (const part of parts) {
       if (part.startsWith('§')) {
         if (part === '§r') {
-          result += '</span>'.repeat(openSpans.length);
-          openSpans = [];
+          result += '</span>'.repeat(openSpans);
+          openSpans = 0;
         } else if (colorMap[part]) {
-          result += '</span>'.repeat(openSpans.length);
-          openSpans = [];
+          result += '</span>'.repeat(openSpans);
           result += `<span class="${colorMap[part]}">`;
-          openSpans.push('</span>');
+          openSpans = 1;
         } else if (formatMap[part]) {
           result += `<span class="${formatMap[part]}">`;
-          openSpans.push('</span>');
+          openSpans++;
         }
       } else {
         result += part;
       }
     }
-  
-    result += '</span>'.repeat(openSpans.length);
+
+    result += '</span>'.repeat(openSpans);
     return result;
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    document.getElementById('minimize-btn').addEventListener('click', () => {
-        ipcRenderer.send('minimize-window');
+function renderLines(container, result) {
+    container.replaceChildren();
+    const lines = result.error
+        ? [`§c${result.error}`]
+        : ['§d§m----------------------------------------------------', ...result.lines.map(l => `  ${l}`), '§d§m----------------------------------------------------'];
+    for (const line of lines) {
+        const p = document.createElement('p');
+        p.className = result.error ? 'error' : 'mc-chat-line';
+        p.innerHTML = formatMinecraftString(line);
+        container.appendChild(p);
+    }
+}
+
+function appendFormattedLine(containerId, text) {
+    const container = document.getElementById(containerId);
+    const entry = document.createElement('div');
+    entry.innerHTML = formatMinecraftString(text);
+    container.appendChild(entry);
+    container.scrollTop = container.scrollHeight;
+}
+
+function flashButton(button, success) {
+    const original = button.innerHTML;
+    button.textContent = success ? 'Saved!' : 'Failed';
+    setTimeout(() => {
+        button.innerHTML = original;
+    }, 2000);
+}
+
+bridge.on('session-state', (session) => {
+    if (session && session.ok) {
+        if (session.token) localStorage.setItem('jwt_token', session.token);
+        localStorage.setItem('user_display_name', session.displayName);
+        updateLoginStatus(session.displayName);
+        switchPage('home');
+        document.body.classList.add('sidebar-open');
+    } else {
+        clearStoredSession();
+        updateLoginStatus(null);
+        switchPage('home');
+        document.body.classList.remove('sidebar-open');
+        if (session && session.error) appendFormattedLine('log-output', `§c${session.error}`);
+    }
+});
+
+function initializeAliasesPage() {
+    const aliasesContainer = document.getElementById('aliases-container');
+    const modal = document.getElementById('confirm-modal');
+    let pendingRemoval = null;
+
+    function createAliasInput(alias = '', command = '') {
+        const group = document.createElement('div');
+        group.className = 'alias-group';
+
+        const keyInput = document.createElement('input');
+        keyInput.type = 'text';
+        keyInput.className = 'alias-key';
+        keyInput.placeholder = '/command';
+        keyInput.value = alias;
+
+        const arrow = document.createElement('span');
+        arrow.textContent = '→';
+
+        const valueInput = document.createElement('input');
+        valueInput.type = 'text';
+        valueInput.className = 'alias-value';
+        valueInput.placeholder = '/executed_command';
+        valueInput.value = command;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'remove-alias-btn';
+        removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+        removeBtn.addEventListener('click', () => {
+            pendingRemoval = group;
+            modal.classList.add('show');
+        });
+
+        group.append(keyInput, arrow, valueInput, removeBtn);
+        aliasesContainer.appendChild(group);
+    }
+
+    function closeModal() {
+        pendingRemoval = null;
+        modal.classList.remove('show');
+    }
+
+    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+        if (pendingRemoval) pendingRemoval.remove();
+        closeModal();
+    });
+    document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
+
+    document.getElementById('add-alias-btn').addEventListener('click', () => createAliasInput());
+
+    document.getElementById('save-aliases-btn').addEventListener('click', () => {
+        const newAliases = {};
+        aliasesContainer.querySelectorAll('.alias-group').forEach(group => {
+            const key = group.querySelector('.alias-key').value.trim();
+            const value = group.querySelector('.alias-value').value.trim();
+            if (key && value) newAliases[key] = value;
+        });
+        bridge.send('save-aliases', newAliases);
     });
 
-    document.getElementById('maximize-btn').addEventListener('click', () => {
-        ipcRenderer.send('maximize-window');
+    bridge.on('aliases-loaded', (aliases) => {
+        aliasesContainer.replaceChildren();
+        for (const [key, value] of Object.entries(aliases || {})) {
+            createAliasInput(key, value);
+        }
     });
 
-    document.getElementById('close-btn').addEventListener('click', () => {
-        ipcRenderer.send('close-window');
+    bridge.on('aliases-saved-reply', (success) => {
+        flashButton(document.getElementById('save-aliases-btn'), success);
+        if (success) bridge.send('get-aliases');
     });
+}
+
+function initializeSettingsPage() {
+    const autoggEnabled = document.getElementById('autogg-enabled');
+    const autoggMessage = document.getElementById('autogg-message');
+    const autoggDelay = document.getElementById('autogg-delay');
+    const discordRpcEnabled = document.getElementById('discord-rpc-enabled');
+    const apiKeyInput = document.getElementById('api-key-input');
+    const updateInfo = document.getElementById('update-info');
+
+    bridge.on('config-loaded', (config) => {
+        if (!config) return;
+        const autoGG = config.auto_gg || {};
+        autoggEnabled.checked = !!autoGG.enabled;
+        autoggMessage.value = autoGG.message || 'gg';
+        autoggDelay.value = autoGG.delay ?? 1500;
+        discordRpcEnabled.checked = !!(config.discord_rpc && config.discord_rpc.enabled);
+    });
+
+    document.getElementById('save-settings-btn').addEventListener('click', () => {
+        bridge.send('save-settings', {
+            auto_gg: {
+                enabled: autoggEnabled.checked,
+                message: autoggMessage.value.trim() || 'gg',
+                delay: parseInt(autoggDelay.value, 10),
+            }
+        });
+    });
+
+    bridge.on('settings-saved-reply', (success) => {
+        flashButton(document.getElementById('save-settings-btn'), success);
+    });
+
+    discordRpcEnabled.addEventListener('change', () => {
+        bridge.send('toggle-discord-rpc', discordRpcEnabled.checked);
+    });
+
+    document.getElementById('toggle-api-key-btn').addEventListener('click', () => {
+        apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
+    });
+
+    document.getElementById('save-api-key-btn').addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        if (key) bridge.send('save-api-key', key);
+    });
+
+    bridge.on('api-key-saved-reply', (success) => {
+        flashButton(document.getElementById('save-api-key-btn'), success);
+        if (success) {
+            apiKeyInput.value = '';
+            bridge.send('get-api-key-status');
+        }
+    });
+
+    bridge.on('api-key-status', (isSet) => {
+        apiKeyInput.placeholder = isSet
+            ? 'API key is set. Enter a new one to change it.'
+            : 'Enter your Hypixel API key';
+    });
+
+    document.getElementById('check-for-updates-btn').addEventListener('click', () => {
+        bridge.send('check-for-updates');
+    });
+
+    bridge.on('app-version', (version) => {
+        updateInfo.textContent = `Current Version: v${version}`;
+    });
+
+    bridge.on('update-status', (message) => {
+        updateInfo.textContent = message;
+    });
+
+    bridge.send('get-app-version');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('minimize-btn').addEventListener('click', () => bridge.send('minimize-window'));
+    document.getElementById('maximize-btn').addEventListener('click', () => bridge.send('maximize-window'));
+    document.getElementById('close-btn').addEventListener('click', () => bridge.send('close-window'));
 
     document.getElementById('burger-menu-btn').addEventListener('click', () => {
         document.body.classList.toggle('sidebar-collapsed');
@@ -147,87 +303,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', (event) => {
             event.preventDefault();
-            const pageId = link.dataset.page;
-            switchPage(pageId);
+            switchPage(link.dataset.page);
         });
     });
 
-    document.getElementById('login-via-browser-button').addEventListener('click', async () => {
-        const localAuthCallbackUrl = ipcRenderer.sendSync('get-local-auth-callback-url');
-        if (localAuthCallbackUrl) {
-            const authUrl = `${WEB_LINK_BASE_URL}/login?redirect_uri=${encodeURIComponent(localAuthCallbackUrl)}`;
-            ipcRenderer.send('open-external-url', authUrl);
-        } else {
-            console.error('Local auth callback URL not available.');
-        }
+    document.getElementById('login-via-browser-button').addEventListener('click', () => {
+        bridge.send('start-login');
     });
 
-    document.getElementById('logout-button').addEventListener('click', async () => {
-        localStorage.removeItem('jwt_token');
-        localStorage.removeItem('user_display_name');
-        ipcRenderer.send('clear-jwt'); 
+    document.getElementById('logout-button').addEventListener('click', () => {
+        clearStoredSession();
+        bridge.send('clear-jwt');
         updateLoginStatus(null);
         switchPage('home');
         document.body.classList.remove('sidebar-open');
     });
 
+    // The main process re-validates a stored token with the backend before using it.
     const existingToken = localStorage.getItem('jwt_token');
-
     if (existingToken) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/user/profile`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${existingToken}` }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Token validation failed with status: ${response.status}`);
-            }
-            
-            const profileData = await response.json();
-            const displayName = profileData.username || profileData.email;
-            
-            localStorage.setItem('user_display_name', displayName);
-            updateLoginStatus(displayName);
-            ipcRenderer.send('set-jwt', existingToken);
-            
-            switchPage('home');
-            document.body.classList.add('sidebar-open');
-
-        } catch (error) {
-            console.warn('Startup token validation failed:', error.message);
-            localStorage.removeItem('jwt_token');
-            localStorage.removeItem('user_display_name');
-            updateLoginStatus(null);
-            ipcRenderer.send('clear-jwt');
-            switchPage('home');
-            document.body.classList.remove('sidebar-open');
-        }
+        updateLoginStatus(localStorage.getItem('user_display_name'));
+        bridge.send('restore-session', existingToken);
     } else {
         updateLoginStatus(null);
         switchPage('home');
         document.body.classList.remove('sidebar-open');
     }
-    document.getElementById('toggle-proxy-btn').addEventListener('click', async () => {
-        const toggleProxyBtn = document.getElementById('toggle-proxy-btn');
-        const currentStatus = toggleProxyBtn.dataset.status;
 
-        if (currentStatus === 'stopped') {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
+    document.getElementById('toggle-proxy-btn').addEventListener('click', () => {
+        const toggleProxyBtn = document.getElementById('toggle-proxy-btn');
+        if (toggleProxyBtn.dataset.status === 'stopped') {
+            if (!localStorage.getItem('jwt_token')) {
                 alert("You must be logged in to launch the proxy.");
                 return;
             }
-            
-            ipcRenderer.send('toggle-proxy', { start: true, token: token });
+            bridge.send('toggle-proxy', { start: true });
         } else {
-            ipcRenderer.send('toggle-proxy', { start: false });
+            bridge.send('toggle-proxy', { start: false });
         }
     });
 
     document.getElementById('copy-log-btn').addEventListener('click', () => {
-        const logOutput = document.getElementById('log-output');
-        const logs = logOutput.innerText;
+        const logs = document.getElementById('log-output').innerText;
         navigator.clipboard.writeText(logs).then(() => {
             const copyBtn = document.getElementById('copy-log-btn');
             const originalContent = copyBtn.innerHTML;
@@ -241,142 +358,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     document.getElementById('stat-search-btn').addEventListener('click', () => {
-        const name = document.getElementById('stat-search-name').value;
+        const name = document.getElementById('stat-search-name').value.trim();
         const gamemode = document.getElementById('stat-search-gamemode').value;
         if (name && gamemode) {
-            ipcRenderer.send('get-player-stats', { name, gamemode });
+            bridge.send('get-player-stats', { name, gamemode });
         } else {
-            document.getElementById('stat-search-results').innerHTML = '<p class="error">Please enter player name and select a gamemode.</p>';
+            renderLines(document.getElementById('stat-search-results'), { error: 'Please enter player name and select a gamemode.' });
         }
     });
 
-    function formatGameStatsLines(p, d, a, apiName, prefix) {
-        const lines = [];
-        switch (apiName) {
-            case "Bedwars":
-                lines.push(`    §fWins: §a${(d.wins_bedwars || 0).toLocaleString()} §8| §fLosses: §c${(d.losses_bedwars || 1).toLocaleString()}`);
-                lines.push(`    §fFKDR: §6${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}`);
-                break;
-            case "SkyWars":
-                lines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fLosses: §c${(d.losses || 1).toLocaleString()}`);
-                lines.push(`    §fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
-                break;
-            case "Duels":
-                const winsKey = prefix ? `${prefix}_wins` : 'wins';
-                const lossesKey = prefix ? `${prefix}_losses` : 'losses';
-                const killsKey = prefix ? `${prefix}_kills` : 'kills';
-                const deathsKey = prefix ? `${prefix}_deaths` : 'deaths';
-                const wins = d[winsKey] || 0;
-                const losses = d[lossesKey] || 1;
-                const kills = d[killsKey] || 0;
-                const deaths = d[deathsKey] || 1;
-                lines.push(`    §fWins: §a${wins.toLocaleString()} §8| §fLosses: §c${losses.toLocaleString()}`);
-                lines.push(`    §fWLR: §6${(wins / (losses || 1)).toFixed(2)} §8| §fKDR: §6${(kills / (deaths || 1)).toFixed(2)}`);
-                break;
-            case "Walls3":
-                lines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fLosses: §c${(d.losses || 1).toLocaleString()}`);
-                lines.push(`    §fFinal Kills: §a${(d.final_kills || 0).toLocaleString()} §8| §fFinal Deaths: §c${(d.final_deaths || 1).toLocaleString()}`);
-                lines.push(`    §fFKDR: §6${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)} §8| §fWLR: §6${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
-                break;
-            case "UHC":
-                lines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fKills: §a${(d.kills || 0).toLocaleString()}`);
-                lines.push(`    §fDeaths: §c${(d.deaths || 1).toLocaleString()} §8| §fKDR: §6${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
-                break;
-            case "MurderMystery":
-                lines.push(`    §fGames: §a${(d.games || 0).toLocaleString()} §8| §fWins: §a${(d.wins || 0).toLocaleString()}`);
-                lines.push(`    §fKills: §a${(d.kills || 0).toLocaleString()} §8| §fWin Rate: §6${(((d.wins || 0) / (d.games || 1)) * 100).toFixed(2)}%`);
-                break;
-            case "BuildBattle":
-                lines.push(`    §fWins: §a${(d.wins || 0).toLocaleString()} §8| §fGames Played: §e${(d.games_played || 0).toLocaleString()}`);
-                lines.push(`    §fScore: §e${(d.score || 0).toLocaleString()} §8| §fWin Rate: §6${(((d.wins || 0) / (d.games_played || 1)) * 100).toFixed(2)}%`);
-                break;
-            case "Pit":
-                const pitStats = p.stats.Pit ? p.stats.Pit.pit_stats_ptl : {};
-                lines.push(`    §fKills: §a${(pitStats.kills || 0).toLocaleString()} §8| §fDeaths: §c${(pitStats.deaths || 1).toLocaleString()}`);
-                lines.push(`    §fKDR: §6${((pitStats.kills || 0) / (pitStats.deaths || 1)).toFixed(2)}`);
-                break;
-            case "WoolGames":
-                const ww = d.wool_wars || {};
-                const stats = ww.stats || {};
-                lines.push(`    §fWins: §a${(stats.wins || 0).toLocaleString()} §8| §fGames: §e${(stats.games_played || 0).toLocaleString()}`);
-                lines.push(`    §fKills: §a${(stats.kills || 0).toLocaleString()} §8| §fAssists: §b${(stats.assists || 0).toLocaleString()}`);
-                lines.push(`    §fWLR: §6${((stats.wins || 0) / ((stats.games_played - (stats.wins || 0)) || 1)).toFixed(2)}`);
-                break;
-            default:
-                lines.push(`    §fWins: §a${(d.wins || 'N/A').toLocaleString()} §8| §fKills: §a${(d.kills || 'N/A').toLocaleString()}`);
-                lines.push(`    §fDeaths: §c${(d.deaths || 'N/A').toLocaleString()}`);
-                break;
-        }
-        return lines;
-    }
-    
-    ipcRenderer.on('player-stats-result', (event, result) => {
-        const resultsDiv = document.getElementById('stat-search-results');
-        resultsDiv.innerHTML = ''; 
-        if (result.error) {
-            resultsDiv.innerHTML = `<p class="error">${formatMinecraftString(result.error)}</p>`;
-            return;
-        }
-    
-        const sendLine = () => `<p class="mc-chat-line">${formatMinecraftString("§d§m----------------------------------------------------")}</p>`;
-        
-        let outputHtml = sendLine();
-        outputHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §d§lPlayer Stats for ${result.game.displayName}`)}</p>`;
-        outputHtml += `<p class="mc-chat-line">${formatMinecraftString(`  ${result.stats.rank} ${result.username} §7${result.stats.guild ? `[§e${result.stats.guild}§7]` : ''}`)}</p>`;
-        
-        const p = result.stats.player; 
-        const d = p.stats?.[result.game.apiName] || {}; 
-        const a = p.achievements || {}; 
-    
-        const statLines = formatGameStatsLines(p, d, a, result.game.apiName, result.game.prefix);
-        statLines.forEach(line => {
-            outputHtml += `<p class="mc-chat-line">${formatMinecraftString(line)}</p>`;
-        });
-    
-        outputHtml += sendLine();
-        resultsDiv.innerHTML = outputHtml;
+    bridge.on('player-stats-result', (result) => {
+        renderLines(document.getElementById('stat-search-results'), result);
     });
 
     document.getElementById('status-check-btn').addEventListener('click', () => {
-        const name = document.getElementById('status-check-name').value;
+        const name = document.getElementById('status-check-name').value.trim();
         if (name) {
-            ipcRenderer.send('get-player-status', name);
+            bridge.send('get-player-status', name);
         } else {
-            document.getElementById('status-check-results').innerHTML = '<p class="error">Please enter player name.</p>';
+            renderLines(document.getElementById('status-check-results'), { error: 'Please enter player name.' });
         }
     });
 
-    ipcRenderer.on('player-status-result', (event, result) => {
-        const resultsDiv = document.getElementById('status-check-results');
-        resultsDiv.innerHTML = ''; 
-        if (result.error) {
-            resultsDiv.innerHTML = `<p class="error">${formatMinecraftString(result.error)}</p>`;
-            return;
-        }
-
-        const sendLine = () => `<p class="mc-chat-line">${formatMinecraftString("§d§m----------------------------------------------------")}</p>`;
-
-        let statusHtml = sendLine();
-        statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §d§lPlayer Status for ${result.username}`)}</p>`;
-        statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  ${result.rank} ${result.username}`)}</p>`;
-        
-        if (result.online) {
-            statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §aOnline.`)}</p>`;
-            if (!result.hidden) {
-                statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §fGame: §b${result.gameType}`)}</p>`;
-                if (result.mode) statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §fMode: §e${result.mode}`)}</p>`;
-                if (result.map) statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §fMap: §e${result.map}`)}</p>`;
-            } else {
-                statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §7(Status is hidden, game info unavailable)`)}</p>`;
-            }
-        } else {
-            statusHtml += `<p class="mc-chat-line">${formatMinecraftString(`  §cOffline.`)}</p>`;
-        }
-        statusHtml += sendLine();
-        resultsDiv.innerHTML = statusHtml;
+    bridge.on('player-status-result', (result) => {
+        renderLines(document.getElementById('status-check-results'), result);
     });
 
-    ipcRenderer.on('proxy-status', (event, status) => {
+    bridge.on('proxy-status', (status) => {
         const toggleProxyBtn = document.getElementById('toggle-proxy-btn');
         if (status === 'running') {
             toggleProxyBtn.dataset.status = 'running';
@@ -387,55 +395,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    ipcRenderer.on('proxy-log', (event, log) => {
-        const logOutput = document.getElementById('log-output');
-        const logEntry = document.createElement('div');
-        logEntry.innerHTML = formatMinecraftString(log);
-        logOutput.appendChild(logEntry);
-        logOutput.scrollTop = logOutput.scrollHeight;
-    });
+    bridge.on('proxy-log', (line) => appendFormattedLine('log-output', line));
+    bridge.on('proxy-chat', (message) => appendFormattedLine('chat-output', message));
 
-    ipcRenderer.on('proxy-chat', (event, message) => {
-        const chatOutput = document.getElementById('chat-output');
-        const messageElement = document.createElement('div');
-        messageElement.innerHTML = formatMinecraftString(message); 
-        chatOutput.appendChild(messageElement);
-        chatOutput.scrollTop = chatOutput.scrollHeight;
-    });
-
-    ipcRenderer.on('gamemode-list-response', (event, gamemodes) => {
+    bridge.on('gamemode-list-response', (gamemodes) => {
         const selector = document.getElementById('stat-search-gamemode');
-        if (selector) {
-            selector.innerHTML = ''; 
-            gamemodes.forEach(mode => {
-                const option = document.createElement('option');
-                option.value = mode.value;
-                option.textContent = mode.text;
-                selector.appendChild(option);
-            });
-        }
+        if (!selector) return;
+        selector.replaceChildren();
+        gamemodes.forEach(mode => {
+            const option = document.createElement('option');
+            option.value = mode.value;
+            option.textContent = mode.text;
+            selector.appendChild(option);
+        });
     });
 
-    ipcRenderer.send('get-gamemode-list'); 
+    bridge.send('get-gamemode-list');
 
+    initializeAliasesPage();
     initializeSettingsPage();
 });
-
-function initializeSettingsPage() {
-    const checkForUpdatesBtn = document.getElementById('check-for-updates-btn');
-    const updateInfo = document.getElementById('update-info');
-
-    checkForUpdatesBtn.addEventListener('click', () => {
-        ipcRenderer.send('check-for-updates');
-    });
-
-    ipcRenderer.on('app-version', (event, version) => {
-        updateInfo.innerText = `Current Version: v${version}`;
-    });
-
-    ipcRenderer.on('update-status', (event, message) => {
-        updateInfo.innerText = message;
-    });
-
-    ipcRenderer.send('get-app-version');
-}

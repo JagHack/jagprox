@@ -1,14 +1,12 @@
 const formatter = require('../formatter.js');
 
-function extractTextFromComponent(component) {
-    if (typeof component === 'string') {
-        return component;
+// Display names arrive as JSON chat components; fall back to the raw string if not.
+function displayNameText(displayName) {
+    try {
+        return formatter.extractText(JSON.parse(displayName));
+    } catch (e) {
+        return displayName;
     }
-    let text = component.text || '';
-    if (component.extra) {
-        text += component.extra.map(extractTextFromComponent).join('');
-    }
-    return text;
 }
 
 class TabAlerter {
@@ -20,7 +18,7 @@ class TabAlerter {
     }
 
     reset() {
-        formatter.log('Tab Alerter reset.');
+        formatter.debug('Tab Alerter reset.');
         this.lobbyPlayers.clear();
         this.alertedThisSession.clear();
     }
@@ -42,7 +40,7 @@ class TabAlerter {
                 for (const player of data.data) {
                     this.lobbyPlayers.set(player.uuid, {
                         rawName: player.name,
-                        displayName: player.displayName ? extractTextFromComponent(JSON.parse(player.displayName)) : player.name
+                        displayName: player.displayName ? displayNameText(player.displayName) : player.name
                     });
                     this.checkForAlert(player.uuid);
                 }
@@ -51,12 +49,7 @@ class TabAlerter {
             case 'update_display_name':
                 for (const player of data.data) {
                     if (this.lobbyPlayers.has(player.uuid) && player.displayName) {
-                        const playerData = this.lobbyPlayers.get(player.uuid);
-                        try {
-                            playerData.displayName = extractTextFromComponent(JSON.parse(player.displayName));
-                        } catch(e) {
-                            playerData.displayName = player.displayName;
-                        }
+                        this.lobbyPlayers.get(player.uuid).displayName = displayNameText(player.displayName);
                         this.checkForAlert(player.uuid);
                     }
                 }
@@ -65,9 +58,8 @@ class TabAlerter {
             case 'remove_player':
                 for (const player of data.data) {
                     this.lobbyPlayers.delete(player.uuid);
-                    const alertedKey = Array.from(this.alertedThisSession).find(name => name.includes(player.uuid));
-                    if (alertedKey) {
-                        this.alertedThisSession.delete(alertedKey);
+                    for (const key of this.alertedThisSession) {
+                        if (key.endsWith(`@${player.uuid}`)) this.alertedThisSession.delete(key);
                     }
                 }
                 break;
@@ -75,25 +67,19 @@ class TabAlerter {
     }
 
     checkForAlert(uuid) {
-        if (!this.lobbyPlayers.has(uuid)) return;
+        const playerData = this.lobbyPlayers.get(uuid);
+        if (!playerData || !playerData.displayName) return;
 
-        const rawAlertList = this.proxy.config.tab_alerts;
-        const alertList = Array.isArray(rawAlertList) ? rawAlertList : [];
+        const alertList = Array.isArray(this.proxy.config.tab_alerts) ? this.proxy.config.tab_alerts : [];
         if (alertList.length === 0) return;
 
-        const playerData = this.lobbyPlayers.get(uuid);
-        const cleanDisplayName = playerData.displayName.replace(/§[0-9a-fk-or]/g, '');
-
+        const cleanDisplayName = formatter.stripColors(playerData.displayName);
         const alertKey = `${cleanDisplayName}@${uuid}`;
-        if (this.alertedThisSession.has(alertKey)) {
-            return;
-        }
+        if (this.alertedThisSession.has(alertKey)) return;
 
-        for (const targetName of alertList) {
-            if (cleanDisplayName.toLowerCase().includes(targetName.toLowerCase())) {
-                this.triggerAlert(cleanDisplayName, alertKey);
-                break;
-            }
+        const lowerName = cleanDisplayName.toLowerCase();
+        if (alertList.some(targetName => lowerName.includes(String(targetName).toLowerCase()))) {
+            this.triggerAlert(cleanDisplayName, alertKey);
         }
     }
 
@@ -102,18 +88,21 @@ class TabAlerter {
         this.proxy.proxyChat(`§dFound player §5${fullPlayerName}§d!`);
         this.alertedThisSession.add(alertKey);
 
-        this.playSoundEffect('entity.experience_orb.pickup');
-        setTimeout(() => this.playSoundEffect('entity.experience_orb.pickup'), 200);
-        setTimeout(() => this.playSoundEffect('entity.experience_orb.pickup'), 400);
-        setTimeout(() => this.playSoundEffect('entity.experience_orb.pickup'), 600);
+        for (const delay of [0, 200, 400, 600]) {
+            setTimeout(() => this.playSoundEffect('random.orb'), delay);
+        }
     }
 
+    // 1.8 sound names (e.g. "random.orb"); coordinates are fixed-point (x8), pitch 63 = 1.0.
     playSoundEffect(soundName) {
         if (!this.proxy.client) return;
         this.proxy.client.write('named_sound_effect', {
-            soundName: soundName, soundCategory: 0,
-            x: this.selfPosition.x * 8, y: this.selfPosition.y * 8, z: this.selfPosition.z * 8,
-            volume: 1.0, pitch: 63
+            soundName,
+            x: Math.round(this.selfPosition.x * 8),
+            y: Math.round(this.selfPosition.y * 8),
+            z: Math.round(this.selfPosition.z * 8),
+            volume: 1.0,
+            pitch: 63
         });
     }
 }

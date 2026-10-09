@@ -1,5 +1,24 @@
 const formatter = require('../formatter.js');
 
+// Hypixel Bed Wars team prefixes start with the team letter (after any § codes).
+const BED_COLORS = {
+    R: { code: '§c', int: 12 },
+    B: { code: '§9', int: 9 },
+    G: { code: '§a', int: 10 },
+    Y: { code: '§e', int: 14 },
+    A: { code: '§b', int: 11 },
+    W: { code: '§f', int: 15 },
+    P: { code: '§d', int: 13 },
+    S: { code: '§8', int: 8 },
+};
+const DEFAULT_BED_COLOR = { code: '§f', int: 15 };
+
+function bedColorFromPrefix(hypixelPrefix) {
+    if (!hypixelPrefix) return DEFAULT_BED_COLOR;
+    const letter = hypixelPrefix.replace(/^(§.)+/, '').charAt(0).toUpperCase();
+    return BED_COLORS[letter] || DEFAULT_BED_COLOR;
+}
+
 class TabManager {
     constructor(proxy) {
         this.proxy = proxy;
@@ -13,89 +32,73 @@ class TabManager {
     }
 
     reset() {
-        formatter.log('Player Tag Manager reset.');
+        formatter.debug('Player Tag Manager reset.');
+        this.playerTeamMap.clear();
+        this.teamColorMap.clear();
+        this.teamPrefixMap.clear();
+        this.teamSuffixMap.clear();
         this.teamOurPrefix.clear();
         this.teamOurSuffix.clear();
-        this.teamCounter = 0;
+        // teamCounter is deliberately never reset: the client may still hold our old
+        // jpN teams, and creating a team that already exists kicks a 1.8 client.
+    }
+
+    removeTeam(team) {
+        this.teamColorMap.delete(team);
+        this.teamPrefixMap.delete(team);
+        this.teamSuffixMap.delete(team);
+        this.teamOurPrefix.delete(team);
+        this.teamOurSuffix.delete(team);
+        for (const [player, playerTeam] of this.playerTeamMap) {
+            if (playerTeam === team) this.playerTeamMap.delete(player);
+        }
     }
 
     handlePacket(data, meta) {
-        if (meta.name === 'scoreboard_team') {
-            const mode = data.mode;
+        // Hypixel sends a respawn on every server switch; the new server has its own teams.
+        if (meta.name === 'login' || meta.name === 'respawn') {
+            this.reset();
+            return;
+        }
+        if (meta.name !== 'scoreboard_team') return;
 
-            if ((mode === 0 || mode === 3) && Array.isArray(data.players)) {
-                for (const p of data.players) {
-                    this.playerTeamMap.set(p.toLowerCase(), data.team);
-                }
-            }
-            if (mode === 4 && Array.isArray(data.players)) {
-                for (const p of data.players) {
-                    this.playerTeamMap.delete(p.toLowerCase());
-                }
-            }
+        const mode = data.mode;
 
-            if (mode === 0 || mode === 2) {
-                if (data.prefix !== undefined) this.teamPrefixMap.set(data.team, data.prefix);
-                if (data.suffix !== undefined) this.teamSuffixMap.set(data.team, data.suffix);
-                if (data.color  !== undefined) this.teamColorMap.set(data.team, data.color);
+        if (mode === 1) {
+            this.removeTeam(data.team);
+            return;
+        }
 
-                const ourPrefix = this.teamOurPrefix.get(data.team);
-                const ourSuffix = this.teamOurSuffix.get(data.team);
-
-                if (ourSuffix) {
-                    const base = this.teamSuffixMap.get(data.team) || '';
-                    data.suffix = (base + ourSuffix).substring(0, 16);
-                }
-
-                if (ourPrefix) {
-                    data.prefix = ourPrefix.substring(0, 16);
-                    const hypixelRawPrefix = this.teamPrefixMap.get(data.team) || '';
-                    data.color = this.getBedColorInt(hypixelRawPrefix);
-                }
+        if ((mode === 0 || mode === 3) && Array.isArray(data.players)) {
+            for (const p of data.players) {
+                this.playerTeamMap.set(p.toLowerCase(), data.team);
             }
         }
-    }
-
-    getPlayerNameByUUID(uuid) { return null; }
-
-    getBedColorFromPrefix(hypixelPrefix) {
-        if (!hypixelPrefix) return '\u00A7f';
-        let str = hypixelPrefix;
-        while (str.length >= 2 && str.charCodeAt(0) === 167) {
-            str = str.substring(2);
+        if (mode === 4 && Array.isArray(data.players)) {
+            for (const p of data.players) {
+                this.playerTeamMap.delete(p.toLowerCase());
+            }
         }
-        const letter = str.charAt(0).toUpperCase();
-        const map = {
-            'R': '\u00A7c',
-            'B': '\u00A79',
-            'G': '\u00A7a',
-            'Y': '\u00A7e',
-            'A': '\u00A7b',
-            'W': '\u00A7f',
-            'P': '\u00A7d',
-            'S': '\u00A78',
-        };
-        return map[letter] || '\u00A7f';
-    }
 
-    getBedColorInt(hypixelPrefix) {
-        if (!hypixelPrefix) return 15;
-        let str = hypixelPrefix;
-        while (str.length >= 2 && str.charCodeAt(0) === 167) {
-            str = str.substring(2);
+        if (mode === 0 || mode === 2) {
+            if (data.prefix !== undefined) this.teamPrefixMap.set(data.team, data.prefix);
+            if (data.suffix !== undefined) this.teamSuffixMap.set(data.team, data.suffix);
+            if (data.color  !== undefined) this.teamColorMap.set(data.team, data.color);
+
+            // Keep our stat tags when Hypixel updates a team we've already tagged.
+            const ourPrefix = this.teamOurPrefix.get(data.team);
+            const ourSuffix = this.teamOurSuffix.get(data.team);
+
+            if (ourSuffix) {
+                const base = this.teamSuffixMap.get(data.team) || '';
+                data.suffix = (base + ourSuffix).substring(0, 16);
+            }
+
+            if (ourPrefix) {
+                data.prefix = ourPrefix.substring(0, 16);
+                data.color = bedColorFromPrefix(this.teamPrefixMap.get(data.team)).int;
+            }
         }
-        const letter = str.charAt(0).toUpperCase();
-        const map = {
-            'R': 12,
-            'B': 9,
-            'G': 10,
-            'Y': 14,
-            'A': 11,
-            'W': 15,
-            'P': 13,
-            'S': 8,
-        };
-        return map[letter] ?? 15;
     }
 
     async updatePlayerTags(playerNames, gamemodeKey) {
@@ -114,28 +117,28 @@ class TabManager {
 
         try {
             const playerData = await this.proxy.hypixel.getTabDataForPlayer(name, gamemodeKey);
-            if (!playerData) return;
+            // The player may have disconnected while we were fetching.
+            const client = this.proxy.client;
+            if (!playerData || !client) return;
 
             const hypixelTeam = this.playerTeamMap.get(name.toLowerCase());
 
             if (hypixelTeam) {
                 let hypixelPrefix = this.teamPrefixMap.get(hypixelTeam) || '';
-                if (!hypixelPrefix || hypixelPrefix.trim().length === 0) {
+                if (!hypixelPrefix.trim()) {
                     await new Promise(r => setTimeout(r, 500));
                     hypixelPrefix = this.teamPrefixMap.get(hypixelTeam) || '';
                 }
-                
-                const bedColorInt = this.getBedColorInt(hypixelPrefix);
-                const bedColorCode = this.getBedColorFromPrefix(hypixelPrefix);
-                
-                const finalPrefix = (playerData.prefix + bedColorCode).substring(0, 16);
+
+                const bedColor = bedColorFromPrefix(hypixelPrefix);
+                const finalPrefix = (playerData.prefix + bedColor.code).substring(0, 16);
                 const baseSuffix = this.teamSuffixMap.get(hypixelTeam) || '';
                 const finalSuffix = (baseSuffix + playerData.suffix).substring(0, 16);
 
                 this.teamOurPrefix.set(hypixelTeam, finalPrefix);
                 this.teamOurSuffix.set(hypixelTeam, playerData.suffix);
 
-                this.proxy.client.write('scoreboard_team', {
+                client.write('scoreboard_team', {
                     team:              hypixelTeam,
                     mode:              2,
                     name:              hypixelTeam,
@@ -143,28 +146,27 @@ class TabManager {
                     suffix:            finalSuffix,
                     friendlyFire:      0,
                     nameTagVisibility: 'always',
-                    color:             bedColorInt,
+                    color:             bedColor.int,
                     players:           []
                 });
 
-                formatter.log(`Tagged ${name}: prefix="${finalPrefix}" suffix="${finalSuffix}" color=${bedColorInt}`);
+                formatter.debug(`Tagged ${name}: prefix="${finalPrefix}" suffix="${finalSuffix}" color=${bedColor.int}`);
             } else {
                 const teamName = `jp${this.teamCounter++}`;
-                const finalPrefix = (playerData.prefix + '\u00A7f').substring(0, 16);
+                const finalPrefix = (playerData.prefix + DEFAULT_BED_COLOR.code).substring(0, 16);
                 const finalSuffix = playerData.suffix.substring(0, 16);
 
                 this.teamOurPrefix.set(teamName, finalPrefix);
                 this.teamOurSuffix.set(teamName, playerData.suffix);
 
-                const bedColorInt = 15;
-                this.proxy.client.write('scoreboard_team', {
+                client.write('scoreboard_team', {
                     team: teamName, mode: 0, name: teamName,
-                    prefix: finalPrefix, 
+                    prefix: finalPrefix,
                     suffix: finalSuffix,
                     friendlyFire: 0, nameTagVisibility: 'always',
-                    color: bedColorInt, players: []
+                    color: DEFAULT_BED_COLOR.int, players: []
                 });
-                this.proxy.client.write('scoreboard_team', { team: teamName, mode: 3, players: [name] });
+                client.write('scoreboard_team', { team: teamName, mode: 3, players: [name] });
             }
         } catch (e) {
             formatter.log(`Error in createOrUpdatePlayerTag for "${name}": ${e.message}`);

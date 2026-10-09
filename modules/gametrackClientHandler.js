@@ -1,12 +1,14 @@
 const formatter = require('../formatter.js');
+const { detectGameResult } = require('../utils/chatParsers.js');
 
 class GametrackClientHandler {
     constructor(proxy, mc_uuid, localPlayerName) {
         this.proxy = proxy;
-        this.gametrackApiHandler = proxy.gametrackApiHandler; 
-        
+        this.gametrackApiHandler = proxy.gametrackApiHandler;
+
         this.mc_uuid = mc_uuid;
         this.localPlayerName = localPlayerName;
+        this.currentGame = null;
 
         this.lastEventTimestamp = 0;
         this.debouncePeriod = 5000;
@@ -17,82 +19,41 @@ class GametrackClientHandler {
             this.currentGame = null;
             return;
         }
-        
-        console.log(`[GameTrack] Game changed to ${newGameKey}. Starting session.`);
+
+        formatter.log(`[GameTrack] Game changed to ${newGameKey}. Starting session.`);
         this.currentGame = newGameKey;
-        
+
         try {
             await this.gametrackApiHandler.sendStartEvent({
                 mc_uuid: this.mc_uuid,
                 mode: this.currentGame
             });
         } catch (e) {
-            console.error(`[GameTrack] Failed to start session:`, e);
+            formatter.log(`[GameTrack] Failed to start session: ${e.message}`);
             this.proxy.proxyChat(`§c[GameTrack] §8Error starting session: ${e.message}`);
         }
     }
 
     async parseChatMessage(chatObject) {
-        const message = formatter.extractText(chatObject);
-        const upperMessage = message.replace(/§[0-9a-fk-or]/g, '').toUpperCase().trim();
-        
-        if (!upperMessage.includes('WINNER!')) {
-            return;
-        }
+        if (!this.currentGame || !this.mc_uuid || !this.gametrackApiHandler) return;
+        if (Date.now() - this.lastEventTimestamp < this.debouncePeriod) return;
 
-        if (message.includes(':')) {
-            return;
-        }
+        const result = detectGameResult(formatter.extractText(chatObject));
+        if (!result) return;
 
-        if (Date.now() - this.lastEventTimestamp < this.debouncePeriod) {
-            return;
-        }
-        
-        if (!this.mc_uuid || !this.gametrackApiHandler) {
-            console.error('[GameTrack] Missing UUID or API Handler. Cannot track game.');
-            return;
-        }
-        
-        if (!this.currentGame || this.currentGame === 'limbo') {
-            return;
-        }
-        
-        if (upperMessage.includes('LOBBY') || upperMessage.includes('REPLAY') || upperMessage.includes('SPECTATOR')) {
-            return;
-        }
+        this.lastEventTimestamp = Date.now();
+        formatter.log(`[GameTrack] Detected ${result} in ${this.currentGame}.`);
 
-        let result = null;
-        
-        const parts = upperMessage.split('WINNER!');
-        const before = parts[0].trim();
-        const after = parts.length > 1 ? parts[1].trim() : '';
-
-        if (after.length > 0) {
-            result = 'win';
-        } else if (before.length > 0) {
-            const wordsBefore = before.split(' ').filter(w => w.length > 0);
-            if (wordsBefore.length >= 2) {
-                result = 'loss';
-            } else if (wordsBefore.length === 1) {
-                result = 'win';
-            }
-        }
-        
-        if (result) {
-            this.lastEventTimestamp = Date.now();
-            console.log(`[GameTrack] Detected ${result} in ${this.currentGame} for nicked player.`);
-            
-            try {
-                await this.gametrackApiHandler.sendEvent({
-                    mc_uuid: this.mc_uuid,
-                    mode: this.currentGame,
-                    result: result
-                });
-                this.proxy.proxyChat(`§d[GameTrack] §8Recorded game result: §5${result.toUpperCase()}§8.`);
-            } catch (e) {
-                this.proxy.proxyChat(`§c[GameTrack] §8Error recording event: ${e.message}`);
-                console.error(`[GameTrack] Failed to send gametrack event:`, e);
-            }
+        try {
+            await this.gametrackApiHandler.sendEvent({
+                mc_uuid: this.mc_uuid,
+                mode: this.currentGame,
+                result: result
+            });
+            this.proxy.proxyChat(`§d[GameTrack] §8Recorded game result: §5${result.toUpperCase()}§8.`);
+        } catch (e) {
+            this.proxy.proxyChat(`§c[GameTrack] §8Error recording event: ${e.message}`);
+            formatter.log(`[GameTrack] Failed to send gametrack event: ${e.message}`);
         }
     }
 }

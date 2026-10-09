@@ -1,27 +1,56 @@
-const fetch = require('node-fetch');
-const Jimp = require('jimp');
+const { PNG } = require('pngjs');
 const formatter = require("../formatter.js");
-const { findClosestMinecraftColor, gameModeMap } = require("../utils/constants");
+const ApiHandler = require('../utils/apiHandler.js');
+const { TTLCache, mapLimit } = require('../utils/cache.js');
+const { findClosestMinecraftColor, gameModeMap } = require("../utils/constants.js");
+const { parsePartyLine } = require('../utils/chatParsers.js');
+const statFormat = require('../utils/statFormat.js');
+
+const HYPIXEL_API = 'https://api.hypixel.net/v2';
+const API_KEY_TTL_MS = 60 * 1000;
+const NOTICE_COOLDOWN_MS = 30 * 1000;
+const LOOKUP_CONCURRENCY = 4;
+const DIVIDER = '§5§m----------------------------------------------------';
+
+async function fetchBuffer(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+    return Buffer.from(await response.arrayBuffer());
+}
+
+function pixelAt(png, x, y) {
+    const idx = (png.width * y + x) << 2;
+    return { r: png.data[idx], g: png.data[idx + 1], b: png.data[idx + 2], a: png.data[idx + 3] };
+}
 
 class HypixelHandler {
     constructor(proxy) {
         this.proxy = proxy;
+        this.apiHandler = this.proxy.env.jwt ? new ApiHandler({ jwt: this.proxy.env.jwt }) : null;
+
         this.apiKeyCache = null;
-        this.apiKeyCacheTime = null;
-        if (this.proxy.env.jwt) {
-            const ApiHandler = require('../utils/apiHandler.js');
-            this.apiHandler = new ApiHandler({ jwt: this.proxy.env.jwt });
-        } else {
-            this.apiHandler = null;
-        }
-        this.avatarCache = new Map();
-        this.uuidCache = new Map();
+        this.apiKeyCacheTime = 0;
+        this.apiKeyRequest = null;
+        this.lastNotice = new Map();
+
+        // Caches survive game switches; entries expire on their own.
+        this.uuidCache = new TTLCache({ ttl: 60 * 60 * 1000, maxSize: 2000 });
+        this.profileCache = new TTLCache({ ttl: 60 * 60 * 1000, maxSize: 2000 });
+        this.statsCache = new TTLCache({ ttl: 5 * 60 * 1000, maxSize: 500 });
+        this.guildCache = new TTLCache({ ttl: 10 * 60 * 1000, maxSize: 500 });
+        this.avatarCache = new TTLCache({ ttl: 60 * 60 * 1000, maxSize: 200 });
     }
 
     reset() {
-        this.avatarCache.clear();
-        this.uuidCache.clear();
-        formatter.log('HypixelHandler avatar cache reset.');
+        // Nothing session-specific to drop: caches are keyed by player and expire by TTL.
+    }
+
+    // Sends a chat notice at most once per cooldown window per key (avoids spam during bulk lookups).
+    notifyOnce(key, message) {
+        const now = Date.now();
+        if (now - (this.lastNotice.get(key) || 0) < NOTICE_COOLDOWN_MS) return;
+        this.lastNotice.set(key, now);
+        this.proxy.proxyChat(message);
     }
 
     cleanRankPrefix(username) {
@@ -32,50 +61,162 @@ class HypixelHandler {
         if (this.proxy.env.apiKey) {
             return this.proxy.env.apiKey;
         }
-
-        if (this.apiKeyCache && this.apiKeyCacheTime && (Date.now() - this.apiKeyCacheTime < 60000)) {
+        if (this.apiKeyCache && Date.now() - this.apiKeyCacheTime < API_KEY_TTL_MS) {
             return this.apiKeyCache;
         }
-
-        if (this.proxy.env.jwt) {
-            if (!this.apiHandler) {
-                const ApiHandler = require('../utils/apiHandler.js');
-                this.apiHandler = new ApiHandler({ jwt: this.proxy.env.jwt });
-            }
-            try {
-                const apiKey = await this.apiHandler.getApiKey();
-                if (apiKey) {
-                    this.apiKeyCache = apiKey;
-                    this.apiKeyCacheTime = Date.now();
-                    return apiKey;
-                } else {
-                    formatter.log('Could not retrieve Hypixel API key from backend. It might not be set.');
+        if (!this.apiHandler) {
+            formatter.log('API Key is not configured in any context.');
+            return null;
+        }
+        // Share one backend request between all concurrent callers.
+        if (!this.apiKeyRequest) {
+            this.apiKeyRequest = this.apiHandler.getApiKey()
+                .then((apiKey) => {
+                    if (apiKey) {
+                        this.apiKeyCache = apiKey;
+                        this.apiKeyCacheTime = Date.now();
+                        return apiKey;
+                    }
+                    this.notifyOnce('api-key', '§cNo Hypixel API key is set for your account. Add one in the launcher settings.');
                     return null;
-                }
-            } catch (e) {
-                this.proxy.proxyChat(`§cError fetching API Key: ${e.message}`);
+                })
+                .catch((e) => {
+                    this.notifyOnce('api-key', `§cError fetching API Key: ${e.message}`);
+                    return null;
+                })
+                .finally(() => {
+                    this.apiKeyRequest = null;
+                });
+        }
+        return this.apiKeyRequest;
+    }
+
+    // GET a Hypixel v2 endpoint. Returns the parsed body, or null on any failure.
+    async hypixelGet(endpoint, params = {}) {
+        const apiKey = await this.getApiKey();
+        if (!apiKey) return null;
+        const url = new URL(`${HYPIXEL_API}/${endpoint}`);
+        for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+        try {
+            const response = await fetch(url, { headers: { 'API-Key': apiKey } });
+            if (response.status === 429) {
+                this.notifyOnce('hypixel-429', '§cHypixel API rate limit reached. Try again in a minute.');
                 return null;
             }
+            if (!response.ok) {
+                formatter.log(`Hypixel /${endpoint} returned ${response.status}`);
+                return null;
+            }
+            const data = await response.json();
+            return data.success ? data : null;
+        } catch (err) {
+            formatter.log(`Hypixel /${endpoint} error: ${err.message}`);
+            return null;
         }
-        
-        formatter.log('API Key is not configured in any context.');
-        return null;
     }
 
     resolveNickname(name) {
-        const nicknames = this.proxy.config.nicknames || {};
+        const nicknames = (this.proxy.config && this.proxy.config.nicknames) || {};
         const lowerName = name.toLowerCase();
         for (const realName in nicknames) {
-            if (nicknames[realName].toLowerCase() === lowerName) {
+            if (String(nicknames[realName]).toLowerCase() === lowerName) {
                 return realName;
             }
         }
         const realName = Object.keys(nicknames).find(key => key.toLowerCase() === lowerName);
-        if (realName) {
-            return realName;
-        }
+        return realName || name;
+    }
 
-        return name;
+    async getMojangUUID(username) {
+        if (!username) return null;
+        return this.uuidCache.getOrLoad(username.toLowerCase(), async () => {
+            try {
+                const response = await fetch(`https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(username)}`);
+                if (!response.ok) {
+                    if (response.status === 429) this.notifyOnce('mojang-429', '§cMojang API rate limit reached.');
+                    return null;
+                }
+                const data = await response.json();
+                return { uuid: data.id, username: data.name };
+            } catch (err) {
+                formatter.log(`Mojang API Error: ${err.message}`);
+                return null;
+            }
+        });
+    }
+
+    // Mojang session profile: current name + skin textures. Cached for an hour.
+    async getSessionProfile(uuid) {
+        return this.profileCache.getOrLoad(uuid, async () => {
+            try {
+                const response = await fetch(`https://sessionserver.mojang.com/session/minecraft/profile/${encodeURIComponent(uuid)}`);
+                if (!response.ok) return null;
+                return await response.json();
+            } catch (err) {
+                formatter.log(`Session profile error for ${uuid}: ${err.message}`);
+                return null;
+            }
+        });
+    }
+
+    async getUsernameFromUUID(uuid) {
+        const profile = await this.getSessionProfile(uuid);
+        return profile ? profile.name : null;
+    }
+
+    async getSkinUrl(uuid) {
+        const profile = await this.getSessionProfile(uuid);
+        const texturesProp = profile && (profile.properties || []).find(p => p.name === 'textures');
+        if (!texturesProp) return null;
+        try {
+            const textures = JSON.parse(Buffer.from(texturesProp.value, 'base64').toString('utf8'));
+            return textures.textures?.SKIN?.url || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // Player data, cached for 5 minutes. Concurrent lookups of the same player share one request.
+    async getStats(uuid) {
+        if (!uuid) return null;
+        return this.statsCache.getOrLoad(uuid, async () => {
+            const data = await this.hypixelGet('player', { uuid });
+            if (!data || !data.player) return null;
+            return { player: data.player, rank: formatter.getRank(data.player) };
+        });
+    }
+
+    async getGuild(uuid) {
+        return this.guildCache.getOrLoad(uuid, async () => {
+            const data = await this.hypixelGet('guild', { player: uuid });
+            if (!data) return null;
+            // Cache "no guild" as an empty string so it isn't re-fetched.
+            if (!data.guild) return '';
+            return data.guild.tag ? `[${data.guild.tag}]` : `[${data.guild.name}]`;
+        });
+    }
+
+    async getHypixelStatus(uuid) {
+        const [statusData, stats] = await Promise.all([
+            this.hypixelGet('status', { uuid }),
+            this.getStats(uuid),
+        ]);
+        if (!stats) return null;
+        const { player, rank } = stats;
+        if (statusData && statusData.session && statusData.session.online) {
+            const { gameType, mode, map } = statusData.session;
+            return { online: true, hidden: false, gameType, mode, map, rank, player };
+        }
+        if ((player.lastLogin || 0) > (player.lastLogout || 0)) {
+            return { online: true, hidden: true, rank, player };
+        }
+        return { online: false, rank, player };
+    }
+
+    // Lightweight status lookup (one request) for periodic polling.
+    async getSessionStatus(uuid) {
+        const data = await this.hypixelGet('status', { uuid });
+        return data ? data.session : null;
     }
 
     async getStatusForAPI(username) {
@@ -84,7 +225,6 @@ class HypixelHandler {
             if (!mojangData) return { error: `Player '${username}' not found.` };
             const status = await this.getHypixelStatus(mojangData.uuid);
             if (!status) return { error: `Could not retrieve status for '${mojangData.username}'.` };
-
             return { username: mojangData.username, uuid: mojangData.uuid, ...status };
         } catch (err) {
             formatter.log(`API Status Check error: ${err.message}`);
@@ -93,7 +233,7 @@ class HypixelHandler {
     }
 
     async getStatsForAPI(gamemode, username) {
-        const gameInfo = gameModeMap[gamemode.toLowerCase()];
+        const gameInfo = gameModeMap[String(gamemode).toLowerCase()];
         if (!gameInfo) {
             return { error: `Unknown game mode: ${gamemode}` };
         }
@@ -101,15 +241,10 @@ class HypixelHandler {
             const mojangData = await this.getMojangUUID(username);
             if (!mojangData) return { error: `Player '${username}' not found.` };
 
-            const stats = await this.getStats(mojangData.uuid);
+            const [stats, guild] = await Promise.all([this.getStats(mojangData.uuid), this.getGuild(mojangData.uuid)]);
             if (!stats) return { error: `Could not retrieve player data for '${mojangData.username}'.` };
 
-            return {
-                username: mojangData.username,
-                uuid: mojangData.uuid,
-                game: gameInfo,
-                stats: stats
-            };
+            return { username: mojangData.username, uuid: mojangData.uuid, game: gameInfo, stats, guild };
         } catch (err) {
             formatter.log(`API Statcheck error: ${err.message}`);
             return { error: 'An internal error occurred.' };
@@ -117,66 +252,56 @@ class HypixelHandler {
     }
 
     handlePartyStatCheck(gamemode) {
+        const target = this.proxy.target;
+        if (!target) return;
         this.proxy.proxyChat("§eRequesting party member list...");
+
         const partyMembers = new Set();
         let capturing = false;
+        let notInParty = false;
+        let finished = false;
+
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timeout);
+            target.removeListener('packet', partyListener);
+            if (partyMembers.size > 0) {
+                this.processPartyMembers(Array.from(partyMembers), gamemode).catch((e) =>
+                    formatter.log(`Party stat check failed: ${e.message}`));
+            } else if (!notInParty) {
+                this.proxy.proxyChat("§cCould not find any party members.");
+            }
+        };
 
         const partyListener = (data, meta) => {
             if (meta.name !== 'chat') return;
-
-            let chatMessage = '';
-            try {
-                const chatData = JSON.parse(data.message);
-                chatMessage = formatter.extractText(chatData);
-            } catch(e) { 
-                this.proxy.target.removeListener('packet', partyListener);
-                return; 
-            }
-
-            const cleanMessage = chatMessage.replace(/§[0-9a-fk-or]/g, '').trim();
+            // Non-JSON chat is just unrelated noise; keep listening.
+            const cleanMessage = formatter.chatToCleanText(data.message);
+            if (cleanMessage === null) return;
 
             if (cleanMessage.includes('You are not currently in a party.')) {
+                notInParty = true;
                 this.proxy.proxyChat("§cYou are not in a party.");
-                this.proxy.target.removeListener('packet', partyListener);
+                finish();
                 return;
             }
 
             if (cleanMessage.startsWith('Party Members (') || cleanMessage.startsWith('Party Leader:')) {
                 capturing = true;
             }
-            
-            if (capturing && (cleanMessage.startsWith('Party Leader:') || cleanMessage.startsWith('Party Moderators:') || cleanMessage.startsWith('Party Members:'))) {
-                 const playersString = cleanMessage.split(':')[1];
-                 if (playersString) {
-                     const players = playersString.split(',').map(p => {
-                         const cleaned = p.replace('●', '').trim();
-                         const parts = cleaned.split(' ');
-                         return parts[parts.length - 1];
-                     });
-                     players.forEach(p => p && partyMembers.add(p));
-                 }
-            }
 
-            if (capturing && cleanMessage.startsWith('--------------------------------')) {
-                if (partyMembers.size > 0) {
-                    capturing = false;
-                    this.proxy.target.removeListener('packet', partyListener);
-                    this.processPartyMembers(Array.from(partyMembers), gamemode);
-                }
+            if (capturing) {
+                const names = parsePartyLine(cleanMessage);
+                if (names) names.forEach(name => partyMembers.add(name));
+                if (cleanMessage.startsWith('-----') && partyMembers.size > 0) finish();
             }
         };
 
-        this.proxy.target.on('packet', partyListener);
-        this.proxy.target.write('chat', { message: '/party list' });
-
-        setTimeout(() => {
-            if (capturing) {
-                this.proxy.target.removeListener('packet', partyListener);
-                if (partyMembers.size > 0) {
-                    this.processPartyMembers(Array.from(partyMembers), gamemode);
-                }
-            }
-        }, 5000);
+        // Always unsubscribe, even if Hypixel never answers.
+        const timeout = setTimeout(finish, 5000);
+        target.on('packet', partyListener);
+        target.write('chat', { message: '/party list' });
     }
 
     async processPartyMembers(partyMembers, gamemode) {
@@ -185,81 +310,43 @@ class HypixelHandler {
             return;
         }
 
-        let gameInfo = gameModeMap[gamemode] || gameModeMap[this.proxy.queueStats.currentGameKey] || gameModeMap.bedwars;
-
+        const gameInfo = gameModeMap[gamemode] || gameModeMap[this.proxy.queueStats?.currentGameKey] || gameModeMap.bedwars;
         this.proxy.proxyChat(`§dFound §f${partyMembers.length} §dmembers. Fetching stats for §5${gameInfo.displayName}§d...`);
 
-        const statBlocks = [];
-        for (const username of partyMembers) {
-            const block = await this.getAndFormatPartyPlayerStats(username.replace(/\[.*?\]\s/g, ''), gameInfo);
-            if (block) {
-                statBlocks.push(block);
-            }
-            await new Promise(resolve => setTimeout(resolve, 300));
-        }
+        const statBlocks = (await mapLimit(partyMembers, LOOKUP_CONCURRENCY, (name) =>
+            this.getAndFormatPartyPlayerStats(name, gameInfo))).filter(Boolean);
 
-        let finalMessage = `§5§m----------------------------------------------------\n`;
+        let finalMessage = `${DIVIDER}\n`;
         finalMessage += `  §5§lParty Stats for §d${gameInfo.displayName}\n \n`;
-        finalMessage += statBlocks.filter(block => block).join('\n \n');
-        finalMessage += `\n§5§m----------------------------------------------------`;
+        finalMessage += statBlocks.join('\n \n');
+        finalMessage += `\n${DIVIDER}`;
         this.proxy.proxyChat(finalMessage);
     }
 
     async getAndFormatPartyPlayerStats(username, gameInfo) {
         try {
-            const cleanUsername = username.replace(/§[0-9a-fk-or]/g, '').replace(/\[.*?\]\s/g, '');
+            const cleanUsername = username.replace(/§./g, '').replace(/\[.*?\]\s/g, '').trim();
             if (!cleanUsername) return null;
 
             const realUsername = this.resolveNickname(cleanUsername);
-
             const mojangData = await this.getMojangUUID(realUsername);
             if (!mojangData) return `  §c§o'${cleanUsername}' not found.`;
-            
+
             const stats = await this.getStats(mojangData.uuid);
             if (!stats) {
                 return `  §7${mojangData.username} §7- No stats found.`;
             }
 
-            const rank = formatter.formatRank(stats.rank);
-
-            if (!stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
-                return `  ${rank} ${mojangData.username} §7- No stats found.`;
+            const rank = formatter.formatRank(stats.player);
+            const nameColor = formatter.getPlayerNameColor(stats.player);
+            const s = statFormat.getModeStats(stats.player, gameInfo);
+            let header = `  ${rank} ${nameColor}${mojangData.username}`;
+            if (!s.hasStats) {
+                return `${header} §7- No stats found.`;
             }
-            
-            const p = stats.player;
-            const d = p.stats[gameInfo.apiName] || {};
-            const a = p.achievements || {};
+            if (s.levelText) header += ` §8[§d${s.levelText}§8]`;
 
-            let statLines = [];
-            let header = `  ${rank} ${mojangData.username}`;
-
-            switch (gameInfo.apiName) {
-                case "Bedwars":
-                    header += ` §8[§d${a.bedwars_level || 0}✫§8]`;
-                    statLines.push(`    §dFKDR §8» §f${((d.final_kills_bedwars || 0) / (d.final_deaths_bedwars || 1)).toFixed(2)} §8| §dWLR §8» §f${((d.wins_bedwars || 0) / (d.losses_bedwars || 1)).toFixed(2)}`);
-                    break;
-                case "SkyWars":
-                    header += ` §8[§d${p.stats.SkyWars.levelFormatted || '0✫'}§8]`;
-                    statLines.push(`    §dKDR §8» §f${((d.kills || 0) / (d.deaths || 1)).toFixed(2)} §8| §dWLR §8» §f${((d.wins || 0) / (d.losses || 1)).toFixed(2)}`);
-                    break;
-                case "Walls3":
-                    statLines.push(`    §dWins §8» §f${(d.wins || 0).toLocaleString()} §8| §dFKDR §8» §f${((d.final_kills || 0) / (d.final_deaths || 1)).toFixed(2)}`);
-                    break;
-                case "Duels":
-                     const wins = d.wins || 0; const losses = d.losses || 1;
-                     const kills = d.kills || 0; const deaths = d.deaths || 1;
-                     statLines.push(`    §dWLR §8» §f${(wins/losses).toFixed(2)} §8| §dKDR §8» §f${(kills/deaths).toFixed(2)}`);
-                     break;
-                case "UHC":
-                    header += ` §8[§d${(a.uhc_champion || 0)}✫§8]`;
-                    statLines.push(`    §dWins §8» §f${(d.wins || 0).toLocaleString()} §8| §dKDR §8» §f${((d.kills || 0) / (d.deaths || 1)).toFixed(2)}`);
-                    break;
-                default:
-                    statLines.push(`    §dWins §8» §f${(d.wins || 'N/A').toLocaleString()} §8| §dKills §8» §f${(d.kills || 'N/A').toLocaleString()}`);
-            }
-            
-            return `${header}\n${statLines.join('\n')}`;
-
+            return `${header}\n    ${statFormat.formatCompactLine(s, gameInfo.apiName)}`;
         } catch (err) {
             formatter.log(`Party stat check error for ${username}: ${err.message}`);
             return `  §cError fetching stats for ${username}.`;
@@ -271,100 +358,32 @@ class HypixelHandler {
         return this.statcheck(gamemode, username);
     }
 
-    async getLeaderboard(game, type) {
-        const apiKey = await this.getApiKey();
-        if (!apiKey) return { error: "API Key not configured." };
+    // `type` is "<Prefix> <Title>", e.g. "Monthly Wins".
+    async getLeaderboard(game, type, limit = 10) {
+        const [prefix, ...titleWords] = String(type).split(' ');
+        const title = titleWords.join(' ');
+        if (!prefix || !title) return { error: `Invalid leaderboard type '${type}'.` };
 
-        try {
-            const response = await fetch(`https://api.hypixel.net/v2/leaderboards?key=${apiKey}`);
-            if (!response.ok) {
-                return { error: `Failed to fetch leaderboards: ${response.statusText}` };
-            }
-            const data = await response.json();
+        const data = await this.hypixelGet('leaderboards');
+        if (!data) return { error: 'Failed to fetch leaderboards from Hypixel.' };
 
-            if (!data.success) {
-                return { error: `Hypixel API Error: ${data.cause || 'Unknown error'}` };
-            }
-
-            const gameLeaderboards = data.leaderboards[game.toUpperCase()];
-            if (!gameLeaderboards) {
-                return { error: `No leaderboards found for game: ${game}` };
-            }
-
-            const targetLeaderboard = gameLeaderboards.find(lb => 
-                lb.prefix && lb.prefix.toLowerCase() === type.split(' ')[0].toLowerCase() && 
-                lb.title && lb.title.toLowerCase() === type.split(' ')[1].toLowerCase()
-            );
-
-            if (!targetLeaderboard) {
-                return { error: `No '${type}' leaderboard found for ${game}.` };
-            }
-
-            const leaders = [];
-            for (const uuid of targetLeaderboard.leaders) {
-                const username = await this.getUsernameFromUUID(uuid);
-                if (username) {
-                    leaders.push(username);
-                } else {
-                    leaders.push(uuid);
-                }
-            }
-            return { success: true, title: `${targetLeaderboard.prefix} ${targetLeaderboard.title} for ${game}`, leaders: leaders };
-
-        } catch (err) {
-            formatter.log(`getLeaderboard Error: ${err.message}`);
-            return { error: 'An internal error occurred while fetching leaderboards.' };
+        const gameLeaderboards = data.leaderboards && data.leaderboards[game.toUpperCase()];
+        if (!gameLeaderboards) {
+            return { error: `No leaderboards found for game: ${game}` };
         }
-    }
 
-    async getUsernameFromUUID(uuid) {
-        const apiKey = await this.getApiKey();
-        if (!apiKey) return null;
-        try {
-            const response = await fetch(`https://api.hypixel.net/v2/player?key=${apiKey}&uuid=${uuid}`);
-            if (!response.ok) return null;
-            const data = await response.json();
-            if (!data.success || !data.player) return null;
-            return data.player.displayname;
-        } catch (err) {
-            formatter.log(`getUsernameFromUUID Error: ${err.message}`);
-            return null;
+        const targetLeaderboard = gameLeaderboards.find(lb =>
+            lb.prefix && lb.prefix.toLowerCase() === prefix.toLowerCase() &&
+            lb.title && lb.title.toLowerCase() === title.toLowerCase()
+        );
+        if (!targetLeaderboard) {
+            return { error: `No '${type}' leaderboard found for ${game}.` };
         }
-    }
 
-    async getMojangUUID(username) {
-        if (!username) return null;
-        const lowerName = username.toLowerCase();
-        if (this.uuidCache.has(lowerName)) return { uuid: this.uuidCache.get(lowerName), username };
-
-        try {
-            const response = await fetch(`https://api.mojang.com/users/profiles/minecraft/${username}`);
-            if (!response.ok) {
-                if (response.status === 429) this.proxy.proxyChat("§cMojang API Rate Limit.");
-                return null;
-            }
-            const data = await response.json();
-            this.uuidCache.set(lowerName, data.id);
-            return { uuid: data.id, username: data.name };
-        } catch (err) {
-            formatter.log(`Mojang API Error: ${err.message}`);
-            return null;
-        }
-    }
-
-    async getGuild(uuid) {
-        const apiKey = await this.getApiKey();
-        if (!apiKey) return null;
-        try {
-            const response = await fetch(`https://api.hypixel.net/v2/guild?key=${apiKey}&player=${uuid}`);
-            if (!response.ok) return null;
-            const data = await response.json();
-            if (!data.guild) return null;
-            return data.guild.tag ? `[${data.guild.tag}]` : `[${data.guild.name}]`;
-        } catch (err) {
-            formatter.log(`getGuild Error: ${err.message}`);
-            return null;
-        }
+        const topUuids = targetLeaderboard.leaders.slice(0, limit);
+        const leaders = await mapLimit(topUuids, LOOKUP_CONCURRENCY, async (uuid) =>
+            (await this.getUsernameFromUUID(uuid)) || uuid);
+        return { success: true, title: `${targetLeaderboard.prefix} ${targetLeaderboard.title} for ${game}`, leaders };
     }
 
     async getPlayerStatus(username) {
@@ -374,10 +393,11 @@ class HypixelHandler {
             if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${username}' not found.`);
             const status = await this.getHypixelStatus(mojangData.uuid);
             if (!status) return this.proxy.proxyChat(`§cCould not retrieve status for '${mojangData.username}'.`);
+
+            const nameLine = `${formatter.formatRank(status.player)} ${formatter.getPlayerNameColor(status.player)}${mojangData.username}`;
             this.proxy.proxyChat("§5§m----------------------------------------");
             if (status.online) {
-                const nameColor = formatter.getPlayerNameColor(status.player);
-                this.proxy.proxyChat(`${formatter.formatRank(status.player)} ${nameColor}${mojangData.username} §dOnline`);
+                this.proxy.proxyChat(`${nameLine} §dOnline`);
                 if (status.hidden) {
                     this.proxy.proxyChat(`§8(Status is hidden, game info unavailable)`);
                 } else {
@@ -386,8 +406,7 @@ class HypixelHandler {
                     if (status.map) this.proxy.proxyChat(`§dMap §8» §f${status.map}`);
                 }
             } else {
-                const nameColor = formatter.getPlayerNameColor(status.player);
-                this.proxy.proxyChat(`${formatter.formatRank(status.player)} ${nameColor}${mojangData.username} §8Offline`);
+                this.proxy.proxyChat(`${nameLine} §8Offline`);
             }
             this.proxy.proxyChat("§5§m----------------------------------------");
         } catch (err) {
@@ -396,286 +415,113 @@ class HypixelHandler {
         }
     }
 
-    async getHypixelStatus(uuid) {
-        const apiKey = await this.getApiKey();
-        if (!apiKey) return null;
-        try {
-            const [statusResponse, playerResponse] = await Promise.all([
-                fetch(`https://api.hypixel.net/v2/status?key=${apiKey}&uuid=${uuid}`),
-                fetch(`https://api.hypixel.net/v2/player?key=${apiKey}&uuid=${uuid}`)
-            ]);
-            const statusData = await statusResponse.json();
-            const playerData = await playerResponse.json();
-            if (!playerData.success || !playerData.player) return null;
-            const player = playerData.player;
-            const rank = (player.monthlyPackageRank && player.monthlyPackageRank === "SUPERSTAR") ? "MVP_PLUS_PLUS" : (player.newPackageRank || player.rank || "NONE");
-            if (statusData.success && statusData.session.online) {
-                return { online: true, hidden: false, gameType: statusData.session.gameType, mode: statusData.session.mode, map: statusData.session.map, rank, player };
-            }
-            if ((player.lastLogin || 0) > (player.lastLogout || 0)) {
-                return { online: true, hidden: true, rank, player };
-            }
-            return { online: false, rank, player };
-        } catch (err) {
-            formatter.log(`getHypixelStatus Error: ${err.message}`);
-            return null;
-        }
-    }
-
+    // Prints a full stat breakdown. Returns { mojangData, stats, gameInfo } on success so
+    // callers can reuse the fetched data, or null.
     async statcheck(gamemode, username) {
         if (!gamemode || !username) {
             this.proxy.proxyChat("§cUsage: /sc <gamemode> <username>");
-            return;
+            return null;
         }
 
         const gameInfo = gameModeMap[gamemode.toLowerCase()];
         if (!gameInfo) {
-            return this.proxy.proxyChat(`§cUnknown game mode: ${gamemode}`);
+            this.proxy.proxyChat(`§cUnknown game mode: ${gamemode}`);
+            return null;
         }
 
         try {
             const cleanUsername = this.cleanRankPrefix(username);
             const resolvedName = this.resolveNickname(cleanUsername);
             const mojangData = await this.getMojangUUID(resolvedName);
-            if (!mojangData) return this.proxy.proxyChat(`§cPlayer '${resolvedName}' not found.`);
+            if (!mojangData) {
+                this.proxy.proxyChat(`§cPlayer '${resolvedName}' not found.`);
+                return null;
+            }
             const stats = await this.getStats(mojangData.uuid);
             if (!stats) {
-                return this.proxy.proxyChat(`§cCould not retrieve data for '${mojangData.username}'.`);
+                this.proxy.proxyChat(`§cCould not retrieve data for '${mojangData.username}'.`);
+                return null;
             }
             if (!stats.player.stats || !stats.player.stats[gameInfo.apiName]) {
-                return this.proxy.proxyChat(`§cNo ${gameInfo.displayName} stats found for '${mojangData.username}'.`);
+                this.proxy.proxyChat(`§cNo ${gameInfo.displayName} stats found for '${mojangData.username}'.`);
+                return null;
             }
-            this.displayFormattedStats(mojangData.username, mojangData.uuid, stats, gameInfo);
+            await this.displayFormattedStats(mojangData.username, mojangData.uuid, stats, gameInfo);
+            return { mojangData, stats, gameInfo };
         } catch (err) {
             formatter.log(`Statcheck error: ${err.message}`);
             this.proxy.proxyChat(`§cAn error occurred.`);
+            return null;
         }
     }
 
     async getPlayerCounts() {
-        const apiKey = await this.getApiKey();
-        if (!apiKey) return null;
-        try {
-            const response = await fetch(`https://api.hypixel.net/v2/counts?key=${apiKey}`);
-            if (!response.ok) return null;
-            const data = await response.json();
-            if (!data.success) return null;
-            return data.games;
-        } catch (err) {
-            formatter.log(`getPlayerCounts Error: ${err.message}`);
-            return null;
-        }
+        const data = await this.hypixelGet('counts');
+        return data ? data.games : null;
     }
 
-    async getStats(uuid) {
-        const apiKey = await this.getApiKey();
-        if (!apiKey) return null;
-        try {
-            const response = await fetch(`https://api.hypixel.net/v2/player?key=${apiKey}&uuid=${uuid}`);
-            if (!response.ok) return null;
-            const data = await response.json();
-            if (!data.success || !data.player) return null;
-            const player = data.player;
-
-            let rank = "NONE";
-            if (player.rank && player.rank !== 'NORMAL') {
-                rank = player.rank;
-            } else if (player.monthlyPackageRank === 'SUPERSTAR') {
-                rank = 'MVP_PLUS_PLUS';
-            } else if (player.newPackageRank) {
-                rank = player.newPackageRank;
+    // 8x8 face (with hat layer) rendered as colored block characters.
+    async getAvatarLines(uuid) {
+        return this.avatarCache.getOrLoad(uuid, async () => {
+            let pixel;
+            try {
+                const skinUrl = await this.getSkinUrl(uuid);
+                if (!skinUrl) throw new Error("No skin URL found");
+                const skin = PNG.sync.read(await fetchBuffer(skinUrl));
+                pixel = (x, y) => {
+                    const hat = pixelAt(skin, 40 + x, 8 + y);
+                    return hat.a > 128 ? hat : pixelAt(skin, 8 + x, 8 + y);
+                };
+            } catch (err) {
+                formatter.log(`Skin processing failed: ${err.message}. Falling back to Minotar.`);
+                const avatar = PNG.sync.read(await fetchBuffer(`https://minotar.net/helm/${uuid}/8.png`));
+                pixel = (x, y) => pixelAt(avatar, x, y);
             }
 
-            return {
-                player: player,
-                rank: rank,
-                guild: await this.getGuild(uuid),
-                properties: player.properties || []
-            };
-        } catch (err) {
-            formatter.log(`getStats Error: ${err.message}`);
-            return null;
-        }
+            const lines = [];
+            for (let y = 0; y < 8; y++) {
+                let line = "";
+                for (let x = 0; x < 8; x++) {
+                    const p = pixel(x, y);
+                    line += (p.a > 128) ? findClosestMinecraftColor(p.r, p.g, p.b) + '█' : " ";
+                }
+                lines.push(line);
+            }
+            return lines;
+        });
     }
 
     async displayFormattedStats(username, uuid, stats, gameInfo) {
         try {
-            let asciiLines;
-            if (this.avatarCache.has(uuid)) {
-                asciiLines = this.avatarCache.get(uuid);
-            } else {
-                let image;
-                try {
-                    const texturesProp = stats.properties.find(p => p.name === 'textures');
-                    if (!texturesProp) throw new Error("No texture property found");
-
-                    const texturesJson = Buffer.from(texturesProp.value, 'base64').toString('utf8');
-                    const textures = JSON.parse(texturesJson);
-                    const skinUrl = textures.textures?.SKIN?.url;
-                    if (!skinUrl) throw new Error("No skin URL found");
-
-                    const skin = await Jimp.read(skinUrl);
-                    image = new Jimp(8, 8);
-                    image.blit(skin, 0, 0, 8, 8, 8, 8);
-                    image.blit(skin, 0, 0, 40, 8, 8, 8);
-                } catch (err) {
-                    formatter.log(`Manual skin processing failed: ${err.message}. Falling back to Crafatar.`);
-                    image = await Jimp.read(`https://minotar.net/avatar/${uuid}/8.png`);
-                }
-
-                asciiLines = [];
-                for (let y = 0; y < 8; y++) {
-                    let line = "";
-                    for (let x = 0; x < 8; x++) {
-                        const pixel = Jimp.intToRGBA(image.getPixelColor(x, y));
-                        line += (pixel.a > 128) ? findClosestMinecraftColor(pixel.r, pixel.g, pixel.b) + '█' : " ";
-                    }
-                    asciiLines.push(line);
-                }
-                this.avatarCache.set(uuid, asciiLines);
-            }
+            const [asciiLines, guildTag] = await Promise.all([
+                this.getAvatarLines(uuid).catch((e) => {
+                    formatter.log(`Avatar unavailable: ${e.message}`);
+                    return [];
+                }),
+                this.getGuild(uuid),
+            ]);
 
             const p = stats.player;
-            const d = p.stats[gameInfo.apiName] || {};
-            const a = p.achievements || {};
+            const client = this.proxy.client;
+            if (!client) return;
 
-            const rank = formatter.formatRank(p);
-            const guild = stats.guild ? ` §5${stats.guild}` : "";
             const prefix = "§8[§5jag§dprox§8] §r";
-
             asciiLines.forEach(line => {
-                this.proxy.client.write("chat", { 
-                    message: JSON.stringify({ text: prefix + line }), 
-                    position: 1 
+                client.write("chat", {
+                    message: JSON.stringify({ text: prefix + line }),
+                    position: 1
                 });
             });
 
-            if (gameInfo.apiName === "Bedwars") {
-                const wins = d.wins_bedwars || 0;
-                const losses = d.losses_bedwars || 0;
-                const kills = d.kills_bedwars || 0;
-                const deaths = d.deaths_bedwars || 0;
-                const finals = d.final_kills_bedwars || 0;
-                const fdeaths = d.final_deaths_bedwars || 0;
-                const bedsBroken = d.beds_broken_bedwars || 0;
-                const bedsLost = d.beds_lost_bedwars || 0;
-                const winstreak = d.winstreak || 0;
-                let bestWinstreak = d.winstreak_best || 0;
-                if (winstreak > bestWinstreak) bestWinstreak = winstreak;
+            const guild = guildTag ? ` §5${guildTag}` : "";
+            const s = statFormat.getModeStats(p, gameInfo);
 
-                const wlr = (wins / (losses || 1)).toFixed(2);
-                const kdr = (kills / (deaths || 1)).toFixed(2);
-                const fkdr = (finals / (fdeaths || 1)).toFixed(2);
-                const bblr = (bedsBroken / (bedsLost || 1)).toFixed(2);
-
-                this.proxy.proxyChat(`§8[§dBedwars§8]`);
-                const nameColor = formatter.getPlayerNameColor(p);
-                this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
-                this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()}    §8| §dLosses §5» §f${losses.toLocaleString()}`);
-                this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()}   §8| §dDeaths §5» §f${deaths.toLocaleString()}`);
-                this.proxy.proxyChat(`§dFinals §5» §f${finals.toLocaleString()}   §8| §dF-Deaths §5» §f${fdeaths.toLocaleString()}`);
-                this.proxy.proxyChat(`§dWLR   §5» §f${wlr} | §dKDR §5» §f${kdr}`);
-                this.proxy.proxyChat(`§dFKDR  §5» §f${fkdr} | §dBBLR §5» §f${bblr}`);
-                if (parseFloat(wlr) > 1.01 && bestWinstreak === 0) {
-                    this.proxy.proxyChat(`§cWINSTREAK API DISABLED`);
-                } else {
-                    this.proxy.proxyChat(`§dWinstreak §5» §f${winstreak.toLocaleString()} | §dBest §5» §f${bestWinstreak.toLocaleString()}`);
-                }
-            } else {
-                this.proxy.proxyChat(`§8[§5${gameInfo.displayName}§8]`);
-
-                const nameColor = formatter.getPlayerNameColor(p);
-                this.proxy.proxyChat(`${rank} ${nameColor}${username}${guild}`);
-
-                let wins = 0, losses = 1, kills = 0, deaths = 1;
-                let currentWinstreak = 0, bestWinstreak = 0;
-
-                switch (gameInfo.apiName) {
-                    case "SkyWars":
-                        wins = d.wins || 0;
-                        losses = d.losses || 1;
-                        kills = d.kills || 0;
-                        deaths = d.deaths || 1;
-                        currentWinstreak = d.winstreak || 0;
-                        bestWinstreak = d.winstreak_best || 0;
-                        break;
-                    case "Duels":
-                        const dgPrefix = gameInfo.prefix || '';
-                        wins = d[dgPrefix ? `${dgPrefix}_wins` : 'wins'] || 0;
-                        losses = d[dgPrefix ? `${dgPrefix}_losses` : 'losses'] || 1;
-                        kills = d[dgPrefix ? `${dgPrefix}_kills` : 'kills'] || 0;
-                        deaths = d[dgPrefix ? `${dgPrefix}_deaths` : 'deaths'] || 1;
-                        if (dgPrefix) {
-                            // Map prefix to Hypixel API mode category for winstreak fields
-                            const modeCategoryMap = {
-                                'bridge_duel': 'bridge_duel',
-                                'bridge_doubles': 'bridge_doubles',
-                                'bridge_3v3': 'bridge_3v3',
-                                'bridge_four': 'bridge_four',
-                                'classic_duel': 'classic_duel',
-                                'classic_doubles': 'classic_doubles',
-                                'uhc_duel': 'uhc_duel',
-                                'uhc_doubles': 'uhc_doubles',
-                                'uhc_four': 'uhc_four',
-                                'uhc_meetup': 'uhc_meetup',
-                                'sw_duel': 'sw_duel',
-                                'sw_doubles': 'sw_doubles',
-                                'sumo_duel': 'sumo_duel',
-                                'bow_duel': 'bow_duel',
-                                'combo_duel': 'combo_duel',
-                                'op_duel': 'op_duel',
-                                'op_doubles': 'op_doubles',
-                                'spleef_duel': 'spleef_duel',
-                                'boxing_duel': 'boxing_duel',
-                                'potion_duel': 'potion_duel',
-                                'blitz_duel': 'blitz_duel',
-                                'mega_walls_duel': 'mega_walls_duel',
-                                'quake_duel': 'quake_duel',
-                                'parkour_duel': 'parkour_duel',
-                                'bowspleef_duel': 'bowspleef_duel',
-                                'bw_duel_rush': 'bw_duel_rush',
-                                'bw_duel_doubles': 'bw_duel_doubles'
-                            };
-                            const modeKey = modeCategoryMap[dgPrefix] || dgPrefix;
-                            // Current streak: key is missing when 0, so use || 0
-                            currentWinstreak = d[`current_${modeKey}_winstreak`] || 0;
-                            // Best streak: fall back to achievements if API doesn't provide it
-                            bestWinstreak = d[`best_${modeKey}_winstreak`] || a[`duels_${modeKey}_winstreak`] || 0;
-                        } else {
-                            // Overall Duels streaks
-                            currentWinstreak = d.current_winstreak || 0;
-                            // Fall back to achievements for best overall streak
-                            bestWinstreak = d.best_winstreak || a.duels_duels_win_streak || 0;
-                        }
-                        break;
-                    case "Walls3":
-                        wins = d.wins || 0;
-                        losses = d.losses || 1;
-                        kills = d.final_kills || 0;
-                        deaths = d.final_deaths || 1;
-                        break;
-                    default:
-                        wins = d.wins || 0;
-                        losses = d.losses || 1;
-                        kills = d.kills || 0;
-                        deaths = d.deaths || 1;
-                }
-
-                const wlr = (wins / losses).toFixed(2);
-                const kdr = (kills / deaths).toFixed(2);
-                if (currentWinstreak > bestWinstreak) bestWinstreak = currentWinstreak;
-
-                this.proxy.proxyChat(`§dWins §5» §f${wins.toLocaleString()} §8| §5Losses §5» §f${losses.toLocaleString()}`);
-                this.proxy.proxyChat(`§dKills §5» §f${kills.toLocaleString()} §8| §5Deaths §5» §f${deaths.toLocaleString()}`);
-                this.proxy.proxyChat(`§dWLR §5» §f${wlr} §8| §dKDR §5» §f${kdr}`);
-                
-                if (bestWinstreak === 0 && parseFloat(wlr) > 1.01) {
-                    this.proxy.proxyChat(`§cWINSTREAK API DISABLED`);
-                } else {
-                    this.proxy.proxyChat(`§dWinstreak §5» §f${currentWinstreak.toLocaleString()} §8| §5Best §5» §f${bestWinstreak.toLocaleString()}`);
-                }
+            this.proxy.proxyChat(`§8[§5${gameInfo.displayName}§8]`);
+            this.proxy.proxyChat(`${formatter.formatRank(p)} ${formatter.getPlayerNameColor(p)}${username}${guild}`);
+            statFormat.formatStatLines(s, gameInfo.apiName).forEach(line => this.proxy.proxyChat(line));
+            if (statFormat.hasWinstreaks(gameInfo.apiName)) {
+                this.proxy.proxyChat(statFormat.formatWinstreakLine(s));
             }
-
         } catch (err) {
             formatter.log(`displayFormattedStats Error: ${err.message}`);
             this.proxy.proxyChat(`§cError displaying stats.`);
@@ -684,57 +530,36 @@ class HypixelHandler {
 
     async getTabDataForPlayer(name, gamemodeKey) {
         try {
+            const gameInfo = gameModeMap[gamemodeKey];
+            if (!gameInfo) return null;
             const mojangData = await this.getMojangUUID(name);
             if (!mojangData) return null;
             const stats = await this.getStats(mojangData.uuid);
             if (!stats) return null;
-            const { gameModeMap } = require('../utils/constants');
-            const gameInfo = gameModeMap[gamemodeKey];
-            if (!gameInfo) return null;
-            const d = stats.player?.stats?.[gameInfo.apiName];
-            if (!d) return null;
+
+            const s = statFormat.getModeStats(stats.player, gameInfo);
+            if (!s.hasStats) return null;
 
             if (gameInfo.apiName === 'Bedwars') {
-                const fk = d.final_kills_bedwars || 0;
-                const fd = d.final_deaths_bedwars || 1;
-                const fkdrValue = (fk / fd).toFixed(2);
-                const fkdrColor = this.getFkdrColor(parseFloat(fkdrValue));
-                const level = stats.player?.achievements?.bedwars_level ?? 0;
-                const lvlColor = this.getLevelColor(level);
-
-                const prefix = lvlColor + '[' + level + '✫] ';
-                const suffix = ' §8|' + fkdrColor + fkdrValue;
-
-                return {
-                    suffix: suffix.substring(0, 16),
-                    prefix: prefix.substring(0, 16)
-                };
+                const fkdr = statFormat.ratio(s.finalKills, s.finalDeaths).toFixed(2);
+                const prefix = `${this.getLevelColor(s.level)}[${s.levelText}] `;
+                const suffix = ` §8|${this.getFkdrColor(parseFloat(fkdr))}${fkdr}`;
+                return { prefix: prefix.substring(0, 16), suffix: suffix.substring(0, 16) };
             }
-             if (gameInfo.apiName === 'SkyWars') {
-                const k = d.kills || 0;
-                const de = d.deaths || 1;
-                const kdr = (k / de).toFixed(2);
-                const kdrColor = this.getFkdrColor(parseFloat(kdr));
-                
-                const rawLevel = stats.player?.stats?.SkyWars?.levelFormatted || '0✫';
-                const levelInt = parseInt(rawLevel.replace(/[^0-9]/g, '')) || 0;
-                const lvlColor = this.getLevelColor(levelInt);
-                
-                const prefix = lvlColor + '[' + rawLevel + '] ';
-                const suffix = ' §8|' + kdrColor + kdr;
-                
-                return { suffix: suffix.substring(0, 16), prefix: prefix.substring(0, 16) };
-            } else if (gameInfo.apiName === 'Duels') {
-                const w = d.wins || 0;
-                const l = d.losses || 1;
-                const wlr = (w / l).toFixed(2);
-                const wlrColor = this.getFkdrColor(parseFloat(wlr));
-                const suffix = ' §8|' + wlrColor + wlr;
-                return { suffix: suffix.substring(0, 16), prefix: '' };
+            if (gameInfo.apiName === 'SkyWars') {
+                const kdr = statFormat.ratio(s.kills, s.deaths).toFixed(2);
+                const prefix = `${this.getLevelColor(s.level)}[${s.levelText}] `;
+                const suffix = ` §8|${this.getFkdrColor(parseFloat(kdr))}${kdr}`;
+                return { prefix: prefix.substring(0, 16), suffix: suffix.substring(0, 16) };
             }
-
+            if (gameInfo.apiName === 'Duels') {
+                const wlr = statFormat.ratio(s.wins, s.losses).toFixed(2);
+                const suffix = ` §8|${this.getFkdrColor(parseFloat(wlr))}${wlr}`;
+                return { prefix: '', suffix: suffix.substring(0, 16) };
+            }
             return null;
         } catch (e) {
+            formatter.log(`Tab data error for ${name}: ${e.message}`);
             return null;
         }
     }
@@ -758,32 +583,30 @@ class HypixelHandler {
     }
 
     async processQueueAndPrintBulk(playerNames, gamemodeKey) {
-        const gameInfo = gameModeMap[gamemodeKey] || gameModeMap['bedwars'];
-        
-        const cleanPlayerNames = playerNames.map(name => 
-            name.replace(/§[0-9a-fk-or]/g, '').replace(/\[.*?\]\s?/g, '').trim()
-        ).filter(name => name && name !== this.proxy.client?.username);
+        const gameInfo = gameModeMap[gamemodeKey] || gameModeMap.bedwars;
+        const ownName = this.proxy.client?.username;
+
+        const cleanPlayerNames = playerNames
+            .map(name => name.replace(/§./g, '').replace(/\[.*?\]\s?/g, '').trim())
+            .filter(name => name && name !== ownName);
 
         if (cleanPlayerNames.length === 0) return;
 
         this.proxy.proxyChat(`§dAuto-checking §f${cleanPlayerNames.length} §dplayers for §5${gameInfo.displayName}§d...`);
 
-        this.proxy.tabManager.updatePlayerTags(cleanPlayerNames, gamemodeKey);
+        // Tags and the chat summary run side by side; the stats cache makes them share requests.
+        this.proxy.tabManager.updatePlayerTags(cleanPlayerNames, gamemodeKey)
+            .catch(e => formatter.log(`Tab tag update failed: ${e.message}`));
 
-        const statBlocks = [];
-        for (const cleanName of cleanPlayerNames) {
-            const block = await this.getAndFormatPartyPlayerStats(cleanName, gameInfo);
-            if (block) statBlocks.push(block);
-
-            await new Promise(r => setTimeout(r, 300));
-        }
+        const statBlocks = (await mapLimit(cleanPlayerNames, LOOKUP_CONCURRENCY, (name) =>
+            this.getAndFormatPartyPlayerStats(name, gameInfo))).filter(Boolean);
 
         if (statBlocks.length === 0) return;
 
-        let msg = `§5§m----------------------------------------------------\n`;
+        let msg = `${DIVIDER}\n`;
         msg += `  §5§lGame Stats §8(${gameInfo.displayName})\n \n`;
         msg += statBlocks.join('\n \n');
-        msg += `\n§5§m----------------------------------------------------`;
+        msg += `\n${DIVIDER}`;
         this.proxy.proxyChat(msg);
     }
 }

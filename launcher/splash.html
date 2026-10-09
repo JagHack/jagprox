@@ -87,15 +87,14 @@
     </div>
 
     <script>
-        const { ipcRenderer } = require('electron');
         const statusText = document.getElementById('status');
         const loaderBar = document.getElementById('loader-bar');
 
-        ipcRenderer.on('update-status', (event, text) => {
-            statusText.innerText = text;
+        window.jagprox.on('update-status', (text) => {
+            statusText.textContent = text;
         });
 
-        ipcRenderer.on('update-progress', (event, percent) => {
+        window.jagprox.on('update-progress', (percent) => {
             loaderBar.classList.add('progress');
             loaderBar.style.width = percent + '%';
         });

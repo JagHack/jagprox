@@ -1,13 +1,9 @@
 const formatter = require('../formatter.js');
+const { GAME_START_MESSAGES } = require('../utils/constants.js');
 
 // "Name has joined (3/8)!" is printed in every Hypixel pre-game lobby, whatever the mode.
 const QUEUE_JOIN_REGEX = /has joined \(\d+\/\d+\)!$/;
-const GAME_START_MESSAGES = [
-    'The game starts in 1 second!',
-    'Protect your bed and destroy the enemy beds.',
-    'Eliminate your opponents!',
-    'Gather resources and equipment on your',
-];
+const QUEUE_END_MESSAGES = ['The game starts in 1 second!', ...GAME_START_MESSAGES];
 
 class RankTracker {
     constructor(proxy) {
@@ -52,7 +48,7 @@ class RankTracker {
                 rankProfile.entityId = data.entityId;
             }
         } else if (meta.name === 'scoreboard_team') {
-            if (Array.isArray(data.players) && data.players.length !== 0 && data.team.startsWith('§')) {
+            if (Array.isArray(data.players) && data.players.length !== 0 && typeof data.team === 'string' && data.team.startsWith('§')) {
                 for (const ign of data.players) {
                     if (!ign.startsWith('§r§k')) continue;
                     let rankProfile = this.getRankProfileByIGN(ign);
@@ -72,12 +68,8 @@ class RankTracker {
     }
 
     handleChat(data) {
-        let cleanMessage;
-        try {
-            cleanMessage = formatter.extractText(JSON.parse(data.message)).replace(/§./g, '').trim();
-        } catch (e) {
-            return;
-        }
+        const cleanMessage = formatter.chatToCleanText(data.message);
+        if (cleanMessage === null) return;
 
         if (QUEUE_JOIN_REGEX.test(cleanMessage)) {
             if (!this.inQueue) {
@@ -86,7 +78,7 @@ class RankTracker {
                 // Players already in the lobby were sent before our own join message.
                 this.rankData.forEach(r => this.announce(r));
             }
-        } else if (this.inQueue && GAME_START_MESSAGES.some(msg => cleanMessage.includes(msg))) {
+        } else if (this.inQueue && QUEUE_END_MESSAGES.some(msg => cleanMessage.includes(msg))) {
             this.inQueue = false;
             formatter.log('Rank tracker: game started, no longer tracking joining players.');
         }
@@ -115,10 +107,6 @@ class RankTracker {
 
     getRankProfileByUUID(uuid) {
         return this.rankData.find(r => r.uuid === uuid) || null;
-    }
-
-    getRankProfileByEntityId(entityId) {
-        return this.rankData.find(r => r.entityId === entityId) || null;
     }
 }
 

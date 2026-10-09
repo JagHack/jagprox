@@ -46,7 +46,7 @@ Follow these steps to get the JagProx devbuild up and running on your system. If
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js:** Version 16.x or newer is recommended. [Download here](https://nodejs.org/).
+- **Node.js:** Version 22.12 or newer. [Download here](https://nodejs.org/).
 - **Git:** Required to clone the repository. [Download here](https://git-scm.com/).
 - **A valid Minecraft: Java Edition account.**
 - **A Hypixel API Key:**
@@ -70,11 +70,22 @@ npm install
 
 ### 4. Configuration
 
-You have two configuration files in the root of the `jagprox` folder:
+On first launch, `config.yml` and `aliases.json` are created in the launcher's user-data folder (on Windows `%APPDATA%\JagProx`, on Linux `~/.config/JagProx`). The copies in this repository are only the defaults. Auto GG, Discord RPC, your API key and aliases can be edited from the launcher; changes reach a running proxy within a few seconds.
 
-**a) `config.yml` (for general settings)**
+Notable `config.yml` options:
 
-**b) `.env` file (for secrets)** (maybe create this one)
+- `port` / `host`: where the proxy listens (default `127.0.0.1:2107`, so only your own PC can connect). Changing them needs a proxy restart.
+- `queue_stats`: per-game automatic lobby stat checks (`bw`, `skywars`, `duels`).
+- `debug_mode`: extra diagnostic lines in the log.
+- `stats_telemetry`: off by default. When on, `/sc` shares the looked-up player's win count with the JagProx website.
+
+### 5. Development
+
+```bash
+npm test      # unit tests
+npm run lint  # ESLint
+npm start     # run the launcher
+```
 
 ---
 
@@ -95,11 +106,11 @@ For a comprehensive guide on all features of the Jagprox Launcher, please refer 
   *Example:* `/status Notch`
 
 * `/superf <add|remove|list> [player] [gamemodes...]`
-  Track a friend and their stats for specific games.
+  Get notified when a friend joins one of the given games (checked once a minute; use `any` for every game).
   *Example:* `/superf add Steve bedwars skywars duels`
 
-* `/psc`
-  Fetch and display Bedwars stats for everyone in your current party.
+* `/psc [gamemode]`
+  Fetch and display stats for everyone in your current party.
 
 * `/rq`
   Re-queues the last `/play` command you used.
@@ -113,13 +124,13 @@ For a comprehensive guide on all features of the Jagprox Launcher, please refer 
 * `/drpc`
   Toggles the discord rich presence.
 
-* `/goal`
-  Sets FKDR, WLR or BBLR goals for specific modes.
+* `/goal <set|view|cancel>`
+  Sets a stat goal, e.g. `/goal set bedwars fkdr 5`.
 
 * `/jagprox`
   Displays the list of available custom commands.
 
-  `/gt | /gametrack [hour|day|log] [hour count if used with hour]`
+* `/gt | /gametrack [hour|day|log] [hour count if used with hour]`
   Shows you the stats for the given hours/day or logs your last games.
 
 ---

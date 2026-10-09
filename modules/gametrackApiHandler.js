@@ -1,5 +1,18 @@
-const fetch = require('node-fetch');
 const { API_BASE_URL } = require('../utils/api_constants.js');
+
+// Returns the JSON body, or throws with the server's message (or the status) on failure.
+async function parseResponse(response) {
+    let data = null;
+    try {
+        data = await response.json();
+    } catch (e) {
+        // Non-JSON body (e.g. an HTML error page).
+    }
+    if (!response.ok) {
+        throw new Error((data && data.message) || `API returned status ${response.status}`);
+    }
+    return data;
+}
 
 class GametrackApiHandler {
     constructor(jwt) {
@@ -23,11 +36,7 @@ class GametrackApiHandler {
             body: JSON.stringify({ mc_uuid, mode }),
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || `API returned status ${response.status}`);
-        }
-        return response.json();
+        return parseResponse(response);
     }
 
     async sendEvent({ mc_uuid, mode, result }) {
@@ -40,18 +49,14 @@ class GametrackApiHandler {
             body: JSON.stringify({ mc_uuid, mode, result }),
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || `API returned status ${response.status}`);
-        }
-        return response.json();
+        return parseResponse(response);
     }
 
     async getStats(period, hours = 1) {
         let url;
         switch (period) {
             case 'hour':
-                url = `${API_BASE_URL}/gametrack/hour?hours=${hours}`;
+                url = `${API_BASE_URL}/gametrack/hour?hours=${encodeURIComponent(hours)}`;
                 break;
             case 'day':
                 url = `${API_BASE_URL}/gametrack/day`;
@@ -64,11 +69,7 @@ class GametrackApiHandler {
         }
 
         const response = await fetch(url, { headers: this.headers });
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.message || `Failed to fetch ${period} stats.`);
-        }
-        return data;
+        return parseResponse(response);
     }
 }
 

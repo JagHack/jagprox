@@ -1,8 +1,8 @@
-const fetch = require('node-fetch');
+const { API_BASE_URL } = require('./api_constants.js');
 
 class ApiHandler {
     constructor(options = {}) {
-        this.baseUrl = options.baseUrl || 'https://jagprox.jaghack.com/api/v1';
+        this.baseUrl = options.baseUrl || API_BASE_URL;
         this.jwt = options.jwt || null;
     }
 

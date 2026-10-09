@@ -4,7 +4,7 @@
         <meta charset="UTF-8" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="script-src 'self';"
+            content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:;"
         />
         <title>JagProx Launcher</title>
         <link
@@ -185,8 +185,8 @@
                             </button>
                         </div>
                         <p class="settings-note">
-                            Note: The proxy must be restarted for changes to
-                            take effect.
+                            Changes apply to a running proxy within a few
+                            seconds.
                         </p>
                     </div>
                 </div>
@@ -229,6 +229,25 @@
                             </div>
                             <div class="settings-group">
                                 <div class="settings-group-header">
+                                    Hypixel API Key
+                                </div>
+                                <div class="settings-item">
+                                    <input
+                                        type="password"
+                                        id="api-key-input"
+                                        placeholder="Enter your Hypixel API key"
+                                        autocomplete="off"
+                                    />
+                                    <button class="action-btn" id="toggle-api-key-btn" title="Show/hide">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="action-btn save-btn" id="save-api-key-btn">
+                                        <i class="fas fa-save"></i> Save Key
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="settings-group">
+                                <div class="settings-group-header">
                                     Application Updates
                                 </div>
                                 <div class="update-container">
@@ -249,7 +268,7 @@
                                     Discord RPC
                                 </div>
                                 <div class="update-container">
-                                    <p id="update-info">
+                                    <p>
                                         Toggle the discord rich presence!
                                     </p>
                                     <label
@@ -274,8 +293,8 @@
                             </button>
                         </div>
                         <p class="settings-note">
-                            Note: The proxy must be restarted for changes to
-                            take effect.
+                            Changes apply to a running proxy within a few
+                            seconds.
                         </p>
                     </div>
                 </div>
@@ -297,6 +316,5 @@
             </div>
         </div>
         <script src="./renderer.js"></script>
-        <script src="./updateUI.js"></script>
     </body>
 </html>
