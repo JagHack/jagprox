@@ -7,6 +7,7 @@ const EntityManager = require("./modules/entityManager.js");
 const TabManager = require("./modules/tabManager.js");
 const TabAlerter = require("./modules/tabAlerter.js");
 const AutoGGHandler = require("./modules/autoGGHandler.js");
+const RankTracker = require("./modules/rankTracker.js");
 const GametrackApiHandler = require("./modules/gametrackApiHandler.js");
 const GametrackClientHandler = require("./modules/gametrackClientHandler.js");
 const path = require("path");
@@ -47,6 +48,7 @@ class JagProx {
         this.tabManager = new TabManager(this);
         this.tabAlerter = new TabAlerter(this);
         this.autoGG = new AutoGGHandler(this);
+        this.rankTracker = new RankTracker(this);
 
         if (this.config.discord_rpc && this.config.discord_rpc.enabled) {
             discordRpc.login();
@@ -208,6 +210,7 @@ class JagProx {
             this.tabManager.handlePacket(data, meta);
             this.tabAlerter.handlePacket(data, meta);
             this.autoGG.handlePacket(data, meta);
+            this.rankTracker.handlePacket(data, meta);
 
             if (meta.name === "custom_payload" && data.channel === "MC|Brand") {
                 data.data = Buffer.from("\x07vanilla");
@@ -235,6 +238,7 @@ class JagProx {
             this.tabManager.reset();
             this.tabAlerter.reset();
             this.autoGG.reset();
+            this.rankTracker.reset();
             this.hypixel.reset();
 
             this.client = null;
@@ -266,6 +270,7 @@ class JagProx {
         this.tabManager.reset();
         this.tabAlerter.reset();
         this.autoGG.reset();
+        this.rankTracker.reset();
 
         this.hypixel.reset();
     }
