@@ -2153,7 +2153,7 @@ checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
 
 [[package]]
 name = "jagprox-app"
-version = "3.0.0-alpha.2"
+version = "3.0.0-alpha.3"
 dependencies = [
  "discord-rich-presence",
  "gtk",
@@ -2169,7 +2169,7 @@ dependencies = [
 
 [[package]]
 name = "jagprox-cli"
-version = "3.0.0-alpha.2"
+version = "3.0.0-alpha.3"
 dependencies = [
  "clap",
  "dirs 6.0.0",
@@ -2187,7 +2187,7 @@ dependencies = [
 
 [[package]]
 name = "jagprox-core"
-version = "3.0.0-alpha.2"
+version = "3.0.0-alpha.3"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2554,7 +2554,7 @@ dependencies = [
 
 [[package]]
 name = "mcproto"
-version = "3.0.0-alpha.2"
+version = "3.0.0-alpha.3"
 dependencies = [
  "aes 0.8.4",
  "flate2",
