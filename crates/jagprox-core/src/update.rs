@@ -359,13 +359,9 @@ pub fn download_dir() -> PathBuf {
         .join("updates")
 }
 
-/// The CPU name used in asset kinds.
+/// The CPU name used in asset kinds (Rust's names: `x86_64`, `aarch64`).
 pub fn arch() -> &'static str {
-    match std::env::consts::ARCH {
-        "x86_64" => "x86_64",
-        "aarch64" => "aarch64",
-        other => other,
-    }
+    std::env::consts::ARCH
 }
 
 /// How an update gets installed.
