@@ -23,13 +23,10 @@ pub const MANIFEST: &str = "jagprox-release.json";
 /// minisign public key of the JagProx release key.
 const PUBLIC_KEY: &str = "RWSNUpaZxh9X3cHOwcdbO4mOCcOK7CC+d4O242TQx+FujzhW9H1YQxAc";
 const RELEASES: &str = "https://github.com/JagHack/jagprox/releases";
-/// Versions before this are the old Electron app, which can't be installed this way.
-const FIRST: Version = Version {
-    major: 3,
-    minor: 0,
-    patch: 0,
-    pre: None,
-};
+const RELEASES_API: &str = "https://api.github.com/repos/JagHack/jagprox/releases?per_page=30";
+/// Major versions before this are the old Electron app, which can't be installed
+/// this way. (3.0.0 pre-releases count as 3.)
+const FIRST_MAJOR: u64 = 3;
 
 /// A version number: `3.1.0`, `v3.1.0`, `3.1.0-beta.2`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,20 +118,27 @@ fn compare_pre(a: &str, b: &str) -> Ordering {
 #[derive(Debug, Clone)]
 pub struct Source {
     pub base: String,
+    /// GitHub's release list (JSON), used to find pre-releases.
+    pub api: String,
     pub public_key: String,
 }
 
 impl Source {
     /// GitHub Releases with the JagProx key. Debug builds can point elsewhere with
-    /// `JAGPROX_RELEASES_URL` / `JAGPROX_RELEASE_KEY` for testing; release builds can't.
+    /// `JAGPROX_RELEASES_URL` / `JAGPROX_RELEASES_API` / `JAGPROX_RELEASE_KEY` for
+    /// testing; release builds can't.
     pub fn official() -> Self {
         let mut source = Source {
             base: RELEASES.to_string(),
+            api: RELEASES_API.to_string(),
             public_key: PUBLIC_KEY.to_string(),
         };
         if cfg!(debug_assertions) {
             if let Ok(base) = std::env::var("JAGPROX_RELEASES_URL") {
                 source.base = base;
+            }
+            if let Ok(api) = std::env::var("JAGPROX_RELEASES_API") {
+                source.api = api;
             }
             if let Ok(key) = std::env::var("JAGPROX_RELEASE_KEY") {
                 source.public_key = key;
@@ -169,15 +173,53 @@ impl Release {
     }
 }
 
-/// Checks `version` can be installed at all (3.0.0 or newer).
+/// Checks `version` can be installed at all (JagProx 3 or newer).
 pub fn check_installable(version: &Version) -> Result<(), String> {
-    if *version < FIRST {
+    if version.major < FIRST_MAJOR {
         return Err(format!(
             "v{version} is the old Electron app and can't be installed with this command; \
-             the oldest version it can install is v{FIRST}"
+             it can install JagProx {FIRST_MAJOR} and newer"
         ));
     }
     Ok(())
+}
+
+/// The newest JagProx 3+ version on the releases page, pre-releases included
+/// (GitHub's "latest" skips them).
+pub async fn newest_version(source: &Source) -> Result<Version, String> {
+    let body = get(&source.api).await.map_err(|e| {
+        if e == "not found" {
+            "could not list the JagProx releases".to_string()
+        } else {
+            e
+        }
+    })?;
+    let releases: Value =
+        serde_json::from_slice(&body).map_err(|_| "the release list is unreadable")?;
+    releases
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r.get("draft").and_then(Value::as_bool) != Some(true))
+        .filter_map(|r| {
+            r.get("tag_name")
+                .and_then(Value::as_str)
+                .and_then(Version::parse)
+        })
+        .filter(|v| v.major >= FIRST_MAJOR)
+        .max()
+        .ok_or_else(|| "there is no JagProx 3 release yet".into())
+}
+
+/// The release `jagprox update` should look at: the latest full release, or for
+/// someone already on a pre-release, the newest release of any kind.
+pub async fn fetch_newest(source: &Source, current: &Version) -> Result<Release, String> {
+    if current.pre.is_some() {
+        let newest = newest_version(source).await?;
+        fetch(source, Some(&newest)).await
+    } else {
+        fetch(source, None).await
+    }
 }
 
 async fn get(url: &str) -> Result<Vec<u8>, String> {
@@ -658,7 +700,8 @@ mod tests {
     #[test]
     fn electron_versions_are_refused() {
         assert!(check_installable(&v("2.6.1")).is_err());
-        assert!(check_installable(&v("3.0.0-alpha.0")).is_err());
+        assert!(check_installable(&v("2.99.0-beta.1")).is_err());
+        assert!(check_installable(&v("3.0.0-alpha.2")).is_ok());
         assert!(check_installable(&v("3.0.0")).is_ok());
     }
 

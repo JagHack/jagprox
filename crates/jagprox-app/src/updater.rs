@@ -50,7 +50,7 @@ pub async fn check(app: &AppHandle) -> Check {
     let current = Version::current();
     let release = match tokio::time::timeout(
         Duration::from_secs(8),
-        update::fetch(&Source::official(), None),
+        update::fetch_newest(&Source::official(), &current),
     )
     .await
     {

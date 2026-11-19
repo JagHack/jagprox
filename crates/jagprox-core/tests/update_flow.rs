@@ -35,7 +35,11 @@ async fn serve(tamper: bool) -> String {
                 let name = path
                     .strip_prefix("/download/v3.1.0/")
                     .or_else(|| path.strip_prefix("/latest/download/"));
-                let body = name.and_then(|n| std::fs::read(fixtures().join(n)).ok());
+                let body = if path == "/api/releases" {
+                    Some(RELEASE_LIST.as_bytes().to_vec())
+                } else {
+                    name.and_then(|n| std::fs::read(fixtures().join(n)).ok())
+                };
                 let response = match body {
                     Some(mut body) => {
                         if tamper && name.is_some_and(|n| n.ends_with(".tar.gz")) {
@@ -61,8 +65,18 @@ async fn serve(tamper: bool) -> String {
     format!("http://{addr}")
 }
 
+/// GitHub's release list: a newer draft (ignored), the 3.1.0 fixture, an older
+/// pre-release and the Electron 2.x line.
+const RELEASE_LIST: &str = r#"[
+    {"tag_name": "v3.2.0", "draft": true, "prerelease": false},
+    {"tag_name": "v3.1.0", "draft": false, "prerelease": false},
+    {"tag_name": "v3.0.0-beta.1", "draft": false, "prerelease": true},
+    {"tag_name": "v2.6.1", "draft": false, "prerelease": false}
+]"#;
+
 fn test_source(base: String) -> Source {
     Source {
+        api: format!("{base}/api/releases"),
         base,
         public_key: std::fs::read_to_string(fixtures().join("test-key.pub"))
             .unwrap()
@@ -171,4 +185,23 @@ async fn a_corrupted_download_is_refused_and_removed() {
     assert!(err.contains("doesn't match the signed release"), "{err}");
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn pre_release_installs_look_at_pre_releases_too() {
+    let source = test_source(serve(false).await);
+    assert_eq!(
+        update::newest_version(&source).await.unwrap(),
+        Version::parse("3.1.0").unwrap()
+    );
+    // From a pre-release: the newest of all (here also 3.1.0, via its own folder).
+    let from_beta = update::fetch_newest(&source, &Version::parse("3.0.0-beta.1").unwrap())
+        .await
+        .unwrap();
+    assert_eq!(from_beta.version, Version::parse("3.1.0").unwrap());
+    // From a full release: GitHub's "latest".
+    let from_full = update::fetch_newest(&source, &Version::parse("3.0.0").unwrap())
+        .await
+        .unwrap();
+    assert_eq!(from_full.version, from_beta.version);
 }

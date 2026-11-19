@@ -25,7 +25,11 @@ pub async fn update(wanted: Option<&str>) -> Result<(), String> {
         Some(v) => format!("Looking up v{v}..."),
         None => "Checking for updates...".to_string(),
     });
-    let release = update::fetch(&Source::official(), wanted.as_ref()).await;
+    let source = Source::official();
+    let release = match &wanted {
+        Some(v) => update::fetch(&source, Some(v)).await,
+        None => update::fetch_newest(&source, &current).await,
+    };
     spinner.stop();
     let release = release?;
 
