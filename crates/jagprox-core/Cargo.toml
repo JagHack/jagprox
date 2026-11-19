@@ -1,0 +1,9 @@
+[package]
+name = "jagprox-core"
+description = "JagProx proxy session, modules and commands"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mcproto = { path = "../mcproto" }

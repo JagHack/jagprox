@@ -1,0 +1,16 @@
+[package]
+name = "jagprox-cli"
+description = "jagprox command: CLI and headless proxy (no GUI dependencies, builds fully static)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "jagprox"
+path = "src/main.rs"
+
+[dependencies]
+jagprox-core = { path = "../jagprox-core" }
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+open = "5"

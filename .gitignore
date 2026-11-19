@@ -28,3 +28,6 @@ Thumbs.db
 # IDE/editor settings
 .vscode/
 .idea/
+
+# rust
+target/

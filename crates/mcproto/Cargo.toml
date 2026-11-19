@@ -1,0 +1,8 @@
+[package]
+name = "mcproto"
+description = "Minecraft 1.8.9 (protocol 47) codec used by JagProx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
