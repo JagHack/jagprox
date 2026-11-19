@@ -12,7 +12,6 @@ mcproto = { path = "../mcproto" }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dirs = "6"
-flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 futures = "0.3"
 getrandom = "0.3"
 indexmap = "2"
@@ -26,10 +25,14 @@ rustls-native-certs = "0.8"
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 sha2 = "0.10"
-tar = { version = "0.4", default-features = false }
 tokio = { version = "1", features = ["macros", "rt", "time", "sync", "net"] }
 webpki-roots = "1"
 
+
+# Unpacking updates (.tar.gz) only happens on Linux and macOS.
+[target.'cfg(unix)'.dependencies]
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+tar = { version = "0.4", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util"] }

@@ -351,8 +351,10 @@ pub fn windows_path_remove(list: &str, dir: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     use std::collections::HashMap;
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn detect_with(exe: &str, appimage: Option<&str>, files: &[(&str, &str)]) -> Install {
         let files: HashMap<PathBuf, String> = files
             .iter()
@@ -414,6 +416,33 @@ mod tests {
             Install::Standalone {
                 exe: "/usr/local/bin/jagprox".into()
             }
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_installs() {
+        assert_eq!(
+            detect_with(
+                "/Applications/JagProx.app/Contents/MacOS/jagprox",
+                None,
+                &[]
+            ),
+            Install::MacApp {
+                bundle: "/Applications/JagProx.app".into()
+            }
+        );
+        assert_eq!(
+            detect_with(
+                "/Users/me/jagprox/target/release/jagprox",
+                None,
+                &[("/Users/me/jagprox/Cargo.toml", "")]
+            ),
+            Install::Dev
+        );
+        assert_eq!(
+            detect_with("/usr/local/bin/jagprox", None, &[]),
+            Install::Unknown
         );
     }
 

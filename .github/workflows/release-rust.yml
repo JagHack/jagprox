@@ -109,6 +109,10 @@ jobs:
           cp "$b/rpm/jagprox-${V}-1.${{ matrix.arch }}.rpm" dist/
           cp "$b"/appimage/jagprox_"${V}"_*.AppImage "dist/JagProx-${V}-${{ matrix.arch }}.AppImage"
           ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-linux-${{ matrix.arch }}
+          path: dist/*
       - name: Test the .deb
         run: |
           sudo apt-get install -y "./dist/jagprox_${V}_${{ matrix.deb }}.deb"
@@ -122,14 +126,12 @@ jobs:
           app="$PWD/dist/JagProx-${V}-${{ matrix.arch }}.AppImage"
           link="$RUNNER_TEMP/test-bin/jagprox"
           mkdir -p "$RUNNER_TEMP/test-bin" && ln -s "$app" "$link"
-          "$link" --version | grep -F "$V"
+          out=$("$link" --version 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -F "$V"
           # install-cli with a scratch home: links ~/.local/bin/jagprox to the AppImage.
           HOME="$RUNNER_TEMP/home" "$link" install-cli < /dev/null
           test "$(readlink "$RUNNER_TEMP/home/.local/bin/jagprox")" = "$app"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-linux-${{ matrix.arch }}
-          path: dist/*
 
   app-windows:
     needs: version
@@ -208,6 +210,10 @@ jobs:
             cargo build --release --locked -p jagprox-cli --target $t --target-dir target-cli
           done
           mkdir -p crates/jagprox-app/binaries
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do
+            cp "target-cli/$t/release/jagprox" "crates/jagprox-app/binaries/jagprox-$t"
+          done
+          # Tauri builds each architecture, then merges them into the universal app.
           lipo -create -output crates/jagprox-app/binaries/jagprox-universal-apple-darwin \
             target-cli/aarch64-apple-darwin/release/jagprox target-cli/x86_64-apple-darwin/release/jagprox
       - name: Build the app and .dmg
