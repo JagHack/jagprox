@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "What the launcher pages may do: listen to events and drag the window.",
-  "windows": ["main", "splash"],
+  "windows": ["main", "splash", "update"],
   "permissions": ["core:default", "core:window:allow-start-dragging"]
 }

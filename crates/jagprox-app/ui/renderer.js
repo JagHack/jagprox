@@ -292,6 +292,29 @@ function initializeSettingsPage() {
     });
 
     bridge.send('get-app-version');
+
+    const cliGroup = document.getElementById('cli-group');
+    const cliInfo = document.getElementById('cli-info');
+    const installCliBtn = document.getElementById('install-cli-btn');
+
+    bridge.on('cli-status', (status) => {
+        cliGroup.style.display = status && status.offer ? '' : 'none';
+        if (status && status.installed) {
+            cliInfo.textContent = 'The jagprox command is installed. Try: jagprox --help';
+        }
+    });
+
+    installCliBtn.addEventListener('click', () => {
+        installCliBtn.disabled = true;
+        bridge.send('install-cli');
+    });
+
+    bridge.on('cli-install-reply', (reply) => {
+        installCliBtn.disabled = false;
+        cliInfo.textContent = reply.message;
+    });
+
+    bridge.send('get-cli-status');
 }
 
 document.addEventListener('DOMContentLoaded', () => {

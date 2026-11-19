@@ -9,6 +9,7 @@ use jagprox_core::api::{Backend, Hypixel, OnlineStatus};
 use jagprox_core::config::Config;
 use jagprox_core::constants::{self, GAME_MODES};
 use jagprox_core::formatter::{format_rank, player_name_color};
+use jagprox_core::install::{self, Install};
 use jagprox_core::log::log;
 use jagprox_core::proxy::{Proxy, ProxyEvent, ProxyOptions};
 use jagprox_core::stat_format;
@@ -16,6 +17,7 @@ use serde_json::{Map, Value, json};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::discord::Discord;
+use crate::updater::{self, Check};
 
 pub struct AppState {
     pub data_dir: PathBuf,
@@ -109,11 +111,46 @@ pub async fn ipc(app: AppHandle, channel: String, payload: Option<Value>) -> Res
             log("Logged out.");
         }
         "get-app-version" => emit(&app, "app-version", env!("CARGO_PKG_VERSION")),
-        "check-for-updates" => emit(
-            &app,
-            "update-status",
-            "Update checks arrive with the first Rust release.",
-        ),
+        "check-for-updates" => {
+            emit(&app, "update-status", "Checking for updates...");
+            if let Check::Nothing(text) = updater::check(&app).await {
+                emit(&app, "update-status", text);
+            }
+        }
+        "update-response" => {
+            if updater::respond(&app, payload.as_str() == Some("update")).await {
+                // Installed: make way for the new version.
+                state.stop_proxy();
+                state.discord.set_enabled(false);
+                app.exit(0);
+            } else if app.get_webview_window("main").is_none() {
+                tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                crate::open_main(&app);
+            }
+        }
+        "get-cli-status" => {
+            let install = install::detect();
+            let offer = matches!(install, Install::AppImage { .. } | Install::MacApp { .. });
+            let installed = offer
+                && install::cli_target(&install)
+                    .ok()
+                    .zip(install::link_path())
+                    .is_some_and(|(target, link)| {
+                        std::fs::canonicalize(link).ok() == std::fs::canonicalize(target).ok()
+                    });
+            emit(
+                &app,
+                "cli-status",
+                json!({ "offer": offer, "installed": installed }),
+            );
+        }
+        "install-cli" => {
+            let reply = match install_cli() {
+                Ok(message) => json!({ "ok": true, "message": message }),
+                Err(message) => json!({ "ok": false, "message": message }),
+            };
+            emit(&app, "cli-install-reply", reply);
+        }
         "get-config" => {
             let config = &state.config;
             emit(
@@ -517,4 +554,39 @@ async fn player_status(state: &AppState, name: &str) -> Value {
         }
     }
     json!({ "lines": lines })
+}
+
+/// The Settings "Install Command" button: links `jagprox` onto PATH and, on Linux,
+/// adds ~/.local/bin to the shell's PATH if it isn't there.
+#[cfg(unix)]
+fn install_cli() -> Result<String, String> {
+    let target = install::cli_target(&install::detect())?;
+    let link = install::link_path().ok_or("could not find your home folder")?;
+    match install::link_cli(&target, &link) {
+        Ok(_) => {}
+        #[cfg(target_os = "macos")]
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            install::link_cli_as_admin(&target, &link, true)
+                .map_err(|e| format!("Not installed: {e}"))?;
+        }
+        Err(e) => return Err(format!("Could not create {}: {e}", link.display())),
+    }
+    log(format!(
+        "Installed the jagprox command: {} -> {}",
+        link.display(),
+        target.display()
+    ));
+    if !cfg!(target_os = "macos")
+        && let Some(dir) = link.parent()
+        && !install::on_path(dir)
+        && let Some(fix) = install::current_path_fix()
+    {
+        install::apply_path_fix(&fix)?;
+    }
+    Ok("Installed. Open a new terminal and run: jagprox --help".into())
+}
+
+#[cfg(not(unix))]
+fn install_cli() -> Result<String, String> {
+    Err("The installer already put jagprox on PATH.".into())
 }

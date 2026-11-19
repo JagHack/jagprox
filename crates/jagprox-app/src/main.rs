@@ -6,6 +6,7 @@
 
 mod discord;
 mod ipc;
+mod updater;
 
 use std::io::Write;
 use std::time::Duration;
@@ -16,6 +17,7 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::discord::Discord;
 use crate::ipc::AppState;
+use crate::updater::{Check, Updates};
 
 /// WebKitGTK's DMA-BUF renderer crashes on NVIDIA under Wayland ("Error 71 (Protocol
 /// error) dispatching to Wayland display"), so it is turned off there unless the user
@@ -42,7 +44,57 @@ fn fix_unset_gtk_dpi() {
     }
 }
 
+/// `jagprox install-cli` links `jagprox` to the AppImage itself, so the AppImage
+/// starts this binary for CLI commands too; those runs go to the bundled CLI.
+#[cfg(target_os = "linux")]
+fn run_cli_if_called_as_jagprox() {
+    use std::os::unix::process::CommandExt;
+    if std::env::var_os("APPIMAGE").is_none() {
+        return;
+    }
+    let Some(argv0) = std::env::var_os("ARGV0") else {
+        return;
+    };
+    if std::path::Path::new(&argv0).file_name() != Some("jagprox".as_ref()) {
+        return;
+    }
+    let Some(cli) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("jagprox")))
+    else {
+        return;
+    };
+    let error = std::process::Command::new(&cli)
+        .args(std::env::args_os().skip(1))
+        .exec();
+    eprintln!("jagprox: could not start {}: {error}", cli.display());
+    std::process::exit(1);
+}
+
+/// Opens the launcher window and closes the splash.
+pub fn open_main(handle: &tauri::AppHandle) {
+    if let Some(main) = handle.get_webview_window("main") {
+        let _ = main.set_focus();
+        return;
+    }
+    let main = WebviewWindowBuilder::new(handle, "main", WebviewUrl::App("index.html".into()))
+        .title("JagProx")
+        .inner_size(1000.0, 650.0)
+        .min_inner_size(760.0, 480.0)
+        .decorations(false)
+        .center()
+        .build();
+    if let Err(e) = main {
+        jagprox_core::log::log(format!("[ERROR] Could not open the launcher window: {e}"));
+    }
+    if let Some(splash) = handle.get_webview_window("splash") {
+        let _ = splash.close();
+    }
+}
+
 fn main() {
+    #[cfg(target_os = "linux")]
+    run_cli_if_called_as_jagprox();
     #[cfg(target_os = "linux")]
     work_around_webkit_nvidia();
 
@@ -78,6 +130,7 @@ fn main() {
             }
         }))
         .manage(AppState::new(data_dir.clone(), config.clone(), discord))
+        .manage(Updates::default())
         .invoke_handler(tauri::generate_handler![ipc::ipc])
         .setup(move |app| {
             #[cfg(target_os = "linux")]
@@ -114,26 +167,15 @@ fn main() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(300)).await;
-                let _ = handle.emit("update-status", "Launching JagProx...");
-                tokio::time::sleep(Duration::from_millis(1200)).await;
-                let main = WebviewWindowBuilder::new(
-                    &handle,
-                    "main",
-                    WebviewUrl::App("index.html".into()),
-                )
-                .title("JagProx")
-                .inner_size(1000.0, 650.0)
-                .min_inner_size(760.0, 480.0)
-                .decorations(false)
-                .center()
-                .build();
-                if let Err(e) = main {
-                    jagprox_core::log::log(format!(
-                        "[ERROR] Could not open the launcher window: {e}"
-                    ));
-                }
-                if let Some(splash) = handle.get_webview_window("splash") {
-                    let _ = splash.close();
+                let _ = handle.emit("update-status", "Checking for updates...");
+                match updater::check(&handle).await {
+                    // The prompt's answer carries on (ipc `update-response`).
+                    Check::Prompted => {}
+                    Check::Nothing(text) => {
+                        let _ = handle.emit("update-status", text);
+                        tokio::time::sleep(Duration::from_millis(1200)).await;
+                        open_main(&handle);
+                    }
                 }
             });
             Ok(())

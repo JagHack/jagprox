@@ -10,8 +10,12 @@ const LAUNCHER: &str = if cfg!(windows) {
 };
 
 /// Next to this binary (installers put both in one folder; macOS: inside the app
-/// bundle), then anywhere on PATH.
+/// bundle), then anywhere on PATH. Inside the AppImage it's the AppImage itself: its
+/// mount goes away when this command exits, so the launcher needs a fresh start of it.
 fn find_launcher() -> Option<PathBuf> {
+    if let Some(appimage) = std::env::var_os("APPIMAGE") {
+        return Some(PathBuf::from(appimage));
+    }
     let exe = std::env::current_exe().ok()?;
     let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
     let beside = exe.parent()?.join(LAUNCHER);
@@ -33,6 +37,8 @@ pub fn launch_launcher() -> Result<(), String> {
     })?;
     let mut command = Command::new(&path);
     command
+        .env_remove("ARGV0")
+        .env_remove("APPIMAGE")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
