@@ -18,6 +18,9 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  ; 3.0.0-alpha.2/3 downloaded updates into the install folder; clear that out.
+  RMDir /r "$INSTDIR\updates"
+
   ; Put jagprox.exe on the user's PATH.
   nsExec::Exec '"$INSTDIR\jagprox.exe" __windows-path add "$INSTDIR"'
   Pop $R0
