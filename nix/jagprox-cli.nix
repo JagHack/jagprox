@@ -13,13 +13,17 @@ rustPlatform.buildRustPackage {
       ../Cargo.toml
       ../Cargo.lock
       ../crates
+      # Embedded into the binary.
       ../config.yml
+      ../aliases.json
+      ../server-icon.png
     ];
   };
   cargoLock.lockFile = ../Cargo.lock;
 
   cargoBuildFlags = [ "-p" "jagprox-cli" ];
-  cargoTestFlags = [ "--workspace" ];
+  # The launcher (jagprox-app) needs WebKitGTK and is packaged separately.
+  cargoTestFlags = [ "-p" "mcproto" "-p" "jagprox-core" "-p" "jagprox-cli" ];
 
   meta = {
     description = "JagProx - a Hypixel proxy";

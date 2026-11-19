@@ -1,6 +1,7 @@
 //! `jagprox` command-line entry point.
 
 mod commands;
+mod launch;
 mod login;
 mod proxy_cmd;
 mod term;
@@ -154,7 +155,7 @@ async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
         Cmd::Link => commands::link(),
         Cmd::Launch {
             what: LaunchTarget::Launcher,
-        } => not_yet("launch launcher"),
+        } => launch::launch_launcher(),
         Cmd::Launch {
             what: LaunchTarget::Proxy { chat },
         } => proxy_cmd::run_proxy(ctx.color, chat).await,

@@ -37,6 +37,13 @@ jobs:
       - name: Install node packages (without Electron's binary download)
         run: npm ci --ignore-scripts
 
+      # The launcher window (Tauri) needs WebKitGTK on Linux.
+      - name: Install launcher build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev libgtk-3-dev librsvg2-dev pkg-config
+
       - name: Format
         run: cargo fmt --all --check
 

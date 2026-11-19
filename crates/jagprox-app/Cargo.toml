@@ -1,0 +1,23 @@
+[package]
+name = "jagprox-app"
+description = "JagProx launcher window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "jagprox-launcher"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+jagprox-core = { path = "../jagprox-core" }
+discord-rich-presence = "1"
+open = "5"
+serde = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }

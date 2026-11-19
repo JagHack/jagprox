@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/mcproto", "crates/jagprox-core", "crates/jagprox-cli"]
+members = ["crates/mcproto", "crates/jagprox-core", "crates/jagprox-cli", "crates/jagprox-app"]
 
 [workspace.package]
 version = "3.0.0-alpha.0"
