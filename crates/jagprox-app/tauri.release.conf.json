@@ -19,7 +19,10 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "installerHooks": "windows/hooks.nsh"
+        "installerHooks": "windows/hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "windows/installer-header.bmp",
+        "sidebarImage": "windows/installer-sidebar.bmp"
       }
     },
     "macOS": {

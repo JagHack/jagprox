@@ -1,2 +1,3 @@
 # Test fixtures are byte-exact (signed, hashed or compared): never convert line endings.
 crates/*/tests/fixtures/** -text
+*.bmp -text
