@@ -65,7 +65,7 @@ jobs:
           path: jagprox-linux-${{ matrix.arch }}.tar.gz
 
   app-linux:
-    needs: [version, cli-linux]
+    needs: version
     strategy:
       matrix:
         include:
@@ -90,14 +90,13 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev libgtk-3-dev librsvg2-dev \
             libayatana-appindicator3-dev patchelf file libfuse2
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/download-artifact@v4
-        with:
-          name: cli-linux-${{ matrix.arch }}
-      - name: Bundle the CLI with the launcher
+      # A regular glibc build, not the static one: the AppImage tool adds a library
+      # path to every binary it bundles, which crashes a static-pie binary.
+      - name: Build the CLI to bundle with the launcher
         run: |
+          cargo build --release --locked -p jagprox-cli
           mkdir -p crates/jagprox-app/binaries
-          tar -xzf jagprox-linux-${{ matrix.arch }}.tar.gz -C crates/jagprox-app/binaries jagprox
-          mv crates/jagprox-app/binaries/jagprox crates/jagprox-app/binaries/jagprox-${{ matrix.arch }}-unknown-linux-gnu
+          cp target/release/jagprox crates/jagprox-app/binaries/jagprox-${{ matrix.arch }}-unknown-linux-gnu
       - name: Build .deb, .rpm and AppImage
         working-directory: crates/jagprox-app
         run: npx --yes "$TAURI_CLI" build --config tauri.release.conf.json --bundles deb,rpm,appimage
