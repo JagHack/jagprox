@@ -13,4 +13,13 @@ path = "src/main.rs"
 jagprox-core = { path = "../jagprox-core" }
 clap = { version = "4", features = ["derive"] }
 dirs = "6"
+getrandom = "0.3"
+keyring = "4"
 open = "5"
+reqwest = { version = "0.13", default-features = false }
+rpassword = "7"
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
+
+[target.'cfg(windows)'.dependencies]
+enable-ansi-support = "0.2"

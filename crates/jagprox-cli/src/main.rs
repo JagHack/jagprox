@@ -1,23 +1,79 @@
 //! `jagprox` command-line entry point.
 
-use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+mod commands;
+mod login;
+mod session;
+mod term;
+
+use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use commands::{Ctx, GametrackPeriod};
 
-/// Folder name shared with the Electron launcher, so existing settings carry over.
-const DATA_DIR_NAME: &str = "jagprox-launcher";
 const DEFAULT_CONFIG: &str = include_str!("../../../config.yml");
 
 #[derive(Parser)]
-#[command(name = "jagprox", version, about = "JagProx - a Hypixel proxy")]
+#[command(name = "jagprox", version, about = "JagProx - a Hypixel proxy", after_help = EXAMPLES)]
 struct Cli {
+    /// Print raw JSON instead of formatted text (stats, status, profile, gametrack)
+    #[arg(long, global = true)]
+    json: bool,
+
     #[command(subcommand)]
     command: Option<Cmd>,
 }
 
+const EXAMPLES: &str = "Examples:
+  jagprox stats Notch            Bed Wars stats for Notch
+  jagprox stats Notch sumo       Sumo Duels stats
+  jagprox status Notch           Is Notch online, and where?
+  jagprox login                  Log in to your JagProx account";
+
 #[derive(Subcommand)]
 enum Cmd {
+    /// Hypixel stats for a player (default game: Bed Wars)
+    #[command(visible_alias = "sc")]
+    Stats {
+        player: String,
+        /// Game mode, e.g. bw, skywars, sumo, "mega walls" (see `jagprox modes`)
+        mode: Vec<String>,
+    },
+    /// Is a player online, and in which game?
+    Status { player: String },
+    /// Duels wins and losses per mode
+    Spread { player: String },
+    /// Duels titles per mode
+    Jtitles { player: String },
+    /// Players in a Duels mode right now (no mode: list the modes)
+    Playercount { mode: Vec<String> },
+    /// Your tracked wins and losses
+    #[command(visible_alias = "gt")]
+    Gametrack {
+        #[command(subcommand)]
+        period: Option<Period>,
+    },
+    /// List the game modes `stats` understands
+    Modes,
+    /// Log in to your JagProx account
+    Login {
+        /// Log in with email and password instead of the browser (for SSH / no browser)
+        #[arg(long, value_name = "EMAIL", num_args = 0..=1)]
+        email: Option<Option<String>>,
+    },
+    /// Log out and forget the saved login
+    Logout,
+    /// Show your JagProx account
+    Profile,
+    /// Show or set the Hypixel API key stored on your JagProx account
+    Key {
+        /// The new key to save
+        api_key: Option<String>,
+        /// Print the full key instead of a masked one
+        #[arg(long)]
+        show: bool,
+    },
+    /// Link your Minecraft account to JagProx
+    Link,
     /// Launch the launcher window or the proxy on its own
     Launch {
         #[command(subcommand)]
@@ -31,6 +87,16 @@ enum Cmd {
     Update,
 }
 
+#[derive(Subcommand, Clone)]
+enum Period {
+    /// The last N hours (default 1)
+    Hour { hours: Option<u32> },
+    /// Today
+    Day,
+    /// Your 10 most recent games
+    Log,
+}
+
 #[derive(Subcommand)]
 enum LaunchTarget {
     /// Open the launcher window (default when no command is given)
@@ -39,60 +105,73 @@ enum LaunchTarget {
     Proxy,
 }
 
-fn data_dir() -> Result<PathBuf, String> {
-    dirs::config_dir()
-        .map(|d| d.join(DATA_DIR_NAME))
-        .ok_or_else(|| "could not find your user config folder".into())
-}
-
-fn open_config() -> Result<(), String> {
-    let dir = data_dir()?;
-    let path = dir.join("config.yml");
-    if !path.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        std::fs::write(&path, DEFAULT_CONFIG).map_err(|e| format!("{}: {e}", path.display()))?;
-        println!("Created default config at {}", path.display());
-    }
-
-    // Terminal users with $EDITOR set get it in place; everyone else gets the OS default app.
-    if let Some(editor) = std::env::var_os("EDITOR").filter(|e| !e.is_empty()) {
-        let status = Command::new(&editor)
-            .arg(&path)
-            .status()
-            .map_err(|e| format!("could not start {}: {e}", editor.to_string_lossy()))?;
-        if !status.success() {
-            return Err(format!("{} exited with {status}", editor.to_string_lossy()));
-        }
-    } else {
-        open::that_detached(&path)
-            .map_err(|e| format!("could not open {}: {e}", path.display()))?;
-        println!("Opened {}", path.display());
-    }
-    Ok(())
-}
-
 fn not_yet(what: &str) -> Result<(), String> {
     Err(format!(
         "`jagprox {what}` is not available yet in the Rust build"
     ))
 }
 
-fn main() -> ExitCode {
-    let cli = Cli::parse();
-    let result = match cli.command.unwrap_or(Cmd::Launch {
-        what: LaunchTarget::Launcher,
-    }) {
+async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
+    match cmd {
+        Cmd::Stats { player, mode } => commands::stats(ctx, &player, &mode).await,
+        Cmd::Status { player } => commands::status(ctx, &player).await,
+        Cmd::Spread { player } => commands::spread(ctx, &player).await,
+        Cmd::Jtitles { player } => commands::jtitles(ctx, &player).await,
+        Cmd::Playercount { mode } => commands::playercount(ctx, &mode).await,
+        Cmd::Gametrack { period } => {
+            let period = match period.unwrap_or(Period::Hour { hours: None }) {
+                Period::Hour { hours: Some(0) } => return Err("invalid number of hours.".into()),
+                Period::Hour { hours } => GametrackPeriod::Hours(hours.unwrap_or(1)),
+                Period::Day => GametrackPeriod::Day,
+                Period::Log => GametrackPeriod::Log,
+            };
+            commands::gametrack(ctx, period).await
+        }
+        Cmd::Modes => commands::modes(ctx),
+        Cmd::Login { email } => commands::login(email).await,
+        Cmd::Logout => commands::logout(),
+        Cmd::Profile => commands::profile(ctx).await,
+        Cmd::Key { api_key, show } => commands::key(api_key, show).await,
+        Cmd::Link => commands::link(),
         Cmd::Launch {
             what: LaunchTarget::Launcher,
         } => not_yet("launch launcher"),
         Cmd::Launch {
             what: LaunchTarget::Proxy,
         } => not_yet("launch proxy"),
-        Cmd::Config => open_config(),
+        Cmd::Config => commands::open_config(DEFAULT_CONFIG),
         Cmd::Version { .. } => not_yet("version"),
         Cmd::Update => not_yet("update"),
+    }
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let ctx = Ctx {
+        color: term::detect(),
+        json: cli.json,
     };
-    match result {
+    // Library log lines are diagnostics; the CLI only shows them with JAGPROX_DEBUG.
+    if std::env::var_os("JAGPROX_DEBUG").is_none() {
+        jagprox_core::log::set_sink(|_| {});
+    } else {
+        jagprox_core::log::set_sink(|line| eprintln!("{line}"));
+    }
+
+    let command = cli.command.unwrap_or(Cmd::Launch {
+        what: LaunchTarget::Launcher,
+    });
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("jagprox: could not start: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match runtime.block_on(run(command, &ctx)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("jagprox: {e}");
