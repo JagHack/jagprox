@@ -16,6 +16,22 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.png", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Game",
+    "publisher": "JagHack",
+    "homepage": "https://github.com/JagHack/jagprox",
+    "copyright": "JagHack",
+    "license": "GPL-3.0-or-later",
+    "shortDescription": "Hypixel proxy with in-game stats",
+    "longDescription": "JagProx is a Minecraft 1.8.9 proxy for Hypixel: tab stats, queue stats, prequeue ranks, auto GG and the jagprox command-line tool.",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
   }
 }

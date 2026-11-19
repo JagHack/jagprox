@@ -28,7 +28,7 @@ rustPlatform.buildRustPackage {
   meta = {
     description = "JagProx - a Hypixel proxy";
     homepage = "https://github.com/JagHack/jagprox";
-    license = lib.licenses.mit;
+    license = lib.licenses.gpl3Plus;
     mainProgram = "jagprox";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;
   };

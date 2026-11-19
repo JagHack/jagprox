@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories={{categories}}
+Comment={{comment}}
+Exec={{exec}}
+Icon={{icon}}
+Name=JagProx
+Terminal=false
+Type=Application
+StartupWMClass=jagprox-launcher

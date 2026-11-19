@@ -1,0 +1,270 @@
+name: Release
+
+# A v3+ tag builds everything, tests the installers and creates a draft GitHub
+# release. Run it by hand (Actions > Release > Run workflow) to build and test
+# without releasing; the files are then attached to the run.
+on:
+  push:
+    tags:
+      - 'v[3-9].*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  TAURI_CLI: '@tauri-apps/cli@2.11.4'
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: Version from Cargo.toml (must match the tag)
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "v$version" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} doesn't match Cargo.toml version $version"
+            exit 1
+          fi
+
+  cli-linux:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch }}-unknown-linux-musl
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - uses: Swatinem/rust-cache@v2
+      - name: Build static jagprox
+        run: cargo build --release --locked -p jagprox-cli --target ${{ matrix.arch }}-unknown-linux-musl
+      - name: Package
+        run: |
+          bin=target/${{ matrix.arch }}-unknown-linux-musl/release/jagprox
+          file "$bin" | grep -q static
+          "$bin" --version
+          mkdir -p out && cp "$bin" LICENSE out/
+          tar -czf jagprox-linux-${{ matrix.arch }}.tar.gz -C out jagprox LICENSE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-linux-${{ matrix.arch }}
+          path: jagprox-linux-${{ matrix.arch }}.tar.gz
+
+  app-linux:
+    needs: [version, cli-linux]
+    strategy:
+      matrix:
+        include:
+          # 22.04: the oldest glibc we build against, so the launcher runs on older distros too.
+          - arch: x86_64
+            deb: amd64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            deb: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf file libfuse2
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: cli-linux-${{ matrix.arch }}
+      - name: Bundle the CLI with the launcher
+        run: |
+          mkdir -p crates/jagprox-app/binaries
+          tar -xzf jagprox-linux-${{ matrix.arch }}.tar.gz -C crates/jagprox-app/binaries jagprox
+          mv crates/jagprox-app/binaries/jagprox crates/jagprox-app/binaries/jagprox-${{ matrix.arch }}-unknown-linux-gnu
+      - name: Build .deb, .rpm and AppImage
+        working-directory: crates/jagprox-app
+        run: npx --yes "$TAURI_CLI" build --config tauri.release.conf.json --bundles deb,rpm,appimage
+      - name: Collect
+        run: |
+          b=target/release/bundle
+          mkdir -p dist
+          cp "$b/deb/jagprox_${V}_${{ matrix.deb }}.deb" dist/
+          cp "$b/rpm/jagprox-${V}-1.${{ matrix.arch }}.rpm" dist/
+          cp "$b"/appimage/jagprox_"${V}"_*.AppImage "dist/JagProx-${V}-${{ matrix.arch }}.AppImage"
+          ls -la dist
+      - name: Test the .deb
+        run: |
+          sudo apt-get install -y "./dist/jagprox_${V}_${{ matrix.deb }}.deb"
+          jagprox --version | grep -F "$V"
+          test "$(cat /usr/lib/jagprox/package)" = deb
+          test -x /usr/bin/jagprox-launcher
+          jagprox install-cli | grep -F "Nothing to do"
+          sudo apt-get remove -y jagprox
+      - name: Test the AppImage's jagprox link
+        run: |
+          app="$PWD/dist/JagProx-${V}-${{ matrix.arch }}.AppImage"
+          link="$RUNNER_TEMP/test-bin/jagprox"
+          mkdir -p "$RUNNER_TEMP/test-bin" && ln -s "$app" "$link"
+          "$link" --version | grep -F "$V"
+          # install-cli with a scratch home: links ~/.local/bin/jagprox to the AppImage.
+          HOME="$RUNNER_TEMP/home" "$link" install-cli < /dev/null
+          test "$(readlink "$RUNNER_TEMP/home/.local/bin/jagprox")" = "$app"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-linux-${{ matrix.arch }}
+          path: dist/*
+
+  app-windows:
+    needs: version
+    runs-on: windows-latest
+    env:
+      V: ${{ needs.version.outputs.version }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+      - name: Build jagprox.exe (static C runtime, so it runs without the VC++ redistributable)
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          cargo build --release --locked -p jagprox-cli --target-dir target-cli
+          New-Item -ItemType Directory -Force crates/jagprox-app/binaries | Out-Null
+          Copy-Item target-cli/release/jagprox.exe crates/jagprox-app/binaries/jagprox-x86_64-pc-windows-msvc.exe
+      - name: Build the installer
+        working-directory: crates/jagprox-app
+        run: npx --yes "$env:TAURI_CLI" build --config tauri.release.conf.json --bundles nsis
+      - name: Collect
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "target/release/bundle/nsis/JagProx_${env:V}_x64-setup.exe" "dist/JagProx-Setup-${env:V}.exe"
+      - name: Test install over JagProx 2, PATH and uninstall
+        run: |
+          # JagProx 2.6.1 (Electron), as existing users have it.
+          gh release download v2.6.1 -R JagHack/jagprox -p 'JagProx-Setup-2.6.1.exe' -D old
+          Start-Process -Wait old/JagProx-Setup-2.6.1.exe -ArgumentList '/S','/currentuser'
+          $old = "$env:LOCALAPPDATA\Programs\JagProx"
+          if (-not (Test-Path "$old\Uninstall JagProx.exe")) { throw "JagProx 2 didn't install to $old" }
+
+          Start-Process -Wait "dist/JagProx-Setup-${env:V}.exe" -ArgumentList '/S'
+          $dir = "$env:LOCALAPPDATA\JagProx"
+          & "$dir\jagprox.exe" --version
+          if (-not (Test-Path "$dir\jagprox-launcher.exe")) { throw "launcher missing" }
+          if (Test-Path "$old\Uninstall JagProx.exe") { throw "JagProx 2 is still installed" }
+          $path = (Get-Item HKCU:\Environment).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+          if (-not ($path -split ';' -contains $dir)) { throw "PATH is missing $dir : $path" }
+          if ((Get-Item HKCU:\Environment).GetValueKind('Path') -ne 'ExpandString') { throw "PATH lost REG_EXPAND_SZ" }
+          & "$dir\jagprox.exe" install-cli
+
+          Start-Process -Wait "$dir\uninstall.exe" -ArgumentList '/S',"_?=$dir"
+          $path = (Get-Item HKCU:\Environment).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+          if ($path -split ';' -contains $dir) { throw "uninstall left $dir on PATH" }
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-windows
+          path: dist/*
+
+  app-macos:
+    needs: version
+    runs-on: macos-latest
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+      - name: Build a universal jagprox
+        run: |
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked -p jagprox-cli --target $t --target-dir target-cli
+          done
+          mkdir -p crates/jagprox-app/binaries
+          lipo -create -output crates/jagprox-app/binaries/jagprox-universal-apple-darwin \
+            target-cli/aarch64-apple-darwin/release/jagprox target-cli/x86_64-apple-darwin/release/jagprox
+      - name: Build the app and .dmg
+        working-directory: crates/jagprox-app
+        run: npx --yes "$TAURI_CLI" build --target universal-apple-darwin --config tauri.release.conf.json --bundles app,dmg
+      - name: Collect
+        run: |
+          b=target/universal-apple-darwin/release/bundle
+          mkdir -p dist
+          cp "$b/dmg/JagProx_${V}_universal.dmg" "dist/JagProx-${V}-universal.dmg"
+          tar -czf "dist/JagProx-${V}-universal.app.tar.gz" -C "$b/macos" JagProx.app
+          "$b/macos/JagProx.app/Contents/MacOS/jagprox" --version | grep -F "$V"
+          lipo -archs "$b/macos/JagProx.app/Contents/MacOS/jagprox-launcher"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-macos
+          path: dist/*
+
+  publish:
+    needs: [version, cli-linux, app-linux, app-windows, app-macos]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release metadata
+        run: python3 scripts/release-manifest.py "$V" dist
+      - name: Sign
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          umask 077
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
+          minisign -S -s "$RUNNER_TEMP/minisign.key" -m dist/jagprox-release.json -t "JagProx $V"
+          rm -f "$RUNNER_TEMP/minisign.key"
+          # The key the apps trust (crates/jagprox-core/src/update.rs) must verify it.
+          key=$(sed -n 's/^const PUBLIC_KEY: &str = "\(.*\)";$/\1/p' crates/jagprox-core/src/update.rs)
+          minisign -V -m dist/jagprox-release.json -P "$key"
+      - name: AUR PKGBUILD
+        run: |
+          mkdir -p aur
+          sed -e "s/@VERSION@/$V/g" -e "s/@PKGVER@/${V//-/_}/g" \
+              -e "s/@SHA_X86_64@/$(sha256sum "dist/jagprox_${V}_amd64.deb" | cut -d' ' -f1)/" \
+              -e "s/@SHA_AARCH64@/$(sha256sum "dist/jagprox_${V}_arm64.deb" | cut -d' ' -f1)/" \
+              packaging/aur/PKGBUILD.in > aur/PKGBUILD
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sed "s/@VERSION@/$V/g" packaging/release-notes.md > notes.md
+          pre=""; case "$V" in *-*) pre="--prerelease";; esac
+          gh release create "v$V" dist/* aur/PKGBUILD --draft $pre --title "JagProx $V" --notes-file notes.md

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "jagprox",
+  "bundle": {
+    "linux": {
+      "deb": { "desktopTemplate": "packaging/jagprox.desktop" },
+      "rpm": { "desktopTemplate": "packaging/jagprox.desktop" }
+    }
+  }
+}

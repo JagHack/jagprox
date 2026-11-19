@@ -6,6 +6,8 @@ mod login;
 mod proxy_cmd;
 mod term;
 mod update_cmd;
+#[cfg(windows)]
+mod windows_path;
 
 use std::process::ExitCode;
 
@@ -94,6 +96,15 @@ enum Cmd {
     Update,
     /// Put the jagprox command on PATH (for the AppImage and the macOS app)
     InstallCli,
+    /// Used by the Windows installer: add or remove its folder on the user PATH
+    #[command(name = "__windows-path", hide = true)]
+    WindowsPath { action: PathAction, dir: String },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum PathAction {
+    Add,
+    Remove,
 }
 
 #[derive(Subcommand, Clone)]
@@ -169,6 +180,12 @@ async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
         Cmd::Version { version } => update_cmd::update(Some(&version)).await,
         Cmd::Update => update_cmd::update(None).await,
         Cmd::InstallCli => update_cmd::install_cli(),
+        #[cfg(windows)]
+        Cmd::WindowsPath { action, dir } => {
+            windows_path::run(matches!(action, PathAction::Add), &dir)
+        }
+        #[cfg(not(windows))]
+        Cmd::WindowsPath { .. } => Err("this is only for the Windows installer".into()),
     }
 }
 

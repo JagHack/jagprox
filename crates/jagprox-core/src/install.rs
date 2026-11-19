@@ -316,6 +316,38 @@ pub fn link_cli_as_admin(target: &Path, link: &Path, gui: bool) -> Result<(), St
     }
 }
 
+fn same_dir(a: &str, b: &str) -> bool {
+    let norm = |s: &str| s.trim().trim_end_matches(['\\', '/']).to_lowercase();
+    !a.trim().is_empty() && norm(a) == norm(b)
+}
+
+/// Windows `PATH` lists (`;`-separated): adds `dir` at the end. `None` if it's
+/// already there (case and a trailing backslash don't matter on Windows).
+pub fn windows_path_add(list: &str, dir: &str) -> Option<String> {
+    if list.split(';').any(|entry| same_dir(entry, dir)) {
+        return None;
+    }
+    let list = list.trim_end_matches(';');
+    Some(if list.is_empty() {
+        dir.to_string()
+    } else {
+        format!("{list};{dir}")
+    })
+}
+
+/// Removes every `dir` entry. `None` if there was none.
+pub fn windows_path_remove(list: &str, dir: &str) -> Option<String> {
+    if !list.split(';').any(|entry| same_dir(entry, dir)) {
+        return None;
+    }
+    Some(
+        list.split(';')
+            .filter(|entry| !same_dir(entry, dir))
+            .collect::<Vec<_>>()
+            .join(";"),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,6 +415,27 @@ mod tests {
                 exe: "/usr/local/bin/jagprox".into()
             }
         );
+    }
+
+    #[test]
+    fn windows_path_lists() {
+        let dir = r"C:\Users\me\AppData\Local\JagProx";
+        assert_eq!(windows_path_add("", dir).as_deref(), Some(dir));
+        assert_eq!(
+            windows_path_add(r"%USERPROFILE%\bin;", dir).unwrap(),
+            format!(r"%USERPROFILE%\bin;{dir}")
+        );
+        assert_eq!(
+            windows_path_add(r"C:\x;c:\users\ME\appdata\local\jagprox\", dir),
+            None
+        );
+        assert_eq!(
+            windows_path_remove(&format!(r"C:\x;{dir};%USERPROFILE%\bin;{dir}\"), dir).unwrap(),
+            r"C:\x;%USERPROFILE%\bin"
+        );
+        assert_eq!(windows_path_remove(r"C:\x", dir), None);
+        // An empty entry never matches.
+        assert_eq!(windows_path_remove("C:\\x;;", ""), None);
     }
 
     #[test]

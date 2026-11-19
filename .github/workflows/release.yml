@@ -3,7 +3,8 @@ name: Build/Release
 on:
   push:
     tags:
-      - 'v*'
+      # 2.x is the Electron app; v3+ is release-rust.yml.
+      - 'v2.*'
 
 jobs:
   release:

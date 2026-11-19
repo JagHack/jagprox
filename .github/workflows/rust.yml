@@ -107,5 +107,18 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
-      - name: Build Nix package
-        run: nix-build nix -A jagprox-cli && ./result/bin/jagprox --version
+      - name: Build Nix packages
+        run: |
+          nix-build nix -A jagprox-cli -o result-cli && ./result-cli/bin/jagprox --version
+          nix-build nix -A jagprox -o result-app && ./result-app/bin/jagprox --version
+          test -x result-app/bin/jagprox-launcher
+
+  install-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Shellcheck install.sh
+        run: shellcheck packaging/install.sh
