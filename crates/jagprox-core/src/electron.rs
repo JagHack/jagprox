@@ -124,9 +124,14 @@ fn migrate_with(
     {
         result.login_imported = save_login(&token);
     }
-    // Only look for the uninstall entry when there's state to clear.
-    let clear_state =
-        ELECTRON_STATE.iter().any(|n| data_dir.join(n).exists()) && !electron_installed();
+    // electron-updater's download folder (it kept the last installer). During the
+    // move this may still hold the running installer; it goes on a later start.
+    let updater = cache_dir
+        .map(|cache| cache.join(format!("{}-updater", account::DATA_DIR_NAME)))
+        .filter(|dir| dir.is_dir());
+    // Only look for the uninstall entry when there's something of JagProx 2's to clear.
+    let state_left = ELECTRON_STATE.iter().any(|n| data_dir.join(n).exists());
+    let clear_state = (state_left || updater.is_some()) && !electron_installed();
     let names = ELECTRON_CACHES
         .iter()
         .chain(ELECTRON_STATE.iter().filter(|_| clear_state));
@@ -139,12 +144,11 @@ fn migrate_with(
         };
         result.removed += usize::from(removed);
     }
-    // electron-updater's download folder (it kept the last installer).
-    if clear_state && let Some(cache) = cache_dir {
-        let updater = cache.join(format!("{}-updater", account::DATA_DIR_NAME));
-        if updater.is_dir() && fs::remove_dir_all(&updater).is_ok() {
-            result.removed += 1;
-        }
+    if clear_state
+        && let Some(updater) = updater
+        && fs::remove_dir_all(&updater).is_ok()
+    {
+        result.removed += 1;
     }
     result
 }
@@ -500,6 +504,36 @@ mod tests {
             assert!(data.join(kept).exists(), "{kept} was deleted");
         }
         assert!(root.join("cache/jagprox-launcher-updater").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_updater_folder_is_retried_on_its_own() {
+        // The installer ran the migration while it was itself in the updater folder,
+        // so only that folder is left.
+        let root =
+            std::env::temp_dir().join(format!("jagprox-electron-updater-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let data = root.join("jagprox-launcher");
+        fs::create_dir_all(&data).unwrap();
+        fs::create_dir_all(root.join("cache/jagprox-launcher-updater/pending")).unwrap();
+        let installed = migrate_with(
+            &data,
+            Some(&root.join("cache")),
+            || true,
+            || false,
+            |_| false,
+        );
+        assert_eq!(installed.removed, 0);
+        let gone = migrate_with(
+            &data,
+            Some(&root.join("cache")),
+            || false,
+            || false,
+            |_| false,
+        );
+        assert_eq!(gone.removed, 1);
+        assert!(!root.join("cache/jagprox-launcher-updater").exists());
         let _ = fs::remove_dir_all(&root);
     }
 
