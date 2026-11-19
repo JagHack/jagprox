@@ -201,6 +201,10 @@ fn main() -> ExitCode {
     } else {
         jagprox_core::log::set_sink(|line| eprintln!("{line}"));
     }
+    // First run after JagProx 2: keep its login, drop its Chromium files.
+    if let Ok(data_dir) = jagprox_core::account::data_dir() {
+        jagprox_core::electron::migrate(&data_dir);
+    }
 
     let command = cli.command.unwrap_or(Cmd::Launch {
         what: LaunchTarget::Launcher,

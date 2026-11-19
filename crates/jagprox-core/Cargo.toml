@@ -24,6 +24,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-native-certs = "0.8"
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
+snap = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt", "time", "sync", "net"] }
 webpki-roots = "1"

@@ -151,6 +151,18 @@ fn main() {
                 let _ = handle.emit("proxy-log", line);
             });
 
+            // First start after JagProx 2: keep its login, drop its Chromium files.
+            let moved = jagprox_core::electron::migrate(&data_dir);
+            if moved.login_imported {
+                jagprox_core::log::log("Kept your JagProx 2 login.");
+            }
+            if moved.removed > 0 {
+                jagprox_core::log::log(format!(
+                    "Removed {} leftover files of JagProx 2.",
+                    moved.removed
+                ));
+            }
+
             let watched = config.clone();
             tauri::async_runtime::spawn(async move {
                 watched.watch();

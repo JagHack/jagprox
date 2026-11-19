@@ -7,6 +7,7 @@ pub mod cache;
 pub mod chat_parsers;
 pub mod config;
 pub mod constants;
+pub mod electron;
 pub mod file_util;
 pub mod formatter;
 pub mod http;
