@@ -17,7 +17,22 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use crate::discord::Discord;
 use crate::ipc::AppState;
 
+/// WebKitGTK's DMA-BUF renderer crashes on NVIDIA under Wayland ("Error 71 (Protocol
+/// error) dispatching to Wayland display"), so it is turned off there unless the user
+/// already chose a value.
+#[cfg(target_os = "linux")]
+fn work_around_webkit_nvidia() {
+    const VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+    if std::env::var_os(VAR).is_none() && std::path::Path::new("/proc/driver/nvidia").exists() {
+        // SAFETY: called first thing in main, before any other thread exists.
+        unsafe { std::env::set_var(VAR, "1") };
+    }
+}
+
 fn main() {
+    #[cfg(target_os = "linux")]
+    work_around_webkit_nvidia();
+
     let data_dir = match account::data_dir() {
         Ok(dir) => dir,
         Err(e) => {
