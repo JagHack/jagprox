@@ -4,6 +4,8 @@ Copyright 2025-2026 JagHack (https://github.com/JagHack)
 This product includes software developed by JagHack
 (https://github.com/JagHack/jagprox).
 
+Thanks to Yanice, whose tips and help shaped JagProx in its early days.
+
 The launcher bundles third-party fonts and icons under their own licenses:
 - Font Awesome Free 6.5.1 (icons: CC BY 4.0, fonts: SIL OFL 1.1, code: MIT),
   see crates/jagprox-app/ui/vendor/fontawesome/LICENSE.txt

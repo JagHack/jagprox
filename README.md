@@ -141,6 +141,10 @@ Contributions are welcome and have already been made! Huge shoutout to Yanice an
 
 ---
 
+## Credits
+
+Made by JagHack. Thanks to Yanice, whose tips and help shaped JagProx in its early days.
+
 ## License
 
 JagProx is licensed under the [Apache License 2.0](LICENSE): use, change and share it however you like, including commercially. If you redistribute it or build on it, keep the [NOTICE](NOTICE) file so JagHack stays credited.
