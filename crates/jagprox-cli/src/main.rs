@@ -5,6 +5,7 @@ mod launch;
 mod login;
 mod proxy_cmd;
 mod term;
+mod update_cmd;
 
 use std::process::ExitCode;
 
@@ -91,6 +92,8 @@ enum Cmd {
     Version { version: String },
     /// Update to the latest JagProx version
     Update,
+    /// Put the jagprox command on PATH (for the AppImage and the macOS app)
+    InstallCli,
 }
 
 #[derive(Subcommand, Clone)]
@@ -123,12 +126,6 @@ enum AccountAction {
     List,
     /// Sign out an account
     Remove { name: String },
-}
-
-fn not_yet(what: &str) -> Result<(), String> {
-    Err(format!(
-        "`jagprox {what}` is not available yet in the Rust build"
-    ))
 }
 
 async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
@@ -169,8 +166,9 @@ async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
             action: AccountAction::Remove { name },
         } => proxy_cmd::account_remove(&name),
         Cmd::Config => commands::open_config(DEFAULT_CONFIG),
-        Cmd::Version { .. } => not_yet("version"),
-        Cmd::Update => not_yet("update"),
+        Cmd::Version { version } => update_cmd::update(Some(&version)).await,
+        Cmd::Update => update_cmd::update(None).await,
+        Cmd::InstallCli => update_cmd::install_cli(),
     }
 }
 

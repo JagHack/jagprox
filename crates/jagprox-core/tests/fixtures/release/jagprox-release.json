@@ -1,0 +1,7 @@
+{
+  "version": "3.1.0",
+  "assets": [
+    { "kind": "cli-linux-x86_64", "name": "jagprox-linux-x86_64.tar.gz", "sha256": "11e43ebfa81b85f06bdc6ddcb58a2e7415148a89731ef4e9a613eb926cbc20eb", "size": 146 },
+    { "kind": "cli-linux-aarch64", "name": "jagprox-linux-aarch64.tar.gz", "sha256": "11e43ebfa81b85f06bdc6ddcb58a2e7415148a89731ef4e9a613eb926cbc20eb", "size": 146 }
+  ]
+}

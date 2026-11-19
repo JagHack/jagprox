@@ -10,10 +10,12 @@ mcproto = { path = "../mcproto" }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dirs = "6"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 futures = "0.3"
 getrandom = "0.3"
 indexmap = "2"
 keyring = "4"
+minisign-verify = "0.2"
 png = "0.18"
 # rustls with `ring` instead of the default aws-lc-rs: no cmake, builds fully static.
 reqwest = { version = "0.13", default-features = false, features = ["form", "json", "query", "rustls-no-provider"] }
@@ -21,6 +23,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-native-certs = "0.8"
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
+sha2 = "0.10"
+tar = { version = "0.4", default-features = false }
 tokio = { version = "1", features = ["macros", "rt", "time", "sync", "net"] }
 webpki-roots = "1"
 

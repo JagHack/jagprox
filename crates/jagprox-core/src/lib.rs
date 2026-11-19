@@ -10,6 +10,7 @@ pub mod constants;
 pub mod file_util;
 pub mod formatter;
 pub mod http;
+pub mod install;
 pub mod js;
 pub mod log;
 pub mod msauth;
@@ -18,6 +19,7 @@ pub mod proxy;
 pub mod reports;
 pub mod stat_format;
 pub mod stat_helper;
+pub mod update;
 pub mod web_login;
 
 pub use constants::DEFAULT_PROXY_PORT;
