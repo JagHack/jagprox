@@ -9,8 +9,11 @@ license.workspace = true
 mcproto = { path = "../mcproto" }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+dirs = "6"
 futures = "0.3"
+getrandom = "0.3"
 indexmap = "2"
+keyring = "4"
 png = "0.18"
 # rustls with `ring` instead of the default aws-lc-rs: no cmake, builds fully static.
 reqwest = { version = "0.13", default-features = false, features = ["form", "json", "query", "rustls-no-provider"] }

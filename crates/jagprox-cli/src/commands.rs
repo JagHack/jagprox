@@ -9,8 +9,8 @@ use jagprox_core::nicknames::Nicknames;
 use jagprox_core::reports::{self, ReportError};
 use serde_json::{Value, json};
 
-use crate::session;
 use crate::term::{self, ColorMode, Spinner};
+use jagprox_core::account as session;
 
 pub type CmdResult = Result<(), String>;
 
@@ -110,7 +110,15 @@ fn print_json(value: &Value) {
 pub async fn login(email: Option<Option<String>>) -> CmdResult {
     let token = match email {
         Some(email) => crate::login::email_login(email).await?,
-        None => crate::login::browser_login().await?,
+        None => jagprox_core::web_login::browser_login(|url| {
+            println!("Opening your browser to log in to JagProx...");
+            println!("If it doesn't open, visit:\n  {url}\n");
+            println!(
+                "(No browser on this machine, e.g. over SSH? Use `jagprox login --email` instead.)"
+            );
+            let _ = open::that_detached(url);
+        })
+        .await?,
     };
     let profile = Backend::new(Some(token.clone()))
         .profile()

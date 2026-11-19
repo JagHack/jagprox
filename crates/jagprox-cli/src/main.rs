@@ -3,7 +3,6 @@
 mod commands;
 mod login;
 mod proxy_cmd;
-mod session;
 mod term;
 
 use std::process::ExitCode;

@@ -136,6 +136,18 @@ impl Session {
 
 const QUEUE: usize = 4096;
 
+/// Aborts the session's tasks when dropped, including when the proxy is stopped
+/// and the session itself is aborted.
+struct AbortOnDrop(Vec<AbortHandle>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        for task in &self.0 {
+            task.abort();
+        }
+    }
+}
+
 /// Writes everything queued for one side, batching what's ready into one write.
 async fn writer_loop(
     mut writer: FrameWriter<OwnedWriteHalf>,
@@ -183,6 +195,17 @@ pub(super) async fn run(
     let mut upstream = tokio::spawn(server_to_client(session.clone(), server.reader));
     let mut downstream = tokio::spawn(client_to_server(session.clone(), client.reader));
     session.spawn(modules::super_friends::run(session.clone()));
+    let _guard = AbortOnDrop(vec![
+        upstream.abort_handle(),
+        downstream.abort_handle(),
+        client_writer.abort_handle(),
+        server_writer.abort_handle(),
+    ]);
+    let tasks = session.clone();
+    let _session_tasks = scopeguard(move || {
+        tasks.proxy().set_current(None);
+        tasks.abort_tasks();
+    });
 
     let reason = tokio::select! {
         r = &mut upstream => { downstream.abort(); r }
@@ -240,6 +263,19 @@ async fn server_to_client(
 
 /// Runs the modules on a packet they care about; anything else (or anything that
 /// fails to decode) is forwarded untouched.
+/// Runs `f` when dropped.
+fn scopeguard(f: impl FnOnce()) -> impl Drop {
+    struct Guard<F: FnOnce()>(Option<F>);
+    impl<F: FnOnce()> Drop for Guard<F> {
+        fn drop(&mut self) {
+            if let Some(f) = self.0.take() {
+                f();
+            }
+        }
+    }
+    Guard(Some(f))
+}
+
 fn inspect_server_frame(session: &Session, frame: Frame) -> Out {
     let Ok(id) = frame.id() else {
         return Out::Frame(frame);

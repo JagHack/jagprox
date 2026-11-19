@@ -65,6 +65,8 @@ pub struct Proxy {
     hypixel: Hypixel,
     aliases: Aliases,
     current: Arc<Mutex<Option<Session>>>,
+    /// Open connections, aborted by [`Proxy::shutdown`].
+    connections: Mutex<Vec<tokio::task::AbortHandle>>,
 }
 
 impl Proxy {
@@ -111,6 +113,7 @@ impl Proxy {
             hypixel,
             aliases,
             current,
+            connections: Mutex::new(Vec::new()),
         }))
     }
 
@@ -124,6 +127,19 @@ impl Proxy {
 
     pub fn data_dir(&self) -> &std::path::Path {
         &self.options.data_dir
+    }
+
+    /// Closes every connection (the listener stops when its `run` task is aborted).
+    pub fn shutdown(&self) {
+        for connection in self
+            .connections
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain(..)
+        {
+            connection.abort();
+        }
+        *self.active.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     pub(super) fn set_current(&self, session: Option<Session>) {
@@ -167,11 +183,14 @@ impl Proxy {
                 }
             };
             let proxy = self.clone();
-            tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 if let Err(e) = proxy.handle(stream).await {
                     crate::log::debug(format!("Connection from {addr} ended: {e}"));
                 }
             });
+            let mut connections = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+            connections.retain(|c| !c.is_finished());
+            connections.push(handle.abort_handle());
         }
     }
 

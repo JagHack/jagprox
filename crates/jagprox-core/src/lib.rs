@@ -1,5 +1,6 @@
 //! JagProx proxy core: session relay, packet modules, commands and API clients.
 
+pub mod account;
 pub mod aliases;
 pub mod api;
 pub mod cache;
@@ -17,5 +18,6 @@ pub mod proxy;
 pub mod reports;
 pub mod stat_format;
 pub mod stat_helper;
+pub mod web_login;
 
 pub use constants::DEFAULT_PROXY_PORT;

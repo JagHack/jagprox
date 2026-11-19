@@ -1,6 +1,8 @@
-//! Where the JagProx login token lives: the OS keychain (Windows Credential Manager,
-//! macOS Keychain, Secret Service on Linux), or a private file when no keychain is
-//! available (headless servers, minimal desktops). `JAGPROX_TOKEN` overrides both.
+//! The JagProx data folder, and where the JagProx login token lives: the OS keychain
+//! (Windows Credential Manager, macOS Keychain, Secret Service on Linux), or a private
+//! file when no keychain is available (headless servers, minimal desktops).
+//! `JAGPROX_TOKEN` overrides both. Shared by the CLI and the launcher, so logging in
+//! with one logs in the other.
 
 use std::fs;
 use std::path::PathBuf;

@@ -5,8 +5,8 @@ use jagprox_core::msauth::Accounts;
 use jagprox_core::proxy::{Proxy, ProxyEvent, ProxyOptions};
 
 use crate::commands::CmdResult;
-use crate::session;
 use crate::term::{self, ColorMode};
+use jagprox_core::account as session;
 
 pub async fn run_proxy(color: ColorMode, show_chat: bool) -> CmdResult {
     let data_dir = session::data_dir()?;
