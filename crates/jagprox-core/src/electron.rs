@@ -61,9 +61,13 @@ const ELECTRON_STATE: &[&str] = &[
     ".updaterId",
 ];
 
-/// electron-builder's uninstall key for JagProx 2 (UUID v5 of com.jaghack.jagprox).
+/// electron-builder's uninstall keys for JagProx 2 (UUID v5 of com.jaghack.jagprox): an
+/// install for the current user, and one for all users.
 #[cfg(windows)]
-const ELECTRON_UNINSTALL_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\59aab638-ecaa-5aab-9b5b-9a5e6fed9139";
+const ELECTRON_UNINSTALL_KEYS: [&str; 2] = [
+    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\59aab638-ecaa-5aab-9b5b-9a5e6fed9139",
+    r"HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\59aab638-ecaa-5aab-9b5b-9a5e6fed9139",
+];
 
 /// Whether JagProx 2 may still be installed. Windows can tell from its uninstall
 /// entry (the JagProx 3 installer removes it); elsewhere JagProx 2 was an AppImage
@@ -73,13 +77,15 @@ fn electron_maybe_installed() -> bool {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        std::process::Command::new("reg")
-            .args(["query", ELECTRON_UNINSTALL_KEY])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .creation_flags(CREATE_NO_WINDOW)
-            .status()
-            .map_or(true, |s| s.success())
+        ELECTRON_UNINSTALL_KEYS.iter().any(|key| {
+            std::process::Command::new("reg")
+                .args(["query", key])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .status()
+                .map_or(true, |s| s.success())
+        })
     }
     #[cfg(not(windows))]
     {

@@ -15,6 +15,15 @@
     Delete "$R0\Uninstall JagProx.exe"
     RMDir "$R0"
   ${EndIf}
+
+  ; Installed for all users instead (Program Files): removing it needs admin rights, so
+  ; Windows asks. Otherwise it would stay next to JagProx 3 and keep offering this update.
+  ReadRegStr $R0 HKLM "Software\${JAGPROX2_GUID}" "InstallLocation"
+  ${If} $R0 != ""
+  ${AndIf} ${FileExists} "$R0\Uninstall JagProx.exe"
+    DetailPrint "Removing JagProx 2 (installed for all users)..."
+    ExecShellWait "runas" "$R0\Uninstall JagProx.exe" "/allusers /S" SW_HIDE
+  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
