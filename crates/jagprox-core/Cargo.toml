@@ -7,3 +7,11 @@ license.workspace = true
 
 [dependencies]
 mcproto = { path = "../mcproto" }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+futures = "0.3"
+indexmap = "2"
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml_ng = "0.10"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "time"] }
