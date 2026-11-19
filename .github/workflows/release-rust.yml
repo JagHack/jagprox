@@ -272,4 +272,4 @@ jobs:
         run: |
           sed "s/@VERSION@/$V/g" packaging/release-notes.md > notes.md
           pre=""; case "$V" in *-*) pre="--prerelease";; esac
-          gh release create "v$V" dist/* aur/PKGBUILD --draft $pre --title "JagProx $V" --notes-file notes.md
+          gh release create "v$V" dist/* aur/PKGBUILD packaging/install.sh --draft $pre --title "JagProx $V" --notes-file notes.md

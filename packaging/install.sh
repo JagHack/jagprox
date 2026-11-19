@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs the jagprox command (CLI and headless proxy) on any Linux:
-#   curl -fsSL https://raw.githubusercontent.com/JagHack/jagprox/main/packaging/install.sh | sh
+#   curl -fsSL https://github.com/JagHack/jagprox/releases/latest/download/install.sh | sh
 # It goes to ~/.local/bin (or $JAGPROX_BIN_DIR). Update it later with `jagprox update`.
 set -eu
 

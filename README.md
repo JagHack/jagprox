@@ -4,7 +4,7 @@
 
 **Disclaimer:** This is a third-party tool and is not affiliated with, endorsed, or supported by Hypixel Inc. Use at your own risk.
 
-JagProx is a powerful, local Hypixel proxy built with Node.js that enhances your gameplay experience by adding custom quality-of-life features, advanced statistical analysis, and powerful automation tools directly to your Minecraft client, all managed through a sleek desktop launcher.
+JagProx is a powerful, local Hypixel proxy that enhances your gameplay experience by adding custom quality-of-life features, advanced statistical analysis, and powerful automation tools directly to your Minecraft client, all managed through a sleek desktop launcher or the `jagprox` command. Since 3.0 it is written in Rust: a ~10 MB download instead of ~150 MB, a fraction of the memory, and it runs on Windows, macOS and Linux.
 
 ---
 
@@ -33,44 +33,53 @@ JagProx is a powerful, local Hypixel proxy built with Node.js that enhances your
   - **Integrated Settings:** Manage your API key, command aliases, and other settings directly within the launcher.
   - **Player Search Tools:** Look up detailed player stats and online status for any player on Hypixel.
 
+- **The `jagprox` command:**  
+  `jagprox stats Notch`, `jagprox status Notch`, `jagprox launch proxy` and more, from any terminal on any OS.
+
 - **Secure & Local:**  
-  The proxy runs entirely on your own machine. Your Minecraft account details are handled by the official `minecraft-protocol` library for authentication and are never sent to a third party.
+  The proxy runs entirely on your own machine. You sign in to your Minecraft account directly with Microsoft; your login is never sent to a third party.
 
 ---
 
 ## Installation Guide
 
-Follow these steps to get the JagProx devbuild up and running on your system. If you only want a working build, go to the releases tab and download the latest setup.exe file.
+Download JagProx from the [latest release](https://github.com/JagHack/jagprox/releases/latest):
 
-### 1. Prerequisites
+| System | Download | `jagprox` command |
+|---|---|---|
+| Windows 10/11 | `JagProx-Setup-<version>.exe` | added to PATH by the installer (open a new terminal) |
+| macOS 10.15+ | `JagProx-<version>-universal.dmg` (right-click the app → Open the first time) | Settings → Install Command |
+| Debian, Ubuntu, Mint, Pop!_OS | `jagprox_<version>_amd64.deb` (`arm64` for ARM) | included |
+| Fedora, openSUSE, RHEL | `jagprox-<version>-1.x86_64.rpm` (`aarch64` for ARM) | included |
+| Arch, Manjaro, EndeavourOS | the `PKGBUILD` from the release (AUR: `jagprox-bin`) | included |
+| NixOS / Nix | `nix-build nix -A jagprox` from this repository | included |
+| Any other Linux | `JagProx-<version>-x86_64.AppImage` | Settings → Install Command |
+| Terminal only, any Linux | `curl -fsSL https://github.com/JagHack/jagprox/releases/latest/download/install.sh \| sh` | `~/.local/bin/jagprox` |
 
-Before you begin, ensure you have the following installed:
+Already on JagProx 2? It offers the update itself; your login, settings and aliases carry over. Updates after that come from the launcher (Settings → Check for Updates) or `jagprox update`.
 
-- **Node.js:** Version 22.12 or newer. [Download here](https://nodejs.org/).
-- **Git:** Required to clone the repository. [Download here](https://git-scm.com/).
-- **A valid Minecraft: Java Edition account.**
-- **A Hypixel API Key:**
-  1. Go to the [Hypixel Developer Dashboard](https://developer.hypixel.net/).
-  2. Log in with your Minecraft account.
-  3. Click on "Create a new API key" and copy the key securely.
+You also need a Minecraft: Java Edition account, and for stats a Hypixel API key from the [Hypixel Developer Dashboard](https://developer.hypixel.net/) (save it in the launcher's Settings or with `jagprox key <key>`).
 
-### 2. Cloning the Repository
+### The `jagprox` command
 
-```bash
-git clone https://github.com/JagHack/jagprox.git
+```
+jagprox                      open the launcher
+jagprox launch proxy         run the proxy in this terminal (Ctrl+C stops it)
+jagprox stats Notch [mode]   stats (Bed Wars by default; `jagprox modes` lists the rest)
+jagprox status Notch         is a player online, and where?
+jagprox playercount sumo     players in a Duels mode
+jagprox gametrack day        your tracked wins and losses
+jagprox login | logout       your JagProx account
+jagprox config               open config.yml
+jagprox update               update to the latest version
+jagprox version 3.0.0        install a specific version
 ```
 
-### 3. Installing Dependencies
+`jagprox --help` lists everything; add `--json` for script-friendly output.
 
-Navigate into the newly cloned folder and install the required packages.
-```bash
-cd jagprox
-npm install
-```
+### Configuration
 
-### 4. Configuration
-
-On first launch, `config.yml` and `aliases.json` are created in the launcher's user-data folder (on Windows `%APPDATA%\jagprox-launcher`, on Linux `~/.config/jagprox-launcher`). The copies in this repository are only the defaults. Auto GG, Discord RPC, your API key and aliases can be edited from the launcher; changes reach a running proxy within a few seconds.
+On first launch, `config.yml` and `aliases.json` are created in the JagProx data folder (`%APPDATA%\jagprox-launcher` on Windows, `~/.config/jagprox-launcher` on Linux, `~/Library/Application Support/jagprox-launcher` on macOS). The copies in this repository are only the defaults. Auto GG, Discord RPC, your API key and aliases can be edited from the launcher; changes reach a running proxy within a few seconds.
 
 Notable `config.yml` options:
 
@@ -79,12 +88,16 @@ Notable `config.yml` options:
 - `debug_mode`: extra diagnostic lines in the log.
 - `stats_telemetry`: off by default. When on, `/sc` shares the looked-up player's win count with the JagProx website.
 
-### 5. Development
+### Building from source
+
+With [Rust](https://rustup.rs) installed (and on Linux WebKitGTK 4.1, e.g. `libwebkit2gtk-4.1-dev`):
 
 ```bash
-npm test      # unit tests
-npm run lint  # ESLint
-npm start     # run the launcher
+git clone https://github.com/JagHack/jagprox.git
+cd jagprox
+cargo test --workspace                     # tests
+cargo run -p jagprox-cli -- --help         # the jagprox command
+cargo run -p jagprox-app                   # the launcher
 ```
 
 ---

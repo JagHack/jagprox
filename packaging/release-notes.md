@@ -10,8 +10,8 @@ JagProx @VERSION@
 | Fedora, openSUSE, RHEL | `jagprox-@VERSION@-1.x86_64.rpm` (`aarch64` for ARM) | included |
 | Arch, Manjaro, EndeavourOS | AUR: `jagprox-bin` | included |
 | Any other Linux | `JagProx-@VERSION@-x86_64.AppImage` | Settings → Install Command |
-| Terminal only (any Linux) | `curl -fsSL https://raw.githubusercontent.com/JagHack/jagprox/main/packaging/install.sh \| sh` | `~/.local/bin/jagprox` |
+| Terminal only (any Linux) | `curl -fsSL https://github.com/JagHack/jagprox/releases/latest/download/install.sh \| sh` | `~/.local/bin/jagprox` |
 
-Already on JagProx 2? The launcher offers this update itself; your settings and aliases carry over. You'll need to log in again once.
+Already on JagProx 2? The launcher offers this update itself; your login, settings and aliases carry over.
 
 Update later with `jagprox update`, or Settings → Check for Updates. Every download is listed in `SHA256SUMS`, and `jagprox-release.json` is signed with the JagProx release key (`jagprox-release.json.minisig`).
