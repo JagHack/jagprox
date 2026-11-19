@@ -1,32 +1,39 @@
-//! Port of `rankTracker.js`: in a pre-game queue lobby, announces the rank of players
-//! whose names are hidden (`§k`), from the team Hypixel puts them in.
+//! Prequeue ranks: Hypixel hides the players you're queued against behind an
+//! obfuscated (`§k`) name, but sorts them into a scoreboard team named by their rank
+//! colour. This announces each one's rank once ("One of your opponents is a
+//! §6MVP§c++").
+//!
+//! Follows Jaglient's player directory (agent/core/src/player_directory.cpp), which
+//! was checked live. Unlike the old JS rank tracker:
+//! - players are not forgotten when Hypixel removes them from the tab list (it does
+//!   that almost immediately: add → team → remove);
+//! - there is no wait for a "has joined (x/y)!" line before announcing;
+//! - the rank comes from the team name's colour, mapped to a tier label.
 
 use mcproto::packets::clientbound::PlayerListAction;
 
 use super::{ServerPacket, State};
-use crate::constants::GAME_START_MESSAGES;
 use crate::log::log;
 use crate::proxy::session::Session;
 
 #[derive(Debug, Clone)]
 struct Hidden {
     uuid: Option<u128>,
+    /// "§r" + the obfuscated profile name (how teams list the player).
     ign: String,
+    /// The scoreboard team name; its colour is the rank tier.
     rank: String,
-    entity_id: i32,
     announced: bool,
 }
 
 #[derive(Default)]
 pub struct RankTracker {
     players: Vec<Hidden>,
-    in_queue: bool,
 }
 
 impl RankTracker {
     pub fn reset(&mut self) {
         self.players.clear();
-        self.in_queue = false;
     }
 
     fn by_ign(&mut self, ign: &str) -> Option<&mut Hidden> {
@@ -38,124 +45,96 @@ impl RankTracker {
     }
 }
 
-fn announce(player: &mut Hidden, s: &Session) {
-    if player.announced || player.rank.is_empty() {
-        return;
+/// The first colour code (0-9, a-f) in `text`, skipping format codes like `§k`.
+fn first_colour(text: &str) -> Option<char> {
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '§' {
+            let code = chars.next()?.to_ascii_lowercase();
+            if code.is_ascii_hexdigit() {
+                return Some(code);
+            }
+        }
     }
-    player.announced = true;
-    s.chat(&format!("§7Hidden player in queue: {}", player.rank));
+    None
 }
 
-/// "Name has joined (3/8)!", printed in every Hypixel pre-game lobby.
-fn is_queue_join(clean: &str) -> bool {
-    let Some(body) = clean.strip_suffix(")!") else {
-        return false;
-    };
-    let Some(open) = body.rfind("has joined (") else {
-        return false;
-    };
-    let Some((a, b)) = body[open + "has joined (".len()..].split_once('/') else {
-        return false;
-    };
-    !a.is_empty()
-        && !b.is_empty()
-        && a.bytes().all(|c| c.is_ascii_digit())
-        && b.bytes().all(|c| c.is_ascii_digit())
+/// The rank label for a team name's colour, or `None` if it isn't a rank colour.
+/// The colour can't tell VIP from VIP+ or MVP from MVP+, so those say both.
+pub fn rank_label(team: &str) -> Option<&'static str> {
+    Some(match first_colour(team)? {
+        '7' | '8' => "§7Non",
+        'a' => "§aVIP/VIP§6+",
+        'b' => "§bMVP/MVP§c+",
+        '6' => "§6MVP§c++",
+        'c' => "§cYT",
+        _ => return None,
+    })
+}
+
+fn announce_pending(ranks: &mut RankTracker, s: &Session) {
+    for p in &mut ranks.players {
+        if p.announced || p.uuid.is_none() || p.rank.is_empty() {
+            continue;
+        }
+        let Some(label) = rank_label(&p.rank) else {
+            continue;
+        };
+        p.announced = true;
+        log(format!(
+            "Prequeue rank: {} is {}",
+            p.ign,
+            crate::formatter::strip_colors(label)
+        ));
+        s.chat(&format!("§eOne of your opponents is a {label}"));
+    }
 }
 
 pub fn handle(st: &mut State, s: &Session, packet: &ServerPacket) {
     let ranks = &mut st.ranks;
     match packet {
-        // Hypixel sends a respawn on every server switch: new lobby, new player list.
-        ServerPacket::JoinGame(_) | ServerPacket::Respawn(_) => ranks.reset(),
-        ServerPacket::Chat(chat) => {
-            let Some(clean) = &chat.clean else { return };
-            if is_queue_join(clean) {
-                if !ranks.in_queue {
-                    ranks.in_queue = true;
-                    log("Rank tracker: queue lobby detected, tracking joining players.");
-                    // Players already in the lobby were sent before our own join message.
-                    for p in &mut ranks.players {
-                        announce(p, s);
-                    }
-                }
-            } else if ranks.in_queue
-                && (clean.contains("The game starts in 1 second!")
-                    || GAME_START_MESSAGES.iter().any(|m| clean.contains(m)))
-            {
-                ranks.in_queue = false;
-                log("Rank tracker: game started, no longer tracking joining players.");
-            }
-        }
-        ServerPacket::PlayerList(list) => match &list.action {
-            PlayerListAction::Add(players) => {
-                for p in players.iter().filter(|p| p.name.starts_with("§k")) {
-                    let ign = format!("§r{}", p.name);
-                    if let Some(existing) = ranks.by_ign(&ign) {
-                        existing.uuid = Some(p.uuid);
-                    } else if let Some(existing) = ranks.by_uuid(p.uuid) {
-                        existing.ign = ign;
-                        existing.rank.clear();
-                        existing.entity_id = -1;
-                    } else {
-                        ranks.players.push(Hidden {
-                            uuid: Some(p.uuid),
-                            ign,
-                            rank: String::new(),
-                            entity_id: -1,
-                            announced: false,
-                        });
-                    }
+        ServerPacket::PlayerList(list) => {
+            // Removals are ignored on purpose: Hypixel drops hidden opponents from the
+            // tab list right away, but they're still in the game.
+            let PlayerListAction::Add(players) = &list.action else {
+                return;
+            };
+            for p in players.iter().filter(|p| p.name.starts_with("§k")) {
+                let ign = format!("§r{}", p.name);
+                if let Some(existing) = ranks.by_ign(&ign) {
+                    existing.uuid = Some(p.uuid);
+                } else if let Some(existing) = ranks.by_uuid(p.uuid) {
+                    existing.ign = ign;
+                } else {
+                    ranks.players.push(Hidden {
+                        uuid: Some(p.uuid),
+                        ign,
+                        rank: String::new(),
+                        announced: false,
+                    });
                 }
             }
-            PlayerListAction::Remove(uuids) => {
-                for uuid in uuids {
-                    if let Some(index) = ranks.players.iter().position(|p| p.uuid == Some(*uuid)) {
-                        ranks.players.remove(index);
-                    }
-                }
-            }
-            _ => {}
-        },
-        ServerPacket::SpawnPlayer(spawn) => {
-            if let Some(p) = ranks.by_uuid(spawn.uuid) {
-                p.entity_id = spawn.entity_id;
-            }
+            announce_pending(ranks, s);
         }
         ServerPacket::Teams(teams) => {
-            let Some(players) = teams.players.as_ref().filter(|p| !p.is_empty()) else {
+            let Some(members) = teams.players.as_ref().filter(|p| !p.is_empty()) else {
                 return;
             };
             if !teams.team.starts_with('§') {
                 return;
             }
-            for ign in players.iter().filter(|i| i.starts_with("§r§k")) {
-                let in_queue = ranks.in_queue;
-                let player = match ranks.by_ign(ign) {
-                    Some(p) => {
-                        p.rank = teams.team.clone();
-                        p
-                    }
-                    None => {
-                        ranks.players.push(Hidden {
-                            uuid: None,
-                            ign: ign.clone(),
-                            rank: teams.team.clone(),
-                            entity_id: -1,
-                            announced: false,
-                        });
-                        ranks.players.last_mut().expect("just pushed")
-                    }
-                };
-                if in_queue {
-                    announce(player, s);
+            for ign in members.iter().filter(|i| i.starts_with("§r§k")) {
+                match ranks.by_ign(ign) {
+                    Some(p) => p.rank = teams.team.clone(),
+                    None => ranks.players.push(Hidden {
+                        uuid: None,
+                        ign: ign.clone(),
+                        rank: teams.team.clone(),
+                        announced: false,
+                    }),
                 }
             }
-        }
-        ServerPacket::DestroyEntities(destroy) => {
-            ranks
-                .players
-                .retain(|p| !destroy.entity_ids.contains(&p.entity_id));
+            announce_pending(ranks, s);
         }
         _ => {}
     }
@@ -166,11 +145,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn queue_join_lines() {
-        assert!(is_queue_join("Notch has joined (3/8)!"));
-        assert!(is_queue_join("[MVP+] Notch has joined (12/16)!"));
-        assert!(!is_queue_join("Notch has joined the lobby!"));
-        assert!(!is_queue_join("Notch has joined (/8)!"));
-        assert!(!is_queue_join("Notch has joined (3/8)! extra"));
+    fn rank_labels_from_team_colours() {
+        assert_eq!(rank_label("§6[MVP§c++§6]"), Some("§6MVP§c++"));
+        assert_eq!(rank_label("§b"), Some("§bMVP/MVP§c+"));
+        assert_eq!(
+            rank_label("§l§aVIP"),
+            Some("§aVIP/VIP§6+"),
+            "format codes are skipped"
+        );
+        assert_eq!(rank_label("§7"), Some("§7Non"));
+        assert_eq!(rank_label("§8zzz"), Some("§7Non"));
+        assert_eq!(rank_label("§9blue"), None);
+        assert_eq!(rank_label("plain"), None);
     }
 }

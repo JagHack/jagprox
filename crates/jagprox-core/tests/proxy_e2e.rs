@@ -192,10 +192,16 @@ async fn modules_react_like_on_hypixel() {
         const chat = (c, text) => c.write('chat', { message: JSON.stringify({ text }), position: 0 });
         server.on('login', c => {
             c.write('login', { entityId: 1, gameMode: 0, dimension: 0, difficulty: 1, maxPlayers: 16, levelType: 'default', reducedDebugInfo: false });
-            // A hidden player in the queue lobby, then our own join line.
-            c.write('player_info', { action: 'add_player', data: [{ uuid: '853c80ef-3c37-49fd-aa49-938b674adae6', name: '§kHidden1', properties: [], gamemode: 0, ping: 1 }] });
+            // Hidden opponents, in Hypixel's order: tab add, team, then removed from
+            // the tab right away. The second one's team arrives before its tab entry.
+            const hidden1 = '853c80ef-3c37-49fd-aa49-938b674adae6';
+            const hidden2 = '069a79f4-44e9-4726-a5be-fca90e38aaf5';
+            c.write('player_info', { action: 'add_player', data: [{ uuid: hidden1, name: '§kHidden1', properties: [], gamemode: 0, ping: 1 }] });
             c.write('scoreboard_team', { team: '§6[MVP§c++§6]', mode: 0, name: 'x', prefix: '§6[MVP§c++§6] ', suffix: '', friendlyFire: 0, nameTagVisibility: 'always', color: 6, players: ['§r§kHidden1'] });
-            chat(c, 'NodeBot has joined (2/8)!');
+            c.write('player_info', { action: 'remove_player', data: [{ uuid: hidden1 }] });
+            c.write('scoreboard_team', { team: '§b', mode: 0, name: 'y', prefix: '§b', suffix: '', friendlyFire: 0, nameTagVisibility: 'always', color: 11, players: ['§r§kHidden2'] });
+            c.write('player_info', { action: 'add_player', data: [{ uuid: hidden2, name: '§kHidden2', properties: [], gamemode: 0, ping: 1 }] });
+            c.write('player_info', { action: 'remove_player', data: [{ uuid: hidden2 }] });
             // The game starts.
             c.write('scoreboard_objective', { name: 'sb', action: 0, displayText: '§e§lBED WARS', type: 'integer' });
             setTimeout(() => chat(c, 'Protect your bed and destroy the enemy beds.'), 200);
@@ -261,7 +267,8 @@ async fn modules_react_like_on_hypixel() {
     ));
 
     let mut want_client = vec![
-        "CHAT §8[§5jag§dprox§8] §r§7Hidden player in queue: §6[MVP§c++§6]".to_string(),
+        "CHAT §8[§5jag§dprox§8] §r§eOne of your opponents is a §6MVP§c++".to_string(),
+        "CHAT §8[§5jag§dprox§8] §r§eOne of your opponents is a §bMVP/MVP§c+".to_string(),
         "FOOTER".to_string(),
         "CHAT §8[§5jag§dprox§8] §r§dAuto-checking §f2 §dplayers for §5Bed Wars§d...".to_string(),
         "CHAT §8[§5jag§dprox§8] §r§eJoining Bedwars 4v4v4v4...".to_string(),
