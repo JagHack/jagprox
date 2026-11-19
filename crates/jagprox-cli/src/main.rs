@@ -2,6 +2,7 @@
 
 mod commands;
 mod login;
+mod proxy_cmd;
 mod session;
 mod term;
 
@@ -74,6 +75,11 @@ enum Cmd {
     },
     /// Link your Minecraft account to JagProx
     Link,
+    /// Microsoft accounts the proxy logs in to Hypixel with
+    Account {
+        #[command(subcommand)]
+        action: AccountAction,
+    },
     /// Launch the launcher window or the proxy on its own
     Launch {
         #[command(subcommand)]
@@ -102,7 +108,21 @@ enum LaunchTarget {
     /// Open the launcher window (default when no command is given)
     Launcher,
     /// Run the proxy headless in this terminal (Ctrl+C to stop)
-    Proxy,
+    Proxy {
+        /// Also print the in-game chat
+        #[arg(long)]
+        chat: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum AccountAction {
+    /// Sign in a Microsoft account
+    Add,
+    /// List signed-in accounts
+    List,
+    /// Sign out an account
+    Remove { name: String },
 }
 
 fn not_yet(what: &str) -> Result<(), String> {
@@ -137,8 +157,17 @@ async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
             what: LaunchTarget::Launcher,
         } => not_yet("launch launcher"),
         Cmd::Launch {
-            what: LaunchTarget::Proxy,
-        } => not_yet("launch proxy"),
+            what: LaunchTarget::Proxy { chat },
+        } => proxy_cmd::run_proxy(ctx.color, chat).await,
+        Cmd::Account {
+            action: AccountAction::Add,
+        } => proxy_cmd::account_add(ctx.color).await,
+        Cmd::Account {
+            action: AccountAction::List,
+        } => proxy_cmd::account_list(),
+        Cmd::Account {
+            action: AccountAction::Remove { name },
+        } => proxy_cmd::account_remove(&name),
         Cmd::Config => commands::open_config(DEFAULT_CONFIG),
         Cmd::Version { .. } => not_yet("version"),
         Cmd::Update => not_yet("update"),

@@ -87,6 +87,15 @@ fn signed_hex(digest: &[u8]) -> String {
     }
 }
 
+/// A stable UUID for a name without a Mojang account (offline/test mode only).
+pub fn offline_uuid(name: &str) -> u128 {
+    let digest = Sha1::digest(format!("OfflinePlayer:{name}").as_bytes());
+    let mut bytes: [u8; 16] = digest[..16].try_into().expect("16 bytes");
+    bytes[6] = (bytes[6] & 0x0f) | 0x30; // version 3-style
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
+    u128::from_be_bytes(bytes)
+}
+
 pub fn random_bytes<const N: usize>() -> [u8; N] {
     let mut out = [0u8; N];
     OsRng.fill_bytes(&mut out);

@@ -19,7 +19,7 @@ open = "5"
 reqwest = { version = "0.13", default-features = false }
 rpassword = "7"
 serde_json = { version = "1", features = ["preserve_order"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "signal"] }
 
 [target.'cfg(windows)'.dependencies]
 enable-ansi-support = "0.2"
