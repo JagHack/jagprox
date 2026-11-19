@@ -342,6 +342,13 @@ pub async fn download(
     mut progress: impl FnMut(u64, u64),
 ) -> Result<PathBuf, String> {
     fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    // Earlier downloads are done with: a Windows installer can't delete itself, so
+    // the previous one is still here. (One that is still running stays.)
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        if entry.file_type().is_ok_and(|t| t.is_file()) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
     let url = format!("{}/{}", release.url, asset.name);
     let mut response = crate::http::client()
         .get(&url)
@@ -394,10 +401,12 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// Where updates are downloaded to.
+/// Named like the data folder: on Windows the cache folder is %LOCALAPPDATA%, where
+/// "jagprox" would be the install folder itself (Windows ignores case).
 pub fn download_dir() -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(std::env::temp_dir)
-        .join("jagprox")
+        .join(crate::account::DATA_DIR_NAME)
         .join("updates")
 }
 

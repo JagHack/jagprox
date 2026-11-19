@@ -147,6 +147,9 @@ async fn download_checks_the_hash_and_replaces_the_binary() {
 
     let dir = temp_dir("ok");
     let mut seen = Vec::new();
+    // A previous update's installer, still lying around: cleared by the next download.
+    std::fs::create_dir_all(dir.join("dl")).unwrap();
+    std::fs::write(dir.join("dl/JagProx-Setup-3.0.9.exe"), "old").unwrap();
     let file = update::download(&release, &asset, &dir.join("dl"), |done, total| {
         seen.push((done, total))
     })
@@ -154,6 +157,7 @@ async fn download_checks_the_hash_and_replaces_the_binary() {
     .unwrap();
     assert_eq!(seen.first(), Some(&(0, asset.size)));
     assert_eq!(seen.last(), Some(&(asset.size, asset.size)));
+    assert!(!dir.join("dl/JagProx-Setup-3.0.9.exe").exists());
 
     let exe = dir.join("bin/jagprox");
     std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
