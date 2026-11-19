@@ -29,6 +29,19 @@ fn work_around_webkit_nvidia() {
     }
 }
 
+/// On Wayland without a desktop settings daemon (Hyprland, Sway, ...) GTK reports the
+/// font DPI as -1 ("unset"). WebKitGTK 2.52 divides that by 96 and renders the page at a
+/// negative zoom, so everything collapses. Use the standard 96 DPI when it is unset.
+#[cfg(target_os = "linux")]
+fn fix_unset_gtk_dpi() {
+    use gtk::prelude::*;
+    if let Some(settings) = gtk::Settings::default()
+        && settings.gtk_xft_dpi() <= 0
+    {
+        settings.set_gtk_xft_dpi(96 * 1024);
+    }
+}
+
 fn main() {
     #[cfg(target_os = "linux")]
     work_around_webkit_nvidia();
@@ -67,6 +80,9 @@ fn main() {
         .manage(AppState::new(data_dir.clone(), config.clone(), discord))
         .invoke_handler(tauri::generate_handler![ipc::ipc])
         .setup(move |app| {
+            #[cfg(target_os = "linux")]
+            fix_unset_gtk_dpi();
+
             // Log lines go to the Log Monitor and to logs/main.log.
             let handle = app.handle().clone();
             let log_file = std::fs::OpenOptions::new()

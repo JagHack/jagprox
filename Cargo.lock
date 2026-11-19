@@ -2146,6 +2146,7 @@ name = "jagprox-app"
 version = "3.0.0-alpha.0"
 dependencies = [
  "discord-rich-presence",
+ "gtk",
  "jagprox-core",
  "open",
  "serde",
