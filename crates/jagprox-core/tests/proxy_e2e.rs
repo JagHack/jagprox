@@ -177,3 +177,121 @@ async fn node_client_plays_through_the_rust_proxy() {
     }
     assert!(saw_playing && saw_chat);
 }
+
+/// The modules and commands against a fake Hypixel that plays out a queue lobby.
+#[tokio::test(flavor = "multi_thread")]
+async fn modules_react_like_on_hypixel() {
+    if !node_available() {
+        return;
+    }
+    let (_server, mut server_out) = node(
+        r#"
+        const mc = require('minecraft-protocol');
+        const server = mc.createServer({ 'online-mode': false, host: '127.0.0.1', port: 0, version: '1.8.9' });
+        server.on('listening', () => console.log('PORT ' + server.socketServer.address().port));
+        const chat = (c, text) => c.write('chat', { message: JSON.stringify({ text }), position: 0 });
+        server.on('login', c => {
+            c.write('login', { entityId: 1, gameMode: 0, dimension: 0, difficulty: 1, maxPlayers: 16, levelType: 'default', reducedDebugInfo: false });
+            // A hidden player in the queue lobby, then our own join line.
+            c.write('player_info', { action: 'add_player', data: [{ uuid: '853c80ef-3c37-49fd-aa49-938b674adae6', name: '§kHidden1', properties: [], gamemode: 0, ping: 1 }] });
+            c.write('scoreboard_team', { team: '§6[MVP§c++§6]', mode: 0, name: 'x', prefix: '§6[MVP§c++§6] ', suffix: '', friendlyFire: 0, nameTagVisibility: 'always', color: 6, players: ['§r§kHidden1'] });
+            chat(c, 'NodeBot has joined (2/8)!');
+            // The game starts.
+            c.write('scoreboard_objective', { name: 'sb', action: 0, displayText: '§e§lBED WARS', type: 'integer' });
+            setTimeout(() => chat(c, 'Protect your bed and destroy the enemy beds.'), 200);
+            c.on('chat', p => {
+                console.log('SERVER GOT ' + p.message);
+                if (p.message === '/wtfmap') {
+                    chat(c, 'You are currently playing on Lighthouse');
+                    setTimeout(() => {
+                        c.write('position', { x: 1, y: 70, z: 1, yaw: 0, pitch: 0, flags: 0 });
+                        c.write('playerlist_header', { header: '{"text":"Hypixel"}', footer: '{"text":"store.hypixel.net"}' });
+                    }, 100);
+                }
+                if (p.message === '/who') {
+                    chat(c, 'ONLINE: Alice, Bob, NodeBot');
+                    setTimeout(() => c.write('title', { action: 0, text: '{"text":"§6§lVICTORY!"}' }), 100);
+                }
+            });
+        });
+        setTimeout(() => process.exit(2), 30000);
+        "#,
+    );
+    let line = expect_line(&mut server_out, "server").await;
+    let upstream_port: u16 = line.strip_prefix("PORT ").unwrap().parse().unwrap();
+
+    let proxy_port = free_port();
+    let config = Config::in_memory(json!({
+        "host": "127.0.0.1",
+        "port": proxy_port,
+        "upstream_host": "127.0.0.1",
+        "upstream_port": upstream_port,
+        "offline_mode": true,
+        "queue_stats": { "bw": true },
+        "auto_gg": { "enabled": true, "message": "gg", "delay": 0 },
+    }));
+    let (events, mut event_rx) = tokio::sync::broadcast::channel(256);
+    let proxy = Proxy::new(ProxyOptions {
+        data_dir: PathBuf::new(),
+        config,
+        jwt: None,
+        events,
+    })
+    .unwrap();
+    tokio::spawn(proxy.run());
+    assert!(matches!(
+        event_rx.recv().await.unwrap(),
+        ProxyEvent::Started { .. }
+    ));
+
+    let (_client, mut client_out) = node(&format!(
+        r#"
+        const mc = require('minecraft-protocol');
+        const c = mc.createClient({{ host: '127.0.0.1', port: {proxy_port}, username: 'NodeBot', version: '1.8.9', auth: 'offline' }});
+        const text = m => {{ try {{ const j = JSON.parse(m); return (j.text || '') + (j.extra || []).map(e => e.text || '').join(''); }} catch (e) {{ return m; }} }};
+        c.on('chat', p => console.log('CHAT ' + text(p.message)));
+        c.on('playerlist_header', p => console.log('FOOTER ' + p.footer));
+        c.on('login', () => setTimeout(() => {{
+            c.write('chat', {{ message: '/q bw4s' }});
+            setTimeout(() => c.write('chat', {{ message: '/rq' }}), 100);
+            setTimeout(() => c.write('chat', {{ message: '/jagprox' }}), 200);
+        }}, 1500));
+        setTimeout(() => process.exit(2), 30000);
+        "#
+    ));
+
+    let mut want_client = vec![
+        "CHAT §8[§5jag§dprox§8] §r§7Hidden player in queue: §6[MVP§c++§6]".to_string(),
+        "FOOTER".to_string(),
+        "CHAT §8[§5jag§dprox§8] §r§dAuto-checking §f2 §dplayers for §5Bed Wars§d...".to_string(),
+        "CHAT §8[§5jag§dprox§8] §r§eJoining Bedwars 4v4v4v4...".to_string(),
+        "CHAT §8[§5jag§dprox§8] §r§dRe-queuing §8» §f/play bedwars_four_four".to_string(),
+        "CHAT §8[§5jag§dprox§8] §r§5§m---".to_string(),
+    ];
+    let mut want_server = vec![
+        "SERVER GOT /wtfmap".to_string(),
+        "SERVER GOT /who".to_string(),
+        "SERVER GOT /ac gg".to_string(),
+        "SERVER GOT /play bedwars_four_four".to_string(),
+    ];
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    while !(want_client.is_empty() && want_server.is_empty()) {
+        tokio::select! {
+            line = client_out.next_line() => {
+                let line = line.unwrap().expect("client exited");
+                if line.starts_with("FOOTER") {
+                    assert!(line.contains("You are currently playing on §5Lighthouse"), "{line}");
+                }
+                want_client.retain(|w| !line.starts_with(w.as_str()));
+            }
+            line = server_out.next_line() => {
+                let line = line.unwrap().expect("server exited");
+                assert_ne!(line, "SERVER GOT /jagprox", "JagProx commands must not reach the server");
+                want_server.retain(|w| *w != line);
+            }
+            _ = tokio::time::sleep_until(deadline) => {
+                panic!("still waiting for client {want_client:?} and server {want_server:?}");
+            }
+        }
+    }
+}

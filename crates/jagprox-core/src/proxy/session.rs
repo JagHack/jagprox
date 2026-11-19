@@ -1,8 +1,8 @@
-//! One player's session: two relay loops (player → Hypixel, Hypixel → player) and a
-//! writer task per side. Only the packets JagProx looks at are decoded; everything
-//! else is forwarded as the exact bytes that arrived.
+//! One player's session: two relay loops (player → Hypixel, Hypixel → player), a writer
+//! task per side, and the session's module state and timers. Only the packets JagProx
+//! looks at are decoded; everything else is forwarded as the exact bytes that arrived.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use mcproto::conn::Connection;
@@ -11,10 +11,12 @@ use mcproto::packets::{Packet, clientbound as cb, serverbound as sb, vanilla_bra
 use serde_json::json;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc;
+use tokio::task::AbortHandle;
 
+use super::modules::{self, ServerPacket, State};
 use super::server::Proxy;
-use super::{CHAT_PREFIX, ProxyEvent};
-use crate::formatter;
+use super::{CHAT_PREFIX, commands};
+use crate::api::{Backend, Hypixel};
 use crate::log::log;
 use crate::msauth::McSession;
 
@@ -27,34 +29,83 @@ pub enum Out {
     Packet(Vec<u8>),
 }
 
-/// Handles modules and commands use to talk to both sides.
-#[derive(Clone)]
-pub struct Session {
-    pub proxy: Arc<Proxy>,
-    pub username: String,
+struct Inner {
+    proxy: Arc<Proxy>,
+    username: String,
     /// Dashed UUID.
-    pub uuid: String,
-    pub mc_session: Option<McSession>,
+    uuid: String,
+    mc_session: Option<McSession>,
     to_client: mpsc::Sender<Out>,
     to_server: mpsc::Sender<Out>,
+    state: Mutex<State>,
+    tasks: Mutex<Vec<AbortHandle>>,
+}
+
+/// Handles modules and commands use to talk to both sides. Cheap to clone.
+#[derive(Clone)]
+pub struct Session {
+    inner: Arc<Inner>,
 }
 
 impl Session {
+    pub fn proxy(&self) -> &Arc<Proxy> {
+        &self.inner.proxy
+    }
+
+    pub fn hypixel(&self) -> &Hypixel {
+        self.inner.proxy.hypixel()
+    }
+
+    pub fn backend(&self) -> Option<Backend> {
+        let backend = self.inner.proxy.hypixel().backend().clone();
+        backend.jwt().is_some().then_some(backend)
+    }
+
+    pub fn username(&self) -> &str {
+        &self.inner.username
+    }
+
+    pub fn uuid(&self) -> &str {
+        &self.inner.uuid
+    }
+
+    pub fn mc_session(&self) -> Option<&McSession> {
+        self.inner.mc_session.as_ref()
+    }
+
+    /// The modules' state. Never hold this across an `.await`.
+    pub fn state(&self) -> MutexGuard<'_, State> {
+        self.inner.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Runs a task that is cancelled when the session ends.
+    pub fn spawn(&self, task: impl Future<Output = ()> + Send + 'static) {
+        let handle = tokio::spawn(task).abort_handle();
+        let mut tasks = self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner());
+        tasks.retain(|t| !t.is_finished());
+        tasks.push(handle);
+    }
+
     pub fn send_to_client(&self, payload: Vec<u8>) {
-        let _ = self.to_client.try_send(Out::Packet(payload));
+        let _ = self.inner.to_client.try_send(Out::Packet(payload));
     }
 
     pub fn send_to_server(&self, payload: Vec<u8>) {
-        let _ = self.to_server.try_send(Out::Packet(payload));
+        let _ = self.inner.to_server.try_send(Out::Packet(payload));
     }
 
     /// A JagProx chat line for the player (JS `proxyChat`).
     pub fn chat(&self, message: &str) {
         let component = json!({ "text": format!("{CHAT_PREFIX}{message}") });
+        self.chat_at(&component.to_string(), 0);
+    }
+
+    /// A raw JSON chat component at a chat position.
+    pub fn chat_at(&self, json: &str, position: i8) {
         self.send_to_client(
             cb::Chat {
-                message: component.to_string(),
-                position: 0,
+                message: json.to_string(),
+                position,
             }
             .to_payload(),
         );
@@ -68,6 +119,18 @@ impl Session {
             }
             .to_payload(),
         );
+    }
+
+    fn abort_tasks(&self) {
+        for task in self
+            .inner
+            .tasks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain(..)
+        {
+            task.abort();
+        }
     }
 }
 
@@ -84,9 +147,6 @@ async fn writer_loop(
             match out {
                 Out::Frame(frame) => writer.queue_frame(&frame)?,
                 Out::Packet(payload) => writer.queue_packet(&payload)?,
-            }
-            if writer.has_pending() && next.is_none() && rx.is_empty() {
-                break;
             }
         }
         writer.flush().await?;
@@ -105,18 +165,24 @@ pub(super) async fn run(
     let (to_client, client_rx) = mpsc::channel(QUEUE);
     let (to_server, server_rx) = mpsc::channel(QUEUE);
     let session = Session {
-        proxy,
-        username,
-        uuid,
-        mc_session,
-        to_client,
-        to_server,
+        inner: Arc::new(Inner {
+            proxy: proxy.clone(),
+            username,
+            uuid,
+            mc_session,
+            to_client,
+            to_server,
+            state: Mutex::new(State::default()),
+            tasks: Mutex::new(Vec::new()),
+        }),
     };
+    proxy.set_current(Some(session.clone()));
 
     let client_writer = tokio::spawn(writer_loop(client.writer, client_rx));
     let server_writer = tokio::spawn(writer_loop(server.writer, server_rx));
     let mut upstream = tokio::spawn(server_to_client(session.clone(), server.reader));
     let mut downstream = tokio::spawn(client_to_server(session.clone(), client.reader));
+    session.spawn(modules::super_friends::run(session.clone()));
 
     let reason = tokio::select! {
         r = &mut upstream => { downstream.abort(); r }
@@ -128,7 +194,12 @@ pub(super) async fn run(
         Err(e) if e.is_cancelled() => "closed".into(),
         Err(e) => format!("relay crashed: {e}"),
     };
-    // Let the writers send what's queued (e.g. a kick), then close both sockets.
+
+    // Session over: stop its timers, reset the modules, and let the writers send
+    // what's queued (e.g. a kick) before both sockets close.
+    proxy.set_current(None);
+    session.abort_tasks();
+    modules::reset(&mut session.state());
     drop(session);
     let _ = tokio::time::timeout(Duration::from_secs(2), async {
         let _ = client_writer.await;
@@ -152,6 +223,7 @@ async fn server_to_client(
             Err(mcproto::Error::Closed) => {
                 let reason = json!({ "text": "§cLost connection to the server." }).to_string();
                 let _ = session
+                    .inner
                     .to_client
                     .send(Out::Packet(cb::Disconnect { reason }.to_payload()))
                     .await;
@@ -159,59 +231,46 @@ async fn server_to_client(
             }
             Err(e) => return Err(e.to_string()),
         };
-        let out = match handle_server_packet(&session, frame) {
-            Ok(out) => out,
-            Err((frame, e)) => {
-                crate::log::debug(format!(
-                    "Could not inspect a packet, forwarding it unchanged: {e}"
-                ));
-                Some(Out::Frame(frame))
-            }
-        };
-        if let Some(out) = out
-            && session.to_client.send(out).await.is_err()
-        {
+        let out = inspect_server_frame(&session, frame);
+        if session.inner.to_client.send(out).await.is_err() {
             return Ok(());
         }
     }
 }
 
-/// Decodes the packets JagProx cares about. Returns what to forward (`None` drops it).
-fn handle_server_packet(
-    session: &Session,
-    frame: Frame,
-) -> Result<Option<Out>, (Frame, mcproto::Error)> {
-    let id = match frame.id() {
-        Ok(id) => id,
-        Err(e) => return Err((frame, e)),
+/// Runs the modules on a packet they care about; anything else (or anything that
+/// fails to decode) is forwarded untouched.
+fn inspect_server_frame(session: &Session, frame: Frame) -> Out {
+    let Ok(id) = frame.id() else {
+        return Out::Frame(frame);
     };
-    match id {
-        cb::Chat::ID => {
-            let chat = match frame.payload().and_then(|p| cb::Chat::from_payload(&p)) {
-                Ok(chat) => chat,
-                Err(e) => return Err((frame, e)),
-            };
-            if chat.position == 0 || chat.position == 1 {
-                let text = formatter::reconstruct_legacy_text_str(&chat.message);
-                let _ = session.proxy.events().send(ProxyEvent::Chat(text));
-            }
-            Ok(Some(Out::Frame(frame)))
+    let decoded = match frame.payload() {
+        Ok(payload) => ServerPacket::decode(id, &payload),
+        Err(_) => None,
+    };
+    let mut packet = match decoded {
+        None => return Out::Frame(frame),
+        Some(Ok(packet)) => packet,
+        Some(Err(e)) => {
+            crate::log::debug(format!(
+                "Could not decode packet {id:#04x}, forwarding it unchanged: {e}"
+            ));
+            return Out::Frame(frame);
         }
-        cb::PluginMessage::ID => {
-            let mut message = match frame
-                .payload()
-                .and_then(|p| cb::PluginMessage::from_payload(&p))
-            {
-                Ok(m) => m,
-                Err(e) => return Err((frame, e)),
-            };
-            if message.channel == "MC|Brand" {
-                message.data = vanilla_brand();
-                return Ok(Some(Out::Packet(message.to_payload())));
-            }
-            Ok(Some(Out::Frame(frame)))
+    };
+    // A bug in one module must never take down the session.
+    let changed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        modules::on_server_packet(session, &mut packet)
+    }));
+    match changed {
+        Ok(true) => packet.encode().map_or(Out::Frame(frame), Out::Packet),
+        Ok(false) => Out::Frame(frame),
+        Err(_) => {
+            log(format!(
+                "[ERROR] A module failed on packet {id:#04x}; it was forwarded unchanged."
+            ));
+            Out::Frame(frame)
         }
-        _ => Ok(Some(Out::Frame(frame))),
     }
 }
 
@@ -233,22 +292,42 @@ async fn client_to_server(
             {
                 Ok(mut message) if message.channel == "MC|Brand" => {
                     message.data = vanilla_brand();
-                    Out::Packet(message.to_payload())
+                    Some(Out::Packet(message.to_payload()))
                 }
-                _ => Out::Frame(frame),
+                _ => Some(Out::Frame(frame)),
             },
-            Ok(sb::Chat::ID) => {
-                if let Ok(chat) = frame.payload().and_then(|p| sb::Chat::from_payload(&p))
-                    && chat.message.to_lowercase().starts_with("/play ")
-                {
-                    log(format!("Captured last play command: {}", chat.message));
-                }
-                Out::Frame(frame)
-            }
-            _ => Out::Frame(frame),
+            Ok(sb::Chat::ID) => match frame.payload().and_then(|p| sb::Chat::from_payload(&p)) {
+                Ok(chat) => on_player_chat(&session, &chat.message).then_some(Out::Frame(frame)),
+                Err(_) => Some(Out::Frame(frame)),
+            },
+            _ => Some(Out::Frame(frame)),
         };
-        if session.to_server.send(out).await.is_err() {
+        if let Some(out) = out
+            && session.inner.to_server.send(out).await.is_err()
+        {
             return Ok(());
         }
     }
+}
+
+/// Returns whether the chat message should still go to Hypixel.
+fn on_player_chat(session: &Session, message: &str) -> bool {
+    if !message.starts_with('/') {
+        return true;
+    }
+    let handled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        commands::handle(session, message)
+    }))
+    .unwrap_or_else(|_| {
+        log(format!("[ERROR] commands.handle failed on \"{message}\""));
+        false
+    });
+    if handled {
+        return false;
+    }
+    if message.to_lowercase().starts_with("/play ") {
+        session.state().last_play_command = Some(message.to_string());
+        log(format!("Captured last play command: {message}"));
+    }
+    true
 }

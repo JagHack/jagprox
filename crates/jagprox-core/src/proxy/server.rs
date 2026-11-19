@@ -14,7 +14,9 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
 
 use super::ProxyEvent;
-use super::session;
+use super::session::{self, Session};
+use crate::aliases::Aliases;
+use crate::api::{Backend, Hypixel};
 use crate::config::Config;
 use crate::log::log;
 use crate::msauth::{self, Accounts, AuthError};
@@ -59,6 +61,10 @@ pub struct Proxy {
     active: Mutex<Option<String>>,
     /// A Microsoft sign-in waiting for its code: (Minecraft name, code, link).
     pending_sign_in: Mutex<Option<(String, String, String)>>,
+    /// Shared for the proxy's lifetime, so caches survive reconnects.
+    hypixel: Hypixel,
+    aliases: Aliases,
+    current: Arc<Mutex<Option<Session>>>,
 }
 
 impl Proxy {
@@ -76,6 +82,25 @@ impl Proxy {
         })
         .to_string();
         let accounts = Accounts::new(&options.data_dir);
+        let current: Arc<Mutex<Option<Session>>> = Arc::new(Mutex::new(None));
+        // Hypixel notices (no API key, rate limits) go to the player's chat.
+        let notice_target = current.clone();
+        let notifier: crate::api::Notifier = Arc::new(move |message: &str| {
+            if let Some(s) = notice_target
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+            {
+                s.chat(message);
+            }
+        });
+        let fixed_key = std::env::var("HYPIXEL_API_KEY").ok();
+        let hypixel = Hypixel::new(Backend::new(options.jwt.clone()), fixed_key, Some(notifier));
+        let aliases = if options.data_dir.as_os_str().is_empty() {
+            Aliases::from_map(Default::default())
+        } else {
+            Aliases::load(&options.data_dir)
+        };
         Ok(Arc::new(Self {
             options,
             key,
@@ -83,7 +108,26 @@ impl Proxy {
             status_json,
             active: Mutex::new(None),
             pending_sign_in: Mutex::new(None),
+            hypixel,
+            aliases,
+            current,
         }))
+    }
+
+    pub fn hypixel(&self) -> &Hypixel {
+        &self.hypixel
+    }
+
+    pub fn aliases(&self) -> &Aliases {
+        &self.aliases
+    }
+
+    pub fn data_dir(&self) -> &std::path::Path {
+        &self.options.data_dir
+    }
+
+    pub(super) fn set_current(&self, session: Option<Session>) {
+        *self.current.lock().unwrap_or_else(|e| e.into_inner()) = session;
     }
 
     pub fn events(&self) -> &broadcast::Sender<ProxyEvent> {
@@ -112,6 +156,7 @@ impl Proxy {
                 }
             })?;
         log(format!("JagProx server started on {host}:{port}."));
+        self.aliases.watch();
         self.emit(ProxyEvent::Started { host, port });
         loop {
             let (stream, addr) = match listener.accept().await {

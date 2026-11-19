@@ -5,8 +5,8 @@ use std::hash::Hash;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use futures::StreamExt;
 use futures::future::{BoxFuture, FutureExt, Shared};
-use futures::{Stream, StreamExt};
 use indexmap::IndexMap;
 
 type Load<V, E> = Shared<BoxFuture<'static, Result<Option<V>, E>>>;
@@ -105,9 +105,11 @@ where
     F: FnMut(T) -> Fut,
     Fut: Future<Output = R>,
 {
-    let stream: std::pin::Pin<Box<dyn Stream<Item = R> + '_>> =
-        Box::pin(futures::stream::iter(items).map(f).buffered(limit.max(1)));
-    stream.collect().await
+    futures::stream::iter(items)
+        .map(f)
+        .buffered(limit.max(1))
+        .collect()
+        .await
 }
 
 #[cfg(test)]
