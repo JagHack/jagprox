@@ -2,6 +2,7 @@
 //! handful of packets JagProx inspects. Everything else is passed through raw.
 
 pub mod buf;
+pub mod conn;
 pub mod crypto;
 pub mod error;
 pub mod frame;

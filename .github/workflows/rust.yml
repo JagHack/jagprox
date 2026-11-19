@@ -26,6 +26,16 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      # node-minecraft-protocol is the reference the codec is tested against.
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install node packages (without Electron's binary download)
+        run: npm ci --ignore-scripts
+
       - name: Format
         run: cargo fmt --all --check
 

@@ -18,6 +18,15 @@ pub enum Error {
     /// Anything else malformed, with a description.
     Malformed(String),
     Crypto(String),
+    /// The other side ended the login with a disconnect (JSON chat reason).
+    Disconnected(String),
+    /// Session server authentication failed.
+    Auth(String),
+    /// A packet arrived that doesn't belong at this point of the login.
+    Unexpected {
+        state: &'static str,
+        id: i32,
+    },
 }
 
 impl fmt::Display for Error {
@@ -33,6 +42,11 @@ impl fmt::Display for Error {
             Error::Zlib(e) => write!(f, "compression error: {e}"),
             Error::Malformed(e) => write!(f, "malformed packet: {e}"),
             Error::Crypto(e) => write!(f, "encryption error: {e}"),
+            Error::Disconnected(reason) => write!(f, "disconnected: {reason}"),
+            Error::Auth(e) => write!(f, "authentication failed: {e}"),
+            Error::Unexpected { state, id } => {
+                write!(f, "unexpected packet {id:#04x} during {state}")
+            }
         }
     }
 }

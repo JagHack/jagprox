@@ -15,4 +15,4 @@ tokio = { version = "1", features = ["io-util"] }
 
 [dev-dependencies]
 serde_json = "1"
-tokio = { version = "1", features = ["io-util", "macros", "rt", "net", "time"] }
+tokio = { version = "1", features = ["io-util", "macros", "rt", "net", "time", "process"] }
