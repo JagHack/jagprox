@@ -6,3 +6,13 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aes = "0.8"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+rsa = "0.9"
+sha1 = "0.10"
+tokio = { version = "1", features = ["io-util"] }
+
+[dev-dependencies]
+serde_json = "1"
+tokio = { version = "1", features = ["io-util", "macros", "rt", "net", "time"] }

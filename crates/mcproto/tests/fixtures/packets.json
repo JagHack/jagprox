@@ -1,0 +1,242 @@
+[
+ {
+  "state": "handshaking",
+  "clientbound": false,
+  "name": "set_protocol",
+  "hex": "002f0e6d632e6879706978656c2e6e657463dd02"
+ },
+ {
+  "state": "status",
+  "clientbound": false,
+  "name": "ping_start",
+  "hex": "00"
+ },
+ {
+  "state": "status",
+  "clientbound": false,
+  "name": "ping",
+  "hex": "010102030405060708"
+ },
+ {
+  "state": "status",
+  "clientbound": true,
+  "name": "server_info",
+  "hex": "002a7b2276657273696f6e223a7b226e616d65223a22312e382e39222c2270726f746f636f6c223a34377d7d"
+ },
+ {
+  "state": "status",
+  "clientbound": true,
+  "name": "ping",
+  "hex": "01000000000000002a"
+ },
+ {
+  "state": "login",
+  "clientbound": false,
+  "name": "login_start",
+  "hex": "00074a61674861636b"
+ },
+ {
+  "state": "login",
+  "clientbound": false,
+  "name": "encryption_begin",
+  "hex": "018001070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070780010909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909"
+ },
+ {
+  "state": "login",
+  "clientbound": true,
+  "name": "disconnect",
+  "hex": "000e7b2274657874223a22627965227d"
+ },
+ {
+  "state": "login",
+  "clientbound": true,
+  "name": "encryption_begin",
+  "hex": "0100a2010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010401020304"
+ },
+ {
+  "state": "login",
+  "clientbound": true,
+  "name": "success",
+  "hex": "022430363961373966342d343465392d343732362d613562652d666361393065333861616635054e6f746368"
+ },
+ {
+  "state": "login",
+  "clientbound": true,
+  "name": "compress",
+  "hex": "038002"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "login",
+  "hex": "01000004d202ff01640764656661756c7400"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "chat",
+  "hex": "02427b2274657874223a22c2a76148656c6c6f20222c226578747261223a5b7b2274657874223a22776f726c6420e29cab222c22636f6c6f72223a22676f6c64227d5d7d01"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "respawn",
+  "hex": "0700000001020004666c6174"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "position",
+  "hex": "083ff80000000000004050000000000000c08f42000000000042b40000c148000000"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "entity_destroy",
+  "hex": "130301ac02f0a204"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "named_sound_effect",
+  "hex": "290a72616e646f6d2e6f72620000005000000200ffffffe83f8000003f"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "player_info",
+  "hex": "380002069a79f444e94726a5befca90e38aaf5054e6f746368010874657874757265730464475634010463326c6e012301427b2274657874223a22c2a76148656c6c6f20222c226578747261223a5b7b2274657874223a22776f726c6420e29cab222c22636f6c6f72223a22676f6c64227d5d7d853c80ef3c3749fdaa49938b674adae6046a65625f010874657874757265730465413d3d00007800"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "player_info",
+  "hex": "380101069a79f444e94726a5befca90e38aaf503"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "player_info",
+  "hex": "380202069a79f444e94726a5befca90e38aaf5f403853c80ef3c3749fdaa49938b674adae601"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "player_info",
+  "hex": "380302069a79f444e94726a5befca90e38aaf501427b2274657874223a22c2a76148656c6c6f20222c226578747261223a5b7b2274657874223a22776f726c6420e29cab222c22636f6c6f72223a22676f6c64227d5d7d853c80ef3c3749fdaa49938b674adae600"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "player_info",
+  "hex": "380402069a79f444e94726a5befca90e38aaf5853c80ef3c3749fdaa49938b674adae6"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "scoreboard_objective",
+  "hex": "3b0773696465626172000ec2a765c2a76c424544205741525307696e7465676572"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "scoreboard_objective",
+  "hex": "3b077369646562617201"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "scoreboard_team",
+  "hex": "3e036a703100036a70310bc2a7375b3132e29cab5d200c20c2a7387cc2a766312e35300306616c776179730f02054e6f746368046a65625f"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "scoreboard_team",
+  "hex": "3e036a703101"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "scoreboard_team",
+  "hex": "3e06c2a763526564020352656403c2a76300001168696465466f724f746865725465616d730c"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "scoreboard_team",
+  "hex": "3e036a703103010a44696e6e6572626f6e65"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "scoreboard_team",
+  "hex": "3e036a70310400"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "custom_payload",
+  "hex": "3f084d437c4272616e64074879706978656c2042756e676565436f7264"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "kick_disconnect",
+  "hex": "40117b2274657874223a224b69636b6564227d"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "title",
+  "hex": "4500137b2274657874223a22564943544f525921227d"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "title",
+  "hex": "45010e7b2274657874223a22737562227d"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "title",
+  "hex": "45020000000a0000004600000014"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "title",
+  "hex": "4503"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "title",
+  "hex": "4504"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "playerlist_header",
+  "hex": "47127b2274657874223a224879706978656c227d1c7b2274657874223a2273746f72652e6879706978656c2e6e6574227d"
+ },
+ {
+  "state": "play",
+  "clientbound": false,
+  "name": "chat",
+  "hex": "010c2f7363206277204e6f746368"
+ },
+ {
+  "state": "play",
+  "clientbound": false,
+  "name": "custom_payload",
+  "hex": "17084d437c4272616e64056c756e6172"
+ },
+ {
+  "state": "play",
+  "clientbound": true,
+  "name": "named_entity_spawn",
+  "hex": "0c9221853c80ef3c3749fdaa49938b674adae60000002000000800ffffffc0000000006641a000007f"
+ }
+]
