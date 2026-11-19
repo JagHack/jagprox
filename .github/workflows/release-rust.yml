@@ -57,8 +57,8 @@ jobs:
           bin=target/${{ matrix.arch }}-unknown-linux-musl/release/jagprox
           file "$bin" | grep -q static
           "$bin" --version
-          mkdir -p out && cp "$bin" LICENSE out/
-          tar -czf jagprox-linux-${{ matrix.arch }}.tar.gz -C out jagprox LICENSE
+          mkdir -p out && cp "$bin" LICENSE NOTICE out/
+          tar -czf jagprox-linux-${{ matrix.arch }}.tar.gz -C out jagprox LICENSE NOTICE
       - uses: actions/upload-artifact@v4
         with:
           name: cli-linux-${{ matrix.arch }}

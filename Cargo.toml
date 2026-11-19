@@ -5,7 +5,7 @@ members = ["crates/mcproto", "crates/jagprox-core", "crates/jagprox-cli", "crate
 [workspace.package]
 version = "3.0.0-alpha.0"
 edition = "2024"
-license = "GPL-3.0-or-later"
+license = "Apache-2.0"
 authors = ["JagHack"]
 repository = "https://github.com/JagHack/jagprox"
 

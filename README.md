@@ -143,4 +143,4 @@ Contributions are welcome and have already been made! Huge shoutout to Yanice an
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+JagProx is licensed under the [Apache License 2.0](LICENSE): use, change and share it however you like, including commercially. If you redistribute it or build on it, keep the [NOTICE](NOTICE) file so JagHack stays credited.

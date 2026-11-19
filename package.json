@@ -1,6 +1,7 @@
 {
   "name": "jagprox-launcher",
   "version": "2.6.1",
+  "license": "Apache-2.0",
   "description": "Launcher for JagProx",
   "main": "launcher/launcher.js",
   "scripts": {

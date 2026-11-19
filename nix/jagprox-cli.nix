@@ -17,6 +17,8 @@ rustPlatform.buildRustPackage {
       ../config.yml
       ../aliases.json
       ../server-icon.png
+      ../LICENSE
+      ../NOTICE
     ];
   };
   cargoLock.lockFile = ../Cargo.lock;
@@ -25,10 +27,14 @@ rustPlatform.buildRustPackage {
   # The launcher (jagprox-app) needs WebKitGTK and is packaged separately.
   cargoTestFlags = [ "-p" "mcproto" "-p" "jagprox-core" "-p" "jagprox-cli" ];
 
+  postInstall = ''
+    install -Dm644 -t $out/share/licenses/jagprox LICENSE NOTICE
+  '';
+
   meta = {
     description = "JagProx - a Hypixel proxy";
     homepage = "https://github.com/JagHack/jagprox";
-    license = lib.licenses.gpl3Plus;
+    license = lib.licenses.asl20;
     mainProgram = "jagprox";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;
   };

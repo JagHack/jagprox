@@ -24,6 +24,10 @@
     },
     "macOS": {
       "signingIdentity": "-"
+    },
+    "resources": {
+      "../../LICENSE": "LICENSE",
+      "../../NOTICE": "NOTICE"
     }
   }
 }

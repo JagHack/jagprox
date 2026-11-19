@@ -36,6 +36,8 @@ rustPlatform.buildRustPackage {
       ../config.yml
       ../aliases.json
       ../server-icon.png
+      ../LICENSE
+      ../NOTICE
     ];
   };
   cargoLock.lockFile = ../Cargo.lock;
@@ -76,6 +78,7 @@ rustPlatform.buildRustPackage {
   ];
 
   postInstall = ''
+    install -Dm644 -t $out/share/licenses/jagprox LICENSE NOTICE
     icons=crates/jagprox-app/icons
     install -Dm644 $icons/32x32.png $out/share/icons/hicolor/32x32/apps/jagprox-launcher.png
     install -Dm644 $icons/128x128.png $out/share/icons/hicolor/128x128/apps/jagprox-launcher.png
@@ -85,7 +88,7 @@ rustPlatform.buildRustPackage {
   meta = {
     description = "JagProx - a Hypixel proxy, with its launcher window";
     homepage = "https://github.com/JagHack/jagprox";
-    license = lib.licenses.gpl3Plus;
+    license = lib.licenses.asl20;
     mainProgram = "jagprox";
     platforms = lib.platforms.linux;
   };

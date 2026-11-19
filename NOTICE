@@ -1,0 +1,10 @@
+JagProx
+Copyright 2025-2026 JagHack (https://github.com/JagHack)
+
+This product includes software developed by JagHack
+(https://github.com/JagHack/jagprox).
+
+The launcher bundles third-party fonts and icons under their own licenses:
+- Font Awesome Free 6.5.1 (icons: CC BY 4.0, fonts: SIL OFL 1.1, code: MIT),
+  see crates/jagprox-app/ui/vendor/fontawesome/LICENSE.txt
+- Inter (SIL OFL 1.1), see crates/jagprox-app/ui/vendor/inter/LICENSE.txt
