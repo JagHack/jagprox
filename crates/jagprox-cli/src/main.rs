@@ -5,6 +5,7 @@ mod launch;
 mod login;
 mod proxy_cmd;
 mod term;
+mod tui;
 mod update_cmd;
 #[cfg(windows)]
 mod windows_path;
@@ -119,8 +120,10 @@ enum Period {
 
 #[derive(Subcommand)]
 enum LaunchTarget {
-    /// Open the launcher window (default when no command is given)
+    /// Open the launcher window (the full graphical app)
     Launcher,
+    /// Open the terminal launcher (default when no command is given)
+    Tui,
     /// Run the proxy headless in this terminal (Ctrl+C to stop)
     Proxy {
         /// Also print the in-game chat
@@ -165,6 +168,9 @@ async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
             what: LaunchTarget::Launcher,
         } => launch::launch_launcher(),
         Cmd::Launch {
+            what: LaunchTarget::Tui,
+        } => tui::run_tui().await,
+        Cmd::Launch {
             what: LaunchTarget::Proxy { chat },
         } => proxy_cmd::run_proxy(ctx.color, chat).await,
         Cmd::Account {
@@ -207,7 +213,7 @@ fn main() -> ExitCode {
     }
 
     let command = cli.command.unwrap_or(Cmd::Launch {
-        what: LaunchTarget::Launcher,
+        what: LaunchTarget::Tui,
     });
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
