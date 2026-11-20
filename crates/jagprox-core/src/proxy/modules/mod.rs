@@ -229,7 +229,8 @@ fn nickname_player_list(
 }
 
 /// Hypixel's tab header starts "You are playing on §eMC.HYPIXEL.NET"; add
-/// "§e through §5JagProx!" to that first line so it's clear the proxy is in the way.
+/// "§b through §5§lJagProx§b!" to that first line so it's clear the proxy is in the way:
+/// aqua "through"/"!", bold dark-purple "JagProx" (a colour code also clears the bold).
 fn brand_tab_header(hf: &mut cb::PlayerListHeaderFooter) -> bool {
     let header =
         serde_json::from_str::<Value>(&hf.header).unwrap_or_else(|_| json!({ "text": hf.header }));
@@ -241,7 +242,7 @@ fn brand_tab_header(hf: &mut cb::PlayerListHeaderFooter) -> bool {
     let (first, rest) = text
         .split_once('\n')
         .map_or((text.as_str(), None), |(a, b)| (a, Some(b)));
-    let mut branded = format!("{first}§e through §5JagProx!");
+    let mut branded = format!("{first}§b through §5§lJagProx§b!");
     if let Some(rest) = rest {
         branded.push('\n');
         branded.push_str(rest);
@@ -293,7 +294,7 @@ mod tests {
         let shown = formatter::reconstruct_legacy_text(&serde_json::from_str(&hf.header).unwrap());
         assert_eq!(
             shown,
-            "§eYou are playing on §6MC.HYPIXEL.NET§e through §5JagProx!"
+            "§eYou are playing on §6MC.HYPIXEL.NET§b through §5§lJagProx§b!"
         );
     }
 
@@ -315,7 +316,7 @@ mod tests {
         let shown = formatter::reconstruct_legacy_text(&serde_json::from_str(&hf.header).unwrap());
         assert_eq!(
             shown,
-            "§eYou are playing on §6MC.HYPIXEL.NET§e through §5JagProx!"
+            "§eYou are playing on §6MC.HYPIXEL.NET§b through §5§lJagProx§b!"
         );
     }
 
@@ -327,7 +328,7 @@ mod tests {
         let shown = formatter::reconstruct_legacy_text(&serde_json::from_str(&hf.header).unwrap());
         assert_eq!(
             shown,
-            "§eYou are playing on §6MC.HYPIXEL.NET§e through §5JagProx!\n§7Steve"
+            "§eYou are playing on §6MC.HYPIXEL.NET§b through §5§lJagProx§b!\n§7Steve"
         );
     }
 
