@@ -32,10 +32,46 @@
       apps = forEach (
         system:
         let
+          pkgs = pkgsFor system;
           pkg = self.packages.${system}.jagprox;
           launcher = {
             type = "app";
             program = "${pkg}/bin/jagprox-launcher";
+          };
+          # A `nix profile` install has no self-update (the store is read-only), so
+          # `nix run github:JagHack/jagprox#enable-auto-update` installs a systemd
+          # user timer that runs `nix profile upgrade` daily instead. Idempotent.
+          enableAutoUpdate = {
+            type = "app";
+            program = "${pkgs.writeShellScript "jagprox-enable-auto-update" ''
+              set -eu
+              dir="$HOME/.config/systemd/user"
+              mkdir -p "$dir"
+              cat > "$dir/jagprox-update.service" <<EOF
+              [Unit]
+              Description=Update the nix-profile JagProx install
+              [Service]
+              Type=oneshot
+              ExecStart=${pkgs.nix}/bin/nix profile upgrade --refresh jagprox
+              Nice=15
+              IOSchedulingClass=idle
+              TimeoutStartSec=30min
+              EOF
+              cat > "$dir/jagprox-update.timer" <<EOF
+              [Unit]
+              Description=Check for JagProx updates daily
+              [Timer]
+              OnCalendar=daily
+              Persistent=true
+              RandomizedDelaySec=2h
+              [Install]
+              WantedBy=timers.target
+              EOF
+              ${pkgs.systemd}/bin/systemctl --user daemon-reload
+              ${pkgs.systemd}/bin/systemctl --user enable --now jagprox-update.timer
+              echo "JagProx will now update daily via nix profile upgrade."
+              echo "Stop it with: systemctl --user disable --now jagprox-update.timer"
+            ''}";
           };
         in
         {
@@ -47,6 +83,7 @@
             type = "app";
             program = "${pkg}/bin/jagprox";
           };
+          enable-auto-update = enableAutoUpdate;
         }
       );
 

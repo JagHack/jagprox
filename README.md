@@ -56,7 +56,13 @@ Download JagProx from the [latest release](https://github.com/JagHack/jagprox/re
 | Any other Linux | `JagProx-<version>-x86_64.AppImage` | Settings → Install Command |
 | Terminal only, any Linux | `curl -fsSL https://github.com/JagHack/jagprox/releases/latest/download/install.sh \| sh` | `~/.local/bin/jagprox` |
 
-**On NixOS**, use the flake above rather than the AppImage — it runs natively with no `appimage-run` or FHS setup. `nix run github:JagHack/jagprox` to try it, `nix profile install github:JagHack/jagprox` to keep it, or add it as a flake input / via `overlays.default`.
+**On NixOS**, use the flake above rather than the AppImage — it runs natively with no `appimage-run` or FHS setup. `nix run github:JagHack/jagprox` to try it, `nix profile install github:JagHack/jagprox` to keep it, or add it as a flake input / via `overlays.default`. A `nix profile` install has no in-app self-update (the store is read-only), so `jagprox update` just points you back to Nix. To keep it current automatically, run once:
+
+```bash
+nix run github:JagHack/jagprox#enable-auto-update
+```
+
+which installs a systemd **user** timer that runs `nix profile upgrade` daily. Stop it with `systemctl --user disable --now jagprox-update.timer`.
 
 Already on JagProx 2? It offers the update itself; your login, settings and aliases carry over. Updates after that come from the launcher (Settings → Check for Updates) or `jagprox update`.
 
@@ -92,14 +98,14 @@ Notable `config.yml` options:
 
 ### Building from source
 
-With [Rust](https://rustup.rs) installed (and on Linux WebKitGTK 4.1, e.g. `libwebkit2gtk-4.1-dev`):
+With [Rust](https://rustup.rs) installed (and on Linux the launcher's OpenGL/Wayland/X11 dev libraries, e.g. `libgl1-mesa-dev libxkbcommon-dev libwayland-dev libxcursor-dev libxrandr-dev libxi-dev libx11-dev libfontconfig1-dev`):
 
 ```bash
 git clone https://github.com/JagHack/jagprox.git
 cd jagprox
 cargo test --workspace                     # tests
 cargo run -p jagprox-cli -- --help         # the jagprox command
-cargo run -p jagprox-app                   # the launcher
+cargo run -p jagprox-gui                   # the launcher
 ```
 
 ---
