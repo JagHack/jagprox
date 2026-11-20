@@ -168,13 +168,14 @@ pub fn saved_login(leveldb: &Path) -> Option<String> {
         // Latin-1
         (1, bytes) => bytes.iter().map(|&b| b as char).collect::<String>(),
         // UTF-16LE
-        (0, bytes) => String::from_utf16(
-            &bytes
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                .collect::<Vec<_>>(),
-        )
-        .ok()?,
+        (0, bytes) => {
+            let (pairs, _) = bytes.as_chunks::<2>();
+            let units: Vec<u16> = pairs
+                .iter()
+                .map(|&[a, b]| u16::from_le_bytes([a, b]))
+                .collect();
+            String::from_utf16(&units).ok()?
+        }
         _ => return None,
     };
     account::looks_like_jwt(&token).then_some(token)

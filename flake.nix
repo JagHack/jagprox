@@ -56,6 +56,26 @@
         jagprox-cli = final.callPackage ./nix/jagprox-cli.nix { };
       };
 
+      devShells = forEach (
+        system:
+        let
+          pkgs = pkgsFor system;
+        in
+        {
+          # `nix develop` gives the launcher's build deps plus the dev tools, with the
+          # same toolchain the package builds with.
+          default = pkgs.mkShell {
+            inputsFrom = [ self.packages.${system}.jagprox ];
+            packages = with pkgs; [
+              clippy
+              rustfmt
+              cargo-tauri
+              nodejs
+            ];
+          };
+        }
+      );
+
       formatter = forEach (system: (pkgsFor system).nixfmt-rfc-style);
     };
 }
