@@ -636,6 +636,34 @@ pub mod serverbound {
     // chat
     packet!(Chat = 0x01, { message: String => string / string });
 
+    // position: the player's absolute position (drives the broadcaster's model).
+    packet!(PlayerPosition = 0x04, {
+        x: f64 => f64 / f64,
+        y: f64 => f64 / f64,
+        z: f64 => f64 / f64,
+        on_ground: bool => bool / bool,
+    });
+
+    // look
+    packet!(PlayerLook = 0x05, {
+        yaw: f32 => f32 / f32,
+        pitch: f32 => f32 / f32,
+        on_ground: bool => bool / bool,
+    });
+
+    // position_look
+    packet!(PlayerPositionAndLook = 0x06, {
+        x: f64 => f64 / f64,
+        y: f64 => f64 / f64,
+        z: f64 => f64 / f64,
+        yaw: f32 => f32 / f32,
+        pitch: f32 => f32 / f32,
+        on_ground: bool => bool / bool,
+    });
+
+    // arm_animation: the player swung their arm (no fields in 1.8).
+    packet!(ArmAnimation = 0x0A, {});
+
     /// `custom_payload`
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct PluginMessage {

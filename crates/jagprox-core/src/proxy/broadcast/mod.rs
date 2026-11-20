@@ -6,6 +6,8 @@
 //! the JagProx rendezvous server, is given a snapshot of that world and then the
 //! live stream, and swaps its Minecraft client over from Hypixel to that feed.
 
+pub mod compass;
 pub mod state;
+pub mod transform;
 
 pub use state::GameState;
