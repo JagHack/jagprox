@@ -144,7 +144,10 @@ pub fn on_server_packet(s: &Session, packet: &mut ServerPacket) -> bool {
     }
 
     match packet {
-        ServerPacket::HeaderFooter(hf) => changed |= inject_map_into_footer(s, hf),
+        ServerPacket::HeaderFooter(hf) => {
+            changed |= brand_tab_header(hf);
+            changed |= inject_map_into_footer(s, hf);
+        }
         ServerPacket::Plugin(p) if p.channel == "MC|Brand" => {
             p.data = vanilla_brand();
             changed = true;
@@ -225,6 +228,28 @@ fn nickname_player_list(
     changed
 }
 
+/// Hypixel's tab header starts "You are playing on §eMC.HYPIXEL.NET"; add
+/// "§e through §5JagProx!" to that first line so it's clear the proxy is in the way.
+fn brand_tab_header(hf: &mut cb::PlayerListHeaderFooter) -> bool {
+    let header =
+        serde_json::from_str::<Value>(&hf.header).unwrap_or_else(|_| json!({ "text": hf.header }));
+    let text = formatter::reconstruct_legacy_text(&header);
+    // Only touch Hypixel's "playing on" header, and never add our line twice.
+    if !text.contains("HYPIXEL.NET") || text.contains("JagProx") {
+        return false;
+    }
+    let (first, rest) = text
+        .split_once('\n')
+        .map_or((text.as_str(), None), |(a, b)| (a, Some(b)));
+    let mut branded = format!("{first}§e through §5JagProx!");
+    if let Some(rest) = rest {
+        branded.push('\n');
+        branded.push_str(rest);
+    }
+    hf.header = json!({ "text": branded }).to_string();
+    true
+}
+
 /// "You are currently playing on <map>" under the tab list.
 fn inject_map_into_footer(s: &Session, hf: &mut cb::PlayerListHeaderFooter) -> bool {
     let Some(map) = s.state().queue.current_map.clone() else {
@@ -248,4 +273,49 @@ pub fn reset(st: &mut State) {
     st.alerter.reset();
     st.auto_gg.reset();
     st.ranks.reset();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn header(text: &str) -> cb::PlayerListHeaderFooter {
+        cb::PlayerListHeaderFooter {
+            header: json!({ "text": text }).to_string(),
+            footer: json!({ "text": "" }).to_string(),
+        }
+    }
+
+    #[test]
+    fn brands_the_hypixel_header() {
+        let mut hf = header("§eYou are playing on §6MC.HYPIXEL.NET");
+        assert!(brand_tab_header(&mut hf));
+        let shown = formatter::reconstruct_legacy_text(&serde_json::from_str(&hf.header).unwrap());
+        assert_eq!(
+            shown,
+            "§eYou are playing on §6MC.HYPIXEL.NET§e through §5JagProx!"
+        );
+    }
+
+    #[test]
+    fn keeps_lines_after_the_first() {
+        // In-game, line 2 is the player's name; it must survive untouched.
+        let mut hf = header("§eYou are playing on §6MC.HYPIXEL.NET\n§7Steve");
+        assert!(brand_tab_header(&mut hf));
+        let shown = formatter::reconstruct_legacy_text(&serde_json::from_str(&hf.header).unwrap());
+        assert_eq!(
+            shown,
+            "§eYou are playing on §6MC.HYPIXEL.NET§e through §5JagProx!\n§7Steve"
+        );
+    }
+
+    #[test]
+    fn is_idempotent_and_leaves_other_headers_alone() {
+        let mut once = header("§eYou are playing on §6MC.HYPIXEL.NET");
+        brand_tab_header(&mut once);
+        assert!(!brand_tab_header(&mut once), "must not brand twice");
+
+        let mut other = header("§aSome other server");
+        assert!(!brand_tab_header(&mut other));
+    }
 }
