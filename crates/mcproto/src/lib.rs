@@ -7,6 +7,7 @@ pub mod crypto;
 pub mod error;
 pub mod frame;
 pub mod packets;
+pub mod world;
 
 pub use error::{Error, Result};
 
