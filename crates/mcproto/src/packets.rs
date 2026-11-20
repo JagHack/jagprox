@@ -576,6 +576,50 @@ pub mod clientbound {
         footer: String => string / string,
     });
 
+    // scoreboard_score
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct UpdateScore {
+        /// The score's entry name (a player or a line of text), ≤ 40 chars.
+        pub name: String,
+        /// 0 = create/update, 1 = remove.
+        pub action: i8,
+        pub objective: String,
+        /// Present unless the action is "remove".
+        pub value: Option<i32>,
+    }
+
+    impl Packet for UpdateScore {
+        const ID: i32 = 0x3C;
+        fn decode(r: &mut &[u8]) -> Result<Self> {
+            let name = r.string()?;
+            let action = r.i8()?;
+            let objective = r.string()?;
+            let value = (action != 1).then(|| r.varint()).transpose()?;
+            Ok(Self {
+                name,
+                action,
+                objective,
+                value,
+            })
+        }
+        fn encode(&self, w: &mut Vec<u8>) {
+            w.string(&self.name);
+            w.i8(self.action);
+            w.string(&self.objective);
+            if self.action != 1
+                && let Some(value) = self.value
+            {
+                w.varint(value);
+            }
+        }
+    }
+
+    // scoreboard_display_objective
+    packet!(DisplayScoreboard = 0x3D, {
+        position: i8 => i8 / i8,
+        name: String => string / string,
+    });
+
     /// `custom_payload` id in this direction.
     pub const PLUGIN_MESSAGE: i32 = PluginMessage::ID;
 }

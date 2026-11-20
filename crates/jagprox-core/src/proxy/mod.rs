@@ -1,6 +1,7 @@
 //! The proxy: a 1.8.9 server for the player's client on one side, a Microsoft-
 //! authenticated connection to Hypixel on the other, and the packet relay between.
 
+pub mod broadcast;
 mod commands;
 mod lookups;
 pub mod modules;
