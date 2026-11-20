@@ -298,6 +298,28 @@ mod tests {
     }
 
     #[test]
+    fn works_on_hypixels_component_format() {
+        // Hypixel sends colour fields, not § codes; branding must keep its colours.
+        let mut hf = cb::PlayerListHeaderFooter {
+            header: json!({
+                "text": "",
+                "extra": [
+                    { "text": "You are playing on ", "color": "yellow" },
+                    { "text": "MC.HYPIXEL.NET", "color": "gold" }
+                ]
+            })
+            .to_string(),
+            footer: json!({ "text": "" }).to_string(),
+        };
+        assert!(brand_tab_header(&mut hf));
+        let shown = formatter::reconstruct_legacy_text(&serde_json::from_str(&hf.header).unwrap());
+        assert_eq!(
+            shown,
+            "§eYou are playing on §6MC.HYPIXEL.NET§e through §5JagProx!"
+        );
+    }
+
+    #[test]
     fn keeps_lines_after_the_first() {
         // In-game, line 2 is the player's name; it must survive untouched.
         let mut hf = header("§eYou are playing on §6MC.HYPIXEL.NET\n§7Steve");
