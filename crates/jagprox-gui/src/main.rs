@@ -551,6 +551,8 @@ fn main() -> eframe::Result<()> {
         "JagProx",
         options,
         Box::new(move |cc| {
+            // Lets egui::Image load the bundled PNG logo.
+            egui_extras::install_image_loaders(&cc.egui_ctx);
             let shared = Arc::new(Shared {
                 ctx: cc.egui_ctx.clone(),
                 rt: rt_handle,

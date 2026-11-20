@@ -120,7 +120,11 @@ pub fn sidebar(ctx: &egui::Context, app: &mut App) {
         .show(ctx, |ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("⚡").size(22.0).color(ACCENT));
+                ui.add(
+                    egui::Image::new(egui::include_image!("../icons/icon.png"))
+                        .fit_to_exact_size(egui::vec2(28.0, 28.0)),
+                );
+                ui.add_space(6.0);
                 ui.label(RichText::new("JagProx").size(22.0).strong().color(TEXT));
             });
             ui.add_space(20.0);
@@ -299,8 +303,13 @@ pub fn home(ui: &mut egui::Ui, app: &mut App) {
         }
     });
 
-    ui.add_space((ui.available_height() * 0.32).max(20.0));
+    ui.add_space((ui.available_height() * 0.22).max(16.0));
     ui.vertical_centered(|ui| {
+        ui.add(
+            egui::Image::new(egui::include_image!("../icons/icon.png"))
+                .fit_to_exact_size(egui::vec2(104.0, 104.0)),
+        );
+        ui.add_space(10.0);
         ui.label(RichText::new("JagProx").size(58.0).strong().color(ACCENT));
         ui.label(
             RichText::new("Your Hypixel Advantage")
