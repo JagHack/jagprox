@@ -505,7 +505,11 @@ fn main() -> eframe::Result<()> {
 
     let rt_handle = rt.handle().clone();
     let config_watch = config.clone();
-    rt.spawn(async move { config_watch.watch() });
+    {
+        // watch() spawns its own task and returns a handle; run it in the runtime.
+        let _guard = rt.enter();
+        config_watch.watch();
+    }
 
     eframe::run_native(
         "JagProx",
