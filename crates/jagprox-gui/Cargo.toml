@@ -1,0 +1,21 @@
+[package]
+name = "jagprox-gui"
+description = "JagProx launcher window (native, egui)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "jagprox-launcher"
+path = "src/main.rs"
+
+[dependencies]
+jagprox-core = { path = "../jagprox-core" }
+eframe = { version = "0.29", default-features = false, features = ["glow", "wayland", "x11", "default_fonts"] }
+egui = "0.29"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+open = "5"
+discord-rich-presence = "1"
