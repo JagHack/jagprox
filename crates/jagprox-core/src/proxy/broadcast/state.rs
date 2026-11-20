@@ -432,7 +432,13 @@ impl GameState {
                 }
                 .to_payload(),
             );
-            out.push(mcproto::world::EntityHeadLook { eid, head_yaw: e.pos.head_yaw }.to_payload());
+            out.push(
+                mcproto::world::EntityHeadLook {
+                    eid,
+                    head_yaw: e.pos.head_yaw,
+                }
+                .to_payload(),
+            );
             if let Some(m) = &e.metadata {
                 out.push(m.clone());
             }
@@ -536,7 +542,10 @@ mod tests {
 
         let snap = gs.snapshot();
         // The snapshot contains the chunk and a multi-block-change overlay.
-        assert!(snap.iter().any(|p| p.first() == Some(&(world::id::CHUNK_DATA as u8))));
+        assert!(
+            snap.iter()
+                .any(|p| p.first() == Some(&(world::id::CHUNK_DATA as u8)))
+        );
         assert!(
             snap.iter()
                 .any(|p| p.first() == Some(&(world::id::MULTI_BLOCK_CHANGE as u8)))

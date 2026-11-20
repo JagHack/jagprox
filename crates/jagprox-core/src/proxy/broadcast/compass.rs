@@ -49,8 +49,7 @@ pub async fn connect(addr: &str) -> std::io::Result<TcpStream> {
 
 /// Writes one control message as a JSON line.
 pub async fn write_msg(write: &mut OwnedWriteHalf, msg: &ClientMsg) -> std::io::Result<()> {
-    let mut line =
-        serde_json::to_vec(msg).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let mut line = serde_json::to_vec(msg).map_err(std::io::Error::other)?;
     line.push(b'\n');
     write.write_all(&line).await?;
     write.flush().await
@@ -84,8 +83,7 @@ pub async fn open_relay(addr: &str, token: &str) -> std::io::Result<TcpStream> {
     let msg = ClientMsg::Relay {
         token: token.to_string(),
     };
-    let mut line =
-        serde_json::to_vec(&msg).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let mut line = serde_json::to_vec(&msg).map_err(std::io::Error::other)?;
     line.push(b'\n');
     stream.write_all(&line).await?;
     stream.flush().await?;

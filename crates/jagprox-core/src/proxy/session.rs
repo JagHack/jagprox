@@ -39,6 +39,8 @@ struct Inner {
     to_server: mpsc::Sender<Out>,
     state: Mutex<State>,
     tasks: Mutex<Vec<AbortHandle>>,
+    /// Set while this session is broadcasting its game to spectators.
+    broadcast: Mutex<Option<Arc<super::broadcast::Broadcast>>>,
 }
 
 /// Handles modules and commands use to talk to both sides. Cheap to clone.
@@ -76,6 +78,24 @@ impl Session {
     /// The modules' state. Never hold this across an `.await`.
     pub fn state(&self) -> MutexGuard<'_, State> {
         self.inner.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The active broadcast, if this session is broadcasting.
+    pub fn broadcast(&self) -> Option<Arc<super::broadcast::Broadcast>> {
+        self.inner
+            .broadcast
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Starts or stops broadcasting.
+    pub fn set_broadcast(&self, broadcast: Option<Arc<super::broadcast::Broadcast>>) {
+        *self
+            .inner
+            .broadcast
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = broadcast;
     }
 
     /// Runs a task that is cancelled when the session ends.
@@ -186,6 +206,7 @@ pub(super) async fn run(
             to_server,
             state: Mutex::new(State::default()),
             tasks: Mutex::new(Vec::new()),
+            broadcast: Mutex::new(None),
         }),
     };
     proxy.set_current(Some(session.clone()));
@@ -221,6 +242,7 @@ pub(super) async fn run(
     // Session over: stop its timers, reset the modules, and let the writers send
     // what's queued (e.g. a kick) before both sockets close.
     proxy.set_current(None);
+    session.set_broadcast(None);
     session.abort_tasks();
     modules::reset(&mut session.state());
     drop(session);
@@ -254,6 +276,12 @@ async fn server_to_client(
             }
             Err(e) => return Err(e.to_string()),
         };
+        // While broadcasting, track the world and forward to spectators.
+        if let Some(broadcast) = session.broadcast()
+            && let Ok(payload) = frame.payload()
+        {
+            broadcast.observe(&payload);
+        }
         let out = inspect_server_frame(&session, frame);
         if session.inner.to_client.send(out).await.is_err() {
             return Ok(());
@@ -321,6 +349,10 @@ async fn client_to_server(
             Err(mcproto::Error::Closed) => return Ok(()),
             Err(e) => return Err(e.to_string()),
         };
+        // While broadcasting, drive the broadcaster's model from their own movement.
+        if let Some(broadcast) = session.broadcast() {
+            feed_broadcaster_movement(&broadcast, &frame);
+        }
         let out = match frame.id() {
             Ok(sb::PluginMessage::ID) => match frame
                 .payload()
@@ -343,6 +375,31 @@ async fn client_to_server(
         {
             return Ok(());
         }
+    }
+}
+
+/// Feeds the broadcaster's own movement/arm-swing into their spectators' model.
+fn feed_broadcaster_movement(broadcast: &super::broadcast::Broadcast, frame: &Frame) {
+    let Ok(id) = frame.id() else { return };
+    let Ok(payload) = frame.payload() else { return };
+    match id {
+        sb::PlayerPosition::ID => {
+            if let Ok(p) = sb::PlayerPosition::from_payload(&payload) {
+                broadcast.broadcaster_move(Some((p.x, p.y, p.z)), None);
+            }
+        }
+        sb::PlayerLook::ID => {
+            if let Ok(p) = sb::PlayerLook::from_payload(&payload) {
+                broadcast.broadcaster_move(None, Some((p.yaw, p.pitch)));
+            }
+        }
+        sb::PlayerPositionAndLook::ID => {
+            if let Ok(p) = sb::PlayerPositionAndLook::from_payload(&payload) {
+                broadcast.broadcaster_move(Some((p.x, p.y, p.z)), Some((p.yaw, p.pitch)));
+            }
+        }
+        sb::ArmAnimation::ID => broadcast.broadcaster_swung(),
+        _ => {}
     }
 }
 

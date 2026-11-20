@@ -61,22 +61,25 @@ pub async fn run(relay: TcpStream, broadcast: Arc<Broadcast>) -> Result<(), Stri
     let mut conn = Connection::new(r, w);
 
     // Login over the relay (offline: no encryption, the link is already trusted).
-    let hs = conn::read_handshake(&mut conn).await.map_err(|e| e.to_string())?;
+    let hs = conn::read_handshake(&mut conn)
+        .await
+        .map_err(|e| e.to_string())?;
     if hs.next_state != mcproto::packets::handshake::LOGIN {
         return Err("spectator did not request login".into());
     }
-    let name = conn::read_login_start(&mut conn).await.map_err(|e| e.to_string())?;
-    conn::server_set_compression(&mut conn, COMPRESSION).await.map_err(|e| e.to_string())?;
+    let name = conn::read_login_start(&mut conn)
+        .await
+        .map_err(|e| e.to_string())?;
+    conn::server_set_compression(&mut conn, COMPRESSION)
+        .await
+        .map_err(|e| e.to_string())?;
     let uuid = mcproto::crypto::offline_uuid(&name);
     conn::server_login_success(&mut conn, &uuid_string(uuid), &name)
         .await
         .map_err(|e| e.to_string())?;
     log(format!("Spectator {name} connected to broadcast."));
 
-    let Connection {
-        reader,
-        mut writer,
-    } = conn;
+    let Connection { reader, mut writer } = conn;
 
     // Enter play: JoinGame + abilities + the world snapshot + the broadcaster model,
     // captured atomically so no live packet is missed or duplicated.
@@ -128,7 +131,11 @@ async fn writer_loop(
     }
 }
 
-async fn reader_loop(mut reader: FrameReader<OwnedReadHalf>, broadcast: Arc<Broadcast>, name: String) {
+async fn reader_loop(
+    mut reader: FrameReader<OwnedReadHalf>,
+    broadcast: Arc<Broadcast>,
+    name: String,
+) {
     loop {
         let frame = match reader.read_frame().await {
             Ok(f) => f,

@@ -67,6 +67,9 @@ pub struct Proxy {
     current: Arc<Mutex<Option<Session>>>,
     /// Open connections, aborted by [`Proxy::shutdown`].
     connections: Mutex<Vec<tokio::task::AbortHandle>>,
+    /// When set, the next client login spectates this broadcaster instead of
+    /// connecting to Hypixel (`/watch <name>`).
+    spectate: Mutex<Option<String>>,
 }
 
 impl Proxy {
@@ -114,7 +117,29 @@ impl Proxy {
             aliases,
             current,
             connections: Mutex::new(Vec::new()),
+            spectate: Mutex::new(None),
         }))
+    }
+
+    /// The broadcaster the next login should spectate, if any.
+    pub fn spectate_target(&self) -> Option<String> {
+        self.spectate
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Sets (or clears) spectate mode for the next login.
+    pub fn set_spectate(&self, target: Option<String>) {
+        *self.spectate.lock().unwrap_or_else(|e| e.into_inner()) = target;
+    }
+
+    /// The broadcasting rendezvous server (config `compass:`, else the default).
+    pub fn compass_addr(&self) -> String {
+        self.config()
+            .get("compass")
+            .and_then(|c| c.as_str().map(str::to_string))
+            .unwrap_or_else(|| super::broadcast::DEFAULT_COMPASS.to_string())
     }
 
     pub fn hypixel(&self) -> &Hypixel {
@@ -291,6 +316,14 @@ impl Proxy {
             }
         };
         log(format!("Client connected to proxy: {name}"));
+
+        // Spectate mode: bridge this client to a broadcaster over the rendezvous
+        // relay instead of connecting to Hypixel. No Microsoft account is needed.
+        if let Some(target) = self.spectate_target() {
+            let client_uuid = uuid_string(uuid);
+            let addr = self.compass_addr();
+            return super::broadcast::spectator::run(client, name, client_uuid, target, addr).await;
+        }
 
         // 2. The Microsoft account for the Hypixel side.
         let session = if offline {

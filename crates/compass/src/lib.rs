@@ -38,8 +38,8 @@ fn key(name: &str) -> String {
 /// A short non-cryptographic pairing nonce (a relay only ever joins two already
 /// approved peers, so this just needs to be unguessable-enough and unique).
 fn token() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)

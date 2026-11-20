@@ -31,7 +31,7 @@ fn is_dropped(id: i32) -> bool {
         | 0x37                      // Statistics
         | 0x39                      // Player Abilities (host controls the spectator's)
         | 0x3A                      // Tab-Complete
-        | 0x48                      // Resource Pack Send
+        | 0x48 // Resource Pack Send
     )
 }
 
@@ -58,7 +58,15 @@ fn fixed(coord: f64) -> i32 {
 /// Spawns the broadcaster as a player entity (`eid`), using their current position.
 /// The skin comes from the broadcaster's tab-list entry, which the spectator already
 /// has from the snapshot, so only a Spawn Player packet is needed.
-pub fn spawn_broadcaster(eid: i32, uuid: u128, x: f64, y: f64, z: f64, yaw: f32, pitch: f32) -> Vec<u8> {
+pub fn spawn_broadcaster(
+    eid: i32,
+    uuid: u128,
+    x: f64,
+    y: f64,
+    z: f64,
+    yaw: f32,
+    pitch: f32,
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(32);
     out.varint(world::id::SPAWN_PLAYER);
     out.varint(eid);
@@ -92,26 +100,6 @@ pub fn move_broadcaster(eid: i32, x: f64, y: f64, z: f64, yaw: f32, pitch: f32) 
     }
     .to_payload();
     vec![tp, head]
-}
-
-/// Turns the broadcaster's look-only change into a model head/look update.
-pub fn look_broadcaster(eid: i32, yaw: f32, pitch: f32) -> Vec<Vec<u8>> {
-    let look = world::EntityLookAndRelativeMove {
-        eid,
-        dx: 0,
-        dy: 0,
-        dz: 0,
-        yaw: angle_byte(yaw),
-        pitch: angle_byte(pitch),
-        on_ground: true,
-    }
-    .to_payload();
-    let head = world::EntityHeadLook {
-        eid,
-        head_yaw: angle_byte(yaw),
-    }
-    .to_payload();
-    vec![look, head]
 }
 
 /// The broadcaster swung their arm.

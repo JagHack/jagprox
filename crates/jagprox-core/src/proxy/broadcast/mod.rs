@@ -14,8 +14,9 @@ pub mod spectator;
 pub mod state;
 pub mod transform;
 
-use std::sync::Mutex;
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use mcproto::packets::{Packet, clientbound as cb, parse_uuid};
 use serde_json::json;
@@ -56,6 +57,7 @@ pub struct Broadcast {
     control_tx: mpsc::Sender<ClientMsg>,
     /// JSON chat component + position to show the broadcaster.
     chat_tx: mpsc::UnboundedSender<(String, i8)>,
+    closed: AtomicBool,
 }
 
 impl Broadcast {
@@ -72,25 +74,17 @@ impl Broadcast {
         }
     }
 
-    /// The broadcaster moved; move their model for every spectator.
-    pub fn broadcaster_moved(&self, x: f64, y: f64, z: f64, yaw: f32, pitch: f32) {
+    /// The broadcaster moved and/or turned; move their model for every spectator.
+    /// Either part may be absent (the three serverbound movement packets carry
+    /// position only, look only, or both).
+    pub fn broadcaster_move(&self, pos: Option<(f64, f64, f64)>, look: Option<(f32, f32)>) {
         let mut inner = self.lock();
+        let cur = inner.game.position.unwrap_or((0.0, 64.0, 0.0, 0.0, 0.0));
+        let (x, y, z) = pos.unwrap_or((cur.0, cur.1, cur.2));
+        let (yaw, pitch) = look.unwrap_or((cur.3, cur.4));
         inner.game.position = Some((x, y, z, yaw, pitch));
         let eid = inner.game.self_eid;
         for p in transform::move_broadcaster(eid, x, y, z, yaw, pitch) {
-            inner.fanout(&p);
-        }
-    }
-
-    /// The broadcaster turned without moving.
-    pub fn broadcaster_looked(&self, yaw: f32, pitch: f32) {
-        let mut inner = self.lock();
-        if let Some(pos) = inner.game.position.as_mut() {
-            pos.3 = yaw;
-            pos.4 = pitch;
-        }
-        let eid = inner.game.self_eid;
-        for p in transform::look_broadcaster(eid, yaw, pitch) {
             inner.fanout(&p);
         }
     }
@@ -140,12 +134,16 @@ impl Broadcast {
 
     /// Approve a pending spectator (from a `/bc accept` click).
     pub fn accept(&self, from: &str) {
-        let _ = self.control_tx.try_send(ClientMsg::Accept { from: from.to_string() });
+        let _ = self.control_tx.try_send(ClientMsg::Accept {
+            from: from.to_string(),
+        });
     }
 
     /// Reject a pending spectator.
     pub fn deny(&self, from: &str) {
-        let _ = self.control_tx.try_send(ClientMsg::Deny { from: from.to_string() });
+        let _ = self.control_tx.try_send(ClientMsg::Deny {
+            from: from.to_string(),
+        });
     }
 
     /// Show the broadcaster a clickable approve/deny prompt for a join request.
@@ -162,9 +160,7 @@ impl Broadcast {
     }
 
     fn broadcaster_chat(&self, text: &str) {
-        let _ = self
-            .chat_tx
-            .send((json!({ "text": text }).to_string(), 0));
+        let _ = self.chat_tx.send((json!({ "text": text }).to_string(), 0));
     }
 
     /// A spectator said something; surface it to the broadcaster.
@@ -178,6 +174,17 @@ impl Broadcast {
     /// Number of connected spectators.
     pub fn spectator_count(&self) -> usize {
         self.lock().spectators.len()
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Relaxed)
+    }
+
+    /// Stops broadcasting: disconnect current spectators and refuse new ones. The
+    /// rendezvous control task notices on its next message and exits.
+    pub fn close(&self) {
+        self.closed.store(true, Ordering::Relaxed);
+        self.lock().spectators.clear();
     }
 }
 
@@ -204,7 +211,10 @@ pub async fn start(session: &Session, compass_addr: &str) -> Result<Arc<Broadcas
     .map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
     loop {
-        match compass::read_msg(&mut read, &mut buf).await.map_err(|e| e.to_string())? {
+        match compass::read_msg(&mut read, &mut buf)
+            .await
+            .map_err(|e| e.to_string())?
+        {
             ServerMsg::Registered => break,
             ServerMsg::Pong => continue,
             ServerMsg::Error { msg } => return Err(msg),
@@ -222,6 +232,7 @@ pub async fn start(session: &Session, compass_addr: &str) -> Result<Arc<Broadcas
         uuid,
         control_tx,
         chat_tx,
+        closed: AtomicBool::new(false),
     });
 
     // Writer task: send control commands up to the rendezvous server.
@@ -251,13 +262,20 @@ pub async fn start(session: &Session, compass_addr: &str) -> Result<Arc<Broadcas
             let msg = match compass::read_msg(&mut read, &mut buf).await {
                 Ok(m) => m,
                 Err(_) => {
-                    log("Broadcast: disconnected from the rendezvous server.".to_string());
+                    log("Broadcast: disconnected from the rendezvous server.");
                     break;
                 }
             };
             match msg {
                 ServerMsg::JoinRequest { from } => b.prompt_join(&from),
-                ServerMsg::StartRelay { token, host: true, peer } => {
+                ServerMsg::StartRelay {
+                    token,
+                    host: true,
+                    peer,
+                } => {
+                    if b.is_closed() {
+                        continue;
+                    }
                     b.broadcaster_chat(&format!("§a{peer} is now watching your game."));
                     match compass::open_relay(&addr, &token).await {
                         Ok(relay) => {

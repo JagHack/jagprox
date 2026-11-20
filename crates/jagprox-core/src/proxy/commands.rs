@@ -4,7 +4,10 @@
 
 use serde_json::{Map, Value, json};
 
+use mcproto::packets::{Packet, clientbound as cb};
+
 use super::ProxyEvent;
+use super::broadcast;
 use super::lookups;
 use super::modules::party;
 use super::session::Session;
@@ -122,6 +125,18 @@ pub fn handle(s: &Session, message: &str) -> bool {
             drpc(s);
             true
         }
+        "bc" | "broadcast" => {
+            broadcast_command(s, args);
+            true
+        }
+        "watch" | "spectate" => {
+            watch_command(s, args);
+            true
+        }
+        "unwatch" | "stopwatching" => {
+            unwatch_command(s);
+            true
+        }
         "link" => run(Box::pin(async move { link(&s2).await })),
         "gametrack" | "gt" => run(Box::pin(async move { gametrack(&s2, args).await })),
         "leaderboard" => run(Box::pin(async move { leaderboard(&s2, args).await })),
@@ -131,6 +146,106 @@ pub fn handle(s: &Session, message: &str) -> bool {
 
 fn show_lines(s: &Session, lines: &[String]) {
     s.chat(&lines.join("\n"));
+}
+
+/// `/bc on|off|accept <name>|deny <name>|status`: control live broadcasting.
+fn broadcast_command(s: &Session, args: Vec<String>) {
+    let sub = args.first().map(|a| a.to_lowercase()).unwrap_or_default();
+    match sub.as_str() {
+        "" | "on" | "start" => {
+            if s.broadcast().is_some() {
+                s.chat("§eYou're already broadcasting. §7Use §f/bc off§7 to stop.");
+                return;
+            }
+            let addr = s.proxy().compass_addr();
+            let s2 = s.clone();
+            s.spawn(async move {
+                s2.chat("§7Starting broadcast…");
+                match broadcast::start(&s2, &addr).await {
+                    Ok(b) => {
+                        s2.set_broadcast(Some(b));
+                        s2.chat(&format!(
+                            "§a§lBroadcasting! §r§7A friend can watch with §f/watch {}",
+                            s2.username()
+                        ));
+                    }
+                    Err(e) => s2.chat(&format!("§cCouldn't start broadcasting: {e}")),
+                }
+            });
+        }
+        "off" | "stop" => match s.broadcast() {
+            Some(b) => {
+                b.close();
+                s.set_broadcast(None);
+                s.chat("§aStopped broadcasting.");
+            }
+            None => s.chat("§eYou aren't broadcasting."),
+        },
+        "accept" | "deny" => {
+            let Some(from) = args.get(1) else {
+                s.chat("§cUsage: /bc accept <name>");
+                return;
+            };
+            let Some(b) = s.broadcast() else {
+                s.chat("§eYou aren't broadcasting.");
+                return;
+            };
+            if sub == "accept" {
+                b.accept(from);
+                s.chat(&format!("§aLetting §f{from}§a watch."));
+            } else {
+                b.deny(from);
+                s.chat(&format!("§7Declined §f{from}§7."));
+            }
+        }
+        "status" => match s.broadcast() {
+            Some(b) => s.chat(&format!(
+                "§aBroadcasting — §f{}§a watching.",
+                b.spectator_count()
+            )),
+            None => s.chat("§7Not broadcasting. §fUse /bc on."),
+        },
+        _ => s.chat("§cUsage: §f/bc on|off|accept <name>|deny <name>|status"),
+    }
+}
+
+/// `/watch <player>`: reconnect into spectate mode for that broadcaster.
+fn watch_command(s: &Session, args: Vec<String>) {
+    let Some(target) = args.first().cloned() else {
+        s.chat("§cUsage: /watch <player>");
+        return;
+    };
+    if let Some(b) = s.broadcast() {
+        b.close();
+        s.set_broadcast(None);
+    }
+    s.proxy().set_spectate(Some(target.clone()));
+    kick(
+        s,
+        &format!(
+            "§aConnecting you to §f{target}§a's broadcast…\n\n§7Reconnect to JagProx to start watching."
+        ),
+    );
+}
+
+/// `/unwatch`: leave spectate mode and reconnect to Hypixel normally.
+fn unwatch_command(s: &Session) {
+    s.proxy().set_spectate(None);
+    kick(
+        s,
+        "§aLeaving the broadcast.\n\n§7Reconnect to JagProx to return to Hypixel.",
+    );
+}
+
+/// Disconnects the player's client with a message (they reconnect to apply a mode
+/// change like entering or leaving spectate).
+fn kick(s: &Session, reason: &str) {
+    s.send_to_client(
+        cb::Disconnect {
+            reason: json!({ "text": reason }).to_string(),
+        }
+        .to_payload(),
+    );
 }
 
 async fn statcheck(s: &Session, args: Vec<String>) -> Result<(), String> {

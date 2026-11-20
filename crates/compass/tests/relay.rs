@@ -40,7 +40,10 @@ async fn register_join_accept_and_relay() {
         },
     )
     .await;
-    assert!(matches!(recv(&mut broadcaster).await, ServerMsg::Registered));
+    assert!(matches!(
+        recv(&mut broadcaster).await,
+        ServerMsg::Registered
+    ));
 
     // Spectator asks to join.
     let mut spectator = TcpStream::connect(addr).await.unwrap();

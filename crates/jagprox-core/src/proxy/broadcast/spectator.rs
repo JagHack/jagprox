@@ -106,8 +106,13 @@ async fn request_join(addr: &str, target: &str, from: &str) -> Result<String, St
     .map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
     loop {
-        match compass::read_msg(&mut read, &mut buf).await.map_err(|e| e.to_string())? {
-            ServerMsg::StartRelay { token, host: false, .. } => return Ok(token),
+        match compass::read_msg(&mut read, &mut buf)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            ServerMsg::StartRelay {
+                token, host: false, ..
+            } => return Ok(token),
             ServerMsg::StartRelay { host: true, .. } => {}
             ServerMsg::Denied { reason } => return Err(reason),
             ServerMsg::Error { msg } => return Err(msg),
@@ -118,14 +123,9 @@ async fn request_join(addr: &str, target: &str, from: &str) -> Result<String, St
 
 /// Forwards raw frames from one side to the other until the source closes.
 async fn forward(mut from: FrameReader<OwnedReadHalf>, mut to: FrameWriter<OwnedWriteHalf>) {
-    loop {
-        match from.read_frame().await {
-            Ok(frame) => {
-                if to.queue_frame(&frame).is_err() || to.flush().await.is_err() {
-                    break;
-                }
-            }
-            Err(_) => break,
+    while let Ok(frame) = from.read_frame().await {
+        if to.queue_frame(&frame).is_err() || to.flush().await.is_err() {
+            break;
         }
     }
 }

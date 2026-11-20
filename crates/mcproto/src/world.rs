@@ -618,7 +618,10 @@ mod tests {
     #[test]
     fn bulk_column_size_matches_popcount() {
         // Two sections, with sky light: 2 * (8192 + 2048 + 2048) + 256.
-        assert_eq!(bulk_column_size(0b101, true), 2 * (8192 + 2048 + 2048) + 256);
+        assert_eq!(
+            bulk_column_size(0b101, true),
+            2 * (8192 + 2048 + 2048) + 256
+        );
         // One section, no sky light (nether): 1 * (8192 + 2048) + 256.
         assert_eq!(bulk_column_size(0b1, false), 8192 + 2048 + 256);
     }
