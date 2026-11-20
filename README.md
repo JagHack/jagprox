@@ -52,9 +52,11 @@ Download JagProx from the [latest release](https://github.com/JagHack/jagprox/re
 | Debian, Ubuntu, Mint, Pop!_OS | `jagprox_<version>_amd64.deb` (`arm64` for ARM) | included |
 | Fedora, openSUSE, RHEL | `jagprox-<version>-1.x86_64.rpm` (`aarch64` for ARM) | included |
 | Arch, Manjaro, EndeavourOS | the `PKGBUILD` from the release (AUR: `jagprox-bin`) | included |
-| NixOS / Nix | `nix-build nix -A jagprox` from this repository | included |
+| NixOS / Nix | `nix profile install github:JagHack/jagprox` — or `nix run github:JagHack/jagprox` to try it | included |
 | Any other Linux | `JagProx-<version>-x86_64.AppImage` | Settings → Install Command |
 | Terminal only, any Linux | `curl -fsSL https://github.com/JagHack/jagprox/releases/latest/download/install.sh \| sh` | `~/.local/bin/jagprox` |
+
+**On NixOS**, use the flake above rather than the AppImage — it runs natively with no `appimage-run` or FHS setup. `nix run github:JagHack/jagprox` to try it, `nix profile install github:JagHack/jagprox` to keep it, or add it as a flake input / via `overlays.default`.
 
 Already on JagProx 2? It offers the update itself; your login, settings and aliases carry over. Updates after that come from the launcher (Settings → Check for Updates) or `jagprox update`.
 
