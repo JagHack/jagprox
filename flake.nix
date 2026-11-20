@@ -6,7 +6,7 @@
   outputs =
     { self, nixpkgs }:
     let
-      # The launcher needs WebKitGTK, so only Linux.
+      # The launcher is a native OpenGL (egui) app, so only Linux here.
       systems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -69,9 +69,24 @@
             packages = with pkgs; [
               clippy
               rustfmt
-              cargo-tauri
-              nodejs
+              cargo-packager
+              cargo-generate-rpm
             ];
+            # eframe loads these at run time; make `cargo run -p jagprox-gui` work in the shell.
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (
+              with pkgs;
+              [
+                libGL
+                libxkbcommon
+                wayland
+                xorg.libX11
+                xorg.libXcursor
+                xorg.libXi
+                xorg.libXrandr
+                fontconfig
+                freetype
+              ]
+            );
           };
         }
       );

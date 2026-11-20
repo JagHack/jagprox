@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Game;
+Comment=Hypixel proxy with in-game stats
+Exec=jagprox-launcher
+Icon=jagprox-launcher
+Name=JagProx
+Terminal=false
+Type=Application
+StartupWMClass=jagprox-launcher

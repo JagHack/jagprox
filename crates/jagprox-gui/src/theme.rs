@@ -224,7 +224,7 @@ pub fn aliases_page(ui: &mut egui::Ui, app: &mut App) {
                                 .desired_width(150.0)
                                 .font(egui::TextStyle::Monospace),
                         );
-                        ui.label(RichText::new("→").color(MUTED).size(16.0));
+                        ui.label(RichText::new("»").color(MUTED).size(16.0));
                         ui.add(
                             egui::TextEdit::singleline(to)
                                 .hint_text("/play bedwars_four_four")
@@ -233,7 +233,7 @@ pub fn aliases_page(ui: &mut egui::Ui, app: &mut App) {
                         );
                         if button(
                             ui,
-                            "✕",
+                            "×",
                             STOP,
                             STOP.gamma_multiply(1.12),
                             Color32::WHITE,

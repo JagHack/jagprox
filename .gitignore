@@ -31,3 +31,4 @@ Thumbs.db
 
 # rust
 target/
+crates/jagprox-gui/binaries/

@@ -1,27 +1,40 @@
 # JagProx with the launcher window: `jagprox`, `jagprox-launcher` and the menu entry.
 #   build:  nix-build nix -A jagprox
 #   NixOS:  environment.systemPackages = [ (import /path/to/jagprox/nix {}).jagprox ];
+#
+# The launcher is a native egui/eframe app (OpenGL via glow), so it needs libGL,
+# libxkbcommon, Wayland and X11 at run time rather than a browser engine. eframe
+# dlopen's those, so the binary is wrapped with an LD_LIBRARY_PATH to find them.
 {
   lib,
   rustPlatform,
   pkg-config,
-  wrapGAppsHook3,
+  makeWrapper,
   copyDesktopItems,
   makeDesktopItem,
-  webkitgtk_4_1,
-  gtk3,
-  glib,
-  glib-networking,
-  libsoup_3,
-  cairo,
-  pango,
-  gdk-pixbuf,
-  atk,
-  librsvg,
+  libGL,
+  libxkbcommon,
+  wayland,
+  xorg,
+  fontconfig,
+  freetype,
   openssl,
   dbus,
 }:
 
+let
+  runtimeLibs = [
+    libGL
+    libxkbcommon
+    wayland
+    xorg.libX11
+    xorg.libXcursor
+    xorg.libXi
+    xorg.libXrandr
+    fontconfig
+    freetype
+  ];
+in
 rustPlatform.buildRustPackage {
   pname = "jagprox";
   version = (lib.importTOML ../Cargo.toml).workspace.package.version;
@@ -44,30 +57,32 @@ rustPlatform.buildRustPackage {
 
   nativeBuildInputs = [
     pkg-config
-    wrapGAppsHook3
+    makeWrapper
     copyDesktopItems
   ];
   buildInputs = [
-    webkitgtk_4_1
-    gtk3
-    glib
-    glib-networking
-    libsoup_3
-    cairo
-    pango
-    gdk-pixbuf
-    atk
-    librsvg
     openssl
     dbus
-  ];
+  ] ++ runtimeLibs;
 
-  cargoBuildFlags = [ "-p" "jagprox-cli" "-p" "jagprox-app" ];
-  cargoTestFlags = [ "-p" "mcproto" "-p" "jagprox-core" "-p" "jagprox-cli" ];
+  cargoBuildFlags = [
+    "-p"
+    "jagprox-cli"
+    "-p"
+    "jagprox-gui"
+  ];
+  cargoTestFlags = [
+    "-p"
+    "mcproto"
+    "-p"
+    "jagprox-core"
+    "-p"
+    "jagprox-cli"
+  ];
 
   desktopItems = [
     (makeDesktopItem {
-      name = "jagprox";
+      name = "jagprox-launcher";
       desktopName = "JagProx";
       comment = "Hypixel proxy with in-game stats";
       exec = "jagprox-launcher";
@@ -79,14 +94,18 @@ rustPlatform.buildRustPackage {
 
   postInstall = ''
     install -Dm644 -t $out/share/licenses/jagprox LICENSE NOTICE
-    icons=crates/jagprox-app/icons
+    icons=crates/jagprox-gui/icons
     install -Dm644 $icons/32x32.png $out/share/icons/hicolor/32x32/apps/jagprox-launcher.png
     install -Dm644 $icons/128x128.png $out/share/icons/hicolor/128x128/apps/jagprox-launcher.png
     install -Dm644 $icons/128x128@2x.png $out/share/icons/hicolor/256x256/apps/jagprox-launcher.png
+
+    # eframe loads GL/Wayland/X11 at run time; point the launcher at them.
+    wrapProgram $out/bin/jagprox-launcher \
+      --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath runtimeLibs}
   '';
 
   meta = {
-    description = "JagProx - a Hypixel proxy, with its launcher window";
+    description = "JagProx - a Hypixel proxy, with its native launcher window";
     homepage = "https://github.com/JagHack/jagprox";
     license = lib.licenses.asl20;
     mainProgram = "jagprox";

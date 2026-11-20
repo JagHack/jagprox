@@ -19,3 +19,75 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"
 serde_json = { version = "1", features = ["preserve_order"] }
 open = "5"
 discord-rich-presence = "1"
+
+# cargo-packager builds the deb, AppImage, macOS .app and .dmg from the egui binary
+# plus the static `jagprox` CLI as an external binary. rpm is cargo-generate-rpm (below);
+# the Windows installer is a hand-written NSIS script (packaging/windows). The release
+# workflow builds jagprox-launcher and the jagprox sidecar, then runs these tools.
+[package.metadata.packager]
+product-name = "JagProx"
+identifier = "com.jaghack.jagprox"
+category = "Game"
+publisher = "JagHack"
+homepage = "https://github.com/JagHack/jagprox"
+authors = ["JagHack"]
+license-file = "../../LICENSE"
+icons = [
+    "icons/32x32.png",
+    "icons/128x128.png",
+    "icons/128x128@2x.png",
+    "icons/icon.icns",
+    "icons/icon.ico",
+]
+binaries = [{ path = "jagprox-launcher", main = true }]
+binaries-dir = "../../target/release"
+external-binaries = ["binaries/jagprox"]
+resources = [
+    { src = "../../LICENSE", target = "LICENSE" },
+    { src = "../../NOTICE", target = "NOTICE" },
+]
+
+[package.metadata.packager.deb]
+package-name = "jagprox"
+desktop-template = "packaging/jagprox.desktop"
+# Runtime libraries the egui/glow launcher loads (GL, wayland, X11, keyboard, fonts).
+depends = [
+    "libc6",
+    "libgl1",
+    "libxkbcommon0",
+    "libwayland-client0",
+    "libx11-6",
+    "libxcursor1",
+    "libxi6",
+    "libxrandr2",
+    "libfontconfig1",
+]
+
+[package.metadata.packager.deb.files]
+"packaging/package-deb" = "/usr/lib/jagprox/package"
+
+[package.metadata.packager.macos]
+minimum-system-version = "10.15"
+signing-identity = "-"
+
+# rpm is built by cargo-generate-rpm (cargo-packager has no rpm target). The binaries
+# and the marker are assembled by the release workflow before this runs.
+[package.metadata.generate-rpm]
+name = "jagprox"
+assets = [
+    { source = "target/release/jagprox-launcher", dest = "/usr/bin/jagprox-launcher", mode = "755" },
+    { source = "target/release/jagprox", dest = "/usr/bin/jagprox", mode = "755" },
+    { source = "crates/jagprox-gui/packaging/package-rpm", dest = "/usr/lib/jagprox/package", mode = "644" },
+    { source = "crates/jagprox-gui/packaging/jagprox-launcher.desktop", dest = "/usr/share/applications/jagprox-launcher.desktop", mode = "644" },
+    { source = "crates/jagprox-gui/icons/128x128.png", dest = "/usr/share/icons/hicolor/128x128/apps/jagprox-launcher.png", mode = "644" },
+    { source = "crates/jagprox-gui/icons/32x32.png", dest = "/usr/share/icons/hicolor/32x32/apps/jagprox-launcher.png", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/licenses/jagprox/LICENSE", mode = "644" },
+    { source = "NOTICE", dest = "/usr/share/licenses/jagprox/NOTICE", mode = "644" },
+]
+
+[package.metadata.generate-rpm.requires]
+mesa-libGL = "*"
+libxkbcommon = "*"
+libwayland-client = "*"
+libX11 = "*"
+fontconfig = "*"

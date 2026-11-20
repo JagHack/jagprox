@@ -475,7 +475,37 @@ impl eframe::App for App {
     }
 }
 
+/// `jagprox install-cli` links `jagprox` to the AppImage itself, so the AppImage
+/// starts this binary for CLI commands too; those runs go to the bundled CLI.
+#[cfg(target_os = "linux")]
+fn run_cli_if_called_as_jagprox() {
+    use std::os::unix::process::CommandExt;
+    if std::env::var_os("APPIMAGE").is_none() {
+        return;
+    }
+    let Some(argv0) = std::env::var_os("ARGV0") else {
+        return;
+    };
+    if std::path::Path::new(&argv0).file_name() != Some("jagprox".as_ref()) {
+        return;
+    }
+    let Some(cli) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("jagprox")))
+    else {
+        return;
+    };
+    let error = std::process::Command::new(&cli)
+        .args(std::env::args_os().skip(1))
+        .exec();
+    eprintln!("jagprox: could not start {}: {error}", cli.display());
+    std::process::exit(1);
+}
+
 fn main() -> eframe::Result<()> {
+    #[cfg(target_os = "linux")]
+    run_cli_if_called_as_jagprox();
+
     let data_dir = match account::data_dir() {
         Ok(d) => d,
         Err(e) => {

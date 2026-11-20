@@ -24,7 +24,7 @@ rustPlatform.buildRustPackage {
   cargoLock.lockFile = ../Cargo.lock;
 
   cargoBuildFlags = [ "-p" "jagprox-cli" ];
-  # The launcher (jagprox-app) needs WebKitGTK and is packaged separately.
+  # The launcher (jagprox-gui) needs OpenGL/Wayland and is packaged separately.
   cargoTestFlags = [ "-p" "mcproto" "-p" "jagprox-core" "-p" "jagprox-cli" ];
 
   postInstall = ''
