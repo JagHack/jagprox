@@ -7,7 +7,7 @@ pkgdesc="Hypixel proxy with in-game stats, and the jagprox command"
 arch=('x86_64' 'aarch64')
 url="https://github.com/JagHack/jagprox"
 license=('Apache-2.0')
-depends=('webkit2gtk-4.1' 'gtk3' 'hicolor-icon-theme')
+depends=('libglvnd' 'libxkbcommon' 'wayland' 'libx11' 'libxcursor' 'libxi' 'libxrandr' 'fontconfig' 'hicolor-icon-theme')
 provides=('jagprox')
 conflicts=('jagprox')
 options=('!strip' '!debug')
@@ -21,5 +21,5 @@ package() {
   # Tells `jagprox update` to leave updates to the AUR helper.
   echo aur > "$pkgdir/usr/lib/jagprox/package"
   install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" \
-    "$pkgdir/usr/lib/jagprox/LICENSE" "$pkgdir/usr/lib/jagprox/NOTICE"
+    "$pkgdir/usr/lib/jagprox-launcher/LICENSE" "$pkgdir/usr/lib/jagprox-launcher/NOTICE"
 }

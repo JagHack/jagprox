@@ -14,7 +14,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  TAURI_CLI: '@tauri-apps/cli@2.11.4'
+  # The native launcher (egui) is packaged with cargo-packager; rpm with
+  # cargo-generate-rpm (cargo-packager has no rpm target); the Windows installer
+  # with a hand-written NSIS script (crates/jagprox-gui/windows/installer.nsi).
+  PACKAGER: 'cargo-packager@0.11'
+  GENERATE_RPM: 'cargo-generate-rpm@0.16'
 
 jobs:
   version:
@@ -72,9 +76,11 @@ jobs:
           # 22.04: the oldest glibc we build against, so the launcher runs on older distros too.
           - arch: x86_64
             deb: amd64
+            triple: x86_64-unknown-linux-gnu
             runner: ubuntu-22.04
           - arch: aarch64
             deb: arm64
+            triple: aarch64-unknown-linux-gnu
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
     env:
@@ -82,31 +88,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev libgtk-3-dev librsvg2-dev \
-            libayatana-appindicator3-dev patchelf file libfuse2
-      - uses: Swatinem/rust-cache@v2
-      # A regular glibc build, not the static one: the AppImage tool adds a library
-      # path to every binary it bundles, which crashes a static-pie binary.
-      - name: Build the CLI to bundle with the launcher
+      - name: Build dependencies for the egui launcher, the AppImage and rpm
         run: |
-          cargo build --release --locked -p jagprox-cli
-          mkdir -p crates/jagprox-app/binaries
-          cp target/release/jagprox crates/jagprox-app/binaries/jagprox-${{ matrix.arch }}-unknown-linux-gnu
-      - name: Build .deb, .rpm and AppImage
-        working-directory: crates/jagprox-app
-        run: npx --yes "$TAURI_CLI" build --config tauri.release.conf.json --bundles deb,rpm,appimage
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgl1-mesa-dev libxkbcommon-dev libwayland-dev \
+            wayland-protocols libxcursor-dev libxrandr-dev libxi-dev libx11-dev \
+            libfontconfig1-dev libfreetype-dev libssl-dev libdbus-1-dev \
+            libfuse2 file rpm
+      - uses: Swatinem/rust-cache@v2
+      - name: Install packaging tools
+        run: cargo install --locked "$PACKAGER" "$GENERATE_RPM"
+      - name: Build the launcher and the jagprox CLI (glibc)
+        run: |
+          cargo build --release --locked -p jagprox-gui -p jagprox-cli
+          mkdir -p crates/jagprox-gui/binaries
+          cp target/release/jagprox crates/jagprox-gui/binaries/jagprox-${{ matrix.triple }}
+      - name: Build the .deb and AppImage
+        run: cargo packager -p jagprox-gui --formats deb appimage --out-dir dist-pkg
+      - name: Build the .rpm
+        run: cargo generate-rpm -p crates/jagprox-gui
       - name: Collect
         run: |
-          b=target/release/bundle
           mkdir -p dist
-          cp "$b/deb/jagprox_${V}_${{ matrix.deb }}.deb" dist/
-          cp "$b/rpm/jagprox-${V}-1.${{ matrix.arch }}.rpm" dist/
-          cp "$b"/appimage/jagprox_"${V}"_*.AppImage "dist/JagProx-${V}-${{ matrix.arch }}.AppImage"
+          cp dist-pkg/*_amd64.deb "dist/jagprox_${V}_amd64.deb" 2>/dev/null || true
+          cp dist-pkg/*_arm64.deb "dist/jagprox_${V}_arm64.deb" 2>/dev/null || true
+          cp dist-pkg/*_${{ matrix.arch }}.AppImage "dist/JagProx-${V}-${{ matrix.arch }}.AppImage"
+          cp target/generate-rpm/jagprox-${V}-1.${{ matrix.arch }}.rpm dist/
           ls -la dist
       - uses: actions/upload-artifact@v4
         with:
@@ -123,6 +130,7 @@ jobs:
       - name: Test the AppImage's jagprox link
         run: |
           app="$PWD/dist/JagProx-${V}-${{ matrix.arch }}.AppImage"
+          chmod +x "$app"
           link="$RUNNER_TEMP/test-bin/jagprox"
           mkdir -p "$RUNNER_TEMP/test-bin" && ln -s "$app" "$link"
           out=$("$link" --version 2>&1) || { echo "$out"; exit 1; }
@@ -143,24 +151,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - uses: Swatinem/rust-cache@v2
-      - name: Build jagprox.exe (static C runtime, so it runs without the VC++ redistributable)
+      - name: Build jagprox-launcher.exe and jagprox.exe (static C runtime)
         env:
           RUSTFLAGS: -C target-feature=+crt-static
-        run: |
-          cargo build --release --locked -p jagprox-cli --target-dir target-cli
-          New-Item -ItemType Directory -Force crates/jagprox-app/binaries | Out-Null
-          Copy-Item target-cli/release/jagprox.exe crates/jagprox-app/binaries/jagprox-x86_64-pc-windows-msvc.exe
+        run: cargo build --release --locked -p jagprox-gui -p jagprox-cli
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
       - name: Build the installer
-        working-directory: crates/jagprox-app
-        run: npx --yes "$env:TAURI_CLI" build --config tauri.release.conf.json --bundles nsis
-      - name: Collect
         run: |
+          $staging = "$env:RUNNER_TEMP/nsis"
+          New-Item -ItemType Directory -Force $staging | Out-Null
+          Copy-Item target/release/jagprox-launcher.exe $staging
+          Copy-Item target/release/jagprox.exe $staging
+          Copy-Item LICENSE $staging
+          Copy-Item NOTICE $staging
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item "target/release/bundle/nsis/JagProx_${env:V}_x64-setup.exe" "dist/JagProx-Setup-${env:V}.exe"
+          $nsi = "crates/jagprox-gui/windows/installer.nsi"
+          $win = "crates/jagprox-gui/windows"
+          & "$env:ProgramFiles (x86)\NSIS\makensis.exe" `
+            "/DVERSION=$env:V" `
+            "/DSOURCEDIR=$staging" `
+            "/DOUTFILE=$PWD/dist/JagProx-Setup-$env:V.exe" `
+            "/DICON=$PWD/crates/jagprox-gui/icons/icon.ico" `
+            "/DHEADER=$PWD/$win/installer-header.bmp" `
+            "/DSIDEBAR=$PWD/$win/installer-sidebar.bmp" `
+            "$PWD/$nsi"
+          if (-not (Test-Path "dist/JagProx-Setup-$env:V.exe")) { throw "installer was not built" }
       - name: Test install over JagProx 2, PATH and uninstall
         run: |
           # JagProx 2.6.1 (Electron), as existing users have it.
@@ -169,7 +186,7 @@ jobs:
           $old = "$env:LOCALAPPDATA\Programs\JagProx"
           if (-not (Test-Path "$old\Uninstall JagProx.exe")) { throw "JagProx 2 didn't install to $old" }
 
-          Start-Process -Wait "dist/JagProx-Setup-${env:V}.exe" -ArgumentList '/S'
+          Start-Process -Wait "dist/JagProx-Setup-$env:V.exe" -ArgumentList '/S'
           $dir = "$env:LOCALAPPDATA\JagProx"
           & "$dir\jagprox.exe" --version
           if (-not (Test-Path "$dir\jagprox-launcher.exe")) { throw "launcher missing" }
@@ -199,33 +216,31 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - uses: Swatinem/rust-cache@v2
-      - name: Build a universal jagprox
+      - name: Install cargo-packager
+        run: cargo install --locked "$PACKAGER"
+      - name: Build universal binaries
         run: |
           for t in aarch64-apple-darwin x86_64-apple-darwin; do
-            cargo build --release --locked -p jagprox-cli --target $t --target-dir target-cli
+            cargo build --release --locked -p jagprox-gui -p jagprox-cli --target $t
           done
-          mkdir -p crates/jagprox-app/binaries
-          for t in aarch64-apple-darwin x86_64-apple-darwin; do
-            cp "target-cli/$t/release/jagprox" "crates/jagprox-app/binaries/jagprox-$t"
-          done
-          # Tauri builds each architecture, then merges them into the universal app.
-          lipo -create -output crates/jagprox-app/binaries/jagprox-universal-apple-darwin \
-            target-cli/aarch64-apple-darwin/release/jagprox target-cli/x86_64-apple-darwin/release/jagprox
-      - name: Build the app and .dmg
-        working-directory: crates/jagprox-app
-        run: npx --yes "$TAURI_CLI" build --target universal-apple-darwin --config tauri.release.conf.json --bundles app,dmg
+          # cargo-packager packages whatever binary we hand it; make them universal.
+          mkdir -p crates/jagprox-gui/binaries
+          lipo -create -output target/release/jagprox-launcher \
+            target/aarch64-apple-darwin/release/jagprox-launcher \
+            target/x86_64-apple-darwin/release/jagprox-launcher
+          lipo -create -output crates/jagprox-gui/binaries/jagprox-aarch64-apple-darwin \
+            target/aarch64-apple-darwin/release/jagprox \
+            target/x86_64-apple-darwin/release/jagprox
+      - name: Build the .app and .dmg
+        run: cargo packager -p jagprox-gui --formats app dmg --out-dir dist-pkg
       - name: Collect
         run: |
-          b=target/universal-apple-darwin/release/bundle
           mkdir -p dist
-          cp "$b/dmg/JagProx_${V}_universal.dmg" "dist/JagProx-${V}-universal.dmg"
-          tar -czf "dist/JagProx-${V}-universal.app.tar.gz" -C "$b/macos" JagProx.app
-          "$b/macos/JagProx.app/Contents/MacOS/jagprox" --version | grep -F "$V"
-          lipo -archs "$b/macos/JagProx.app/Contents/MacOS/jagprox-launcher"
+          cp dist-pkg/*.dmg "dist/JagProx-${V}-universal.dmg"
+          tar -czf "dist/JagProx-${V}-universal.app.tar.gz" -C dist-pkg JagProx.app
+          dist-pkg/JagProx.app/Contents/MacOS/jagprox --version | grep -F "$V"
+          lipo -archs dist-pkg/JagProx.app/Contents/MacOS/jagprox-launcher
       - uses: actions/upload-artifact@v4
         with:
           name: app-macos
