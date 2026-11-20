@@ -20,7 +20,9 @@ use jagprox_core::constants::{self, GAME_MODES};
 use jagprox_core::formatter::{format_rank, player_name_color};
 use jagprox_core::log::{self, log};
 use jagprox_core::proxy::{Proxy, ProxyEvent, ProxyOptions};
-use jagprox_core::{install, stat_format};
+use jagprox_core::stat_format;
+#[cfg(unix)]
+use jagprox_core::install;
 use serde_json::json;
 use tokio::task::AbortHandle;
 
