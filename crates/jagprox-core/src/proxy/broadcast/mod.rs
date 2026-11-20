@@ -299,3 +299,180 @@ pub async fn start(session: &Session, compass_addr: &str) -> Result<Arc<Broadcas
 
     Ok(broadcast)
 }
+
+#[cfg(test)]
+impl Broadcast {
+    /// A broadcast with no rendezvous connection, for feeding a world and serving
+    /// host sessions directly in tests.
+    fn detached(uuid: u128) -> Arc<Self> {
+        let (control_tx, _control_rx) = mpsc::channel(8);
+        let (chat_tx, _chat_rx) = mpsc::unbounded_channel();
+        Arc::new(Self {
+            inner: Mutex::new(Inner {
+                game: GameState::new(),
+                spectators: Vec::new(),
+            }),
+            uuid,
+            control_tx,
+            chat_tx,
+            closed: AtomicBool::new(false),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mcproto::conn::{self, Connection};
+    use mcproto::frame::Frame;
+    use mcproto::world;
+    use tokio::net::TcpListener;
+
+    /// A broadcaster feeds a world, a spectator connects over the real rendezvous
+    /// server + relay, and receives the world snapshot: the full host login +
+    /// snapshot handshake over a real socket, end to end.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn spectator_receives_world_snapshot_over_relay() {
+        // Real rendezvous server.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let compass_addr = listener.local_addr().unwrap().to_string();
+        tokio::spawn(jagprox_compass::serve(listener));
+
+        // Broadcaster: feed a world (JoinGame + a chunk + a mob).
+        let broadcast = Broadcast::detached(0xABCD);
+        broadcast.observe(
+            &cb::JoinGame {
+                entity_id: 7,
+                game_mode: 0,
+                dimension: 0,
+                difficulty: 2,
+                max_players: 1,
+                level_type: "default".into(),
+                reduced_debug_info: false,
+            }
+            .to_payload(),
+        );
+        broadcast.observe(&world::chunk_data_payload(0, 0, true, 0b1, &[0u8; 64]));
+        let mut mob = Vec::new();
+        mcproto::buf::Write::varint(&mut mob, world::id::SPAWN_MOB);
+        mcproto::buf::Write::varint(&mut mob, 200);
+        mcproto::buf::Write::u8(&mut mob, 54);
+        for v in [32 * 5i32, 32 * 64, 32 * 5] {
+            mcproto::buf::Write::i32(&mut mob, v);
+        }
+        for _ in 0..3 {
+            mcproto::buf::Write::i8(&mut mob, 0);
+        }
+        for _ in 0..3 {
+            mcproto::buf::Write::i16(&mut mob, 0);
+        }
+        mcproto::buf::Write::u8(&mut mob, 0x7f);
+        broadcast.observe(&mob);
+
+        // Broadcaster control connection: register, accept the join, and on relay
+        // hand-off run the host session.
+        let bc_stream = compass::connect(&compass_addr).await.unwrap();
+        let (mut bc_read, mut bc_write) = bc_stream.into_split();
+        compass::write_msg(
+            &mut bc_write,
+            &ClientMsg::Register {
+                name: "Host".into(),
+                uuid: "abcd".into(),
+            },
+        )
+        .await
+        .unwrap();
+        let mut bc_buf = Vec::new();
+        assert!(matches!(
+            compass::read_msg(&mut bc_read, &mut bc_buf).await.unwrap(),
+            ServerMsg::Registered
+        ));
+        let addr2 = compass_addr.clone();
+        let host_broadcast = broadcast.clone();
+        tokio::spawn(async move {
+            loop {
+                match compass::read_msg(&mut bc_read, &mut bc_buf).await {
+                    Ok(ServerMsg::JoinRequest { from }) => {
+                        compass::write_msg(&mut bc_write, &ClientMsg::Accept { from })
+                            .await
+                            .unwrap();
+                    }
+                    Ok(ServerMsg::StartRelay {
+                        token, host: true, ..
+                    }) => {
+                        let relay = compass::open_relay(&addr2, &token).await.unwrap();
+                        let _ = host::run(relay, host_broadcast.clone()).await;
+                        return;
+                    }
+                    _ => return,
+                }
+            }
+        });
+
+        // Spectator: join, get the relay, and log in to the host as a client.
+        let spec_stream = compass::connect(&compass_addr).await.unwrap();
+        let (mut sr, mut sw) = spec_stream.into_split();
+        compass::write_msg(
+            &mut sw,
+            &ClientMsg::Join {
+                target: "Host".into(),
+                from: "Watcher".into(),
+            },
+        )
+        .await
+        .unwrap();
+        let mut sbuf = Vec::new();
+        let token = loop {
+            match compass::read_msg(&mut sr, &mut sbuf).await.unwrap() {
+                ServerMsg::StartRelay {
+                    token, host: false, ..
+                } => break token,
+                ServerMsg::Denied { reason } => panic!("denied: {reason}"),
+                _ => continue,
+            }
+        };
+        let relay = compass::open_relay(&compass_addr, &token).await.unwrap();
+        let (rr, rw) = relay.into_split();
+        let mut host_conn = Connection::new(rr, rw);
+        let login = conn::client_login(&mut host_conn, "broadcast", 0, "Watcher", |_| async {
+            Ok(())
+        })
+        .await
+        .unwrap();
+        assert_eq!(login.username, "Watcher");
+
+        // Read play packets; the snapshot must include our JoinGame, the chunk and
+        // a teleport placing the mob.
+        let mut saw_join = false;
+        let mut saw_chunk = false;
+        let mut saw_mob = false;
+        for _ in 0..200 {
+            let frame: Frame = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                host_conn.reader.read_frame(),
+            )
+            .await
+            .expect("timed out waiting for snapshot")
+            .expect("relay closed early");
+            let payload = frame.payload().unwrap();
+            match frame.id().unwrap() {
+                cb::JoinGame::ID => saw_join = true,
+                world::id::CHUNK_DATA => saw_chunk = true,
+                world::id::ENTITY_TELEPORT
+                    if world::EntityTeleport::from_payload(&payload)
+                        .map(|t| t.eid == 200)
+                        .unwrap_or(false) =>
+                {
+                    saw_mob = true;
+                }
+                _ => {}
+            }
+            if saw_join && saw_chunk && saw_mob {
+                break;
+            }
+        }
+        assert!(saw_join, "spectator never received JoinGame");
+        assert!(saw_chunk, "spectator never received the chunk");
+        assert!(saw_mob, "spectator never received the mob placement");
+    }
+}
