@@ -6,6 +6,7 @@
 
 mod discord;
 mod theme;
+mod updater;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -363,6 +364,10 @@ struct App {
     stat_mode: String,
     status_name: String,
     gamemodes: Vec<(String, String)>,
+    // Aliases editor
+    aliases: Vec<(String, String)>,
+    aliases_loaded: bool,
+    aliases_status: String,
 }
 
 impl App {
@@ -418,6 +423,9 @@ impl App {
                 .unwrap_or_default(),
             status_name: String::new(),
             gamemodes,
+            aliases: Vec::new(),
+            aliases_loaded: false,
+            aliases_status: String::new(),
             page: Page::Home,
             shared,
         };
@@ -454,11 +462,7 @@ impl eframe::App for App {
             Page::Home => theme::home(ui, self),
             Page::Logs => theme::log_view(ui, &self.shared.logs, "Live Logs"),
             Page::Chat => theme::log_view(ui, &self.shared.chat, "In-Game Chat"),
-            Page::Aliases => theme::placeholder(
-                ui,
-                "Aliases",
-                "Edit aliases.json in your data folder for now.",
-            ),
+            Page::Aliases => theme::aliases_page(ui, self),
             Page::Stats => theme::stats_page(ui, self),
             Page::Status => theme::status_page(ui, self),
             Page::Settings => theme::settings(ui, self),
@@ -553,6 +557,8 @@ fn main() -> eframe::Result<()> {
             if moved.login_imported {
                 log("Kept your JagProx 2 login.");
             }
+            // Quietly check for a newer release on startup.
+            updater::check(&shared, true);
             Ok(Box::new(App::new(cc, rt, shared)))
         }),
     )
@@ -641,6 +647,51 @@ impl App {
             *shared.status.lock().unwrap_or_else(|e| e.into_inner()) = result;
             shared.ctx.request_repaint();
         });
+    }
+
+    fn check_updates(&self) {
+        updater::check(&self.shared, false);
+    }
+
+    /// Reads aliases.json into the editor the first time the page is shown.
+    fn ensure_aliases_loaded(&mut self) {
+        if self.aliases_loaded {
+            return;
+        }
+        self.aliases_loaded = true;
+        let text =
+            std::fs::read_to_string(self.shared.data_dir.join("aliases.json")).unwrap_or_default();
+        if let Ok(serde_json::Value::Object(map)) =
+            serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
+        {
+            let mut pairs: Vec<(String, String)> = map
+                .iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect();
+            pairs.sort();
+            self.aliases = pairs;
+        }
+    }
+
+    fn save_aliases(&mut self) {
+        let mut clean = serde_json::Map::new();
+        for (from, to) in &self.aliases {
+            let from = from.trim().to_lowercase();
+            let to = to.trim().to_string();
+            if from.starts_with('/') && to.starts_with('/') {
+                clean.insert(from, json!(to));
+            }
+        }
+        let count = clean.len();
+        let text =
+            serde_json::to_string_pretty(&serde_json::Value::Object(clean)).unwrap_or_default();
+        match jagprox_core::file_util::write_file_atomic(
+            &self.shared.data_dir.join("aliases.json"),
+            &text,
+        ) {
+            Ok(()) => self.aliases_status = format!("Saved {count} aliases."),
+            Err(e) => self.aliases_status = format!("Could not save: {e}"),
+        }
     }
 
     fn install_cli_clicked(&mut self) {

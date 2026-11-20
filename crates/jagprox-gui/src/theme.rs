@@ -194,9 +194,81 @@ fn card(ui: &mut egui::Ui, fill: Color32, body: impl FnOnce(&mut egui::Ui)) {
         });
 }
 
-pub fn placeholder(ui: &mut egui::Ui, title: &str, msg: &str) {
-    pane_title(ui, title);
-    ui.label(RichText::new(msg).color(MUTED));
+pub fn aliases_page(ui: &mut egui::Ui, app: &mut App) {
+    pane_title(ui, "Command Aliases");
+    app.ensure_aliases_loaded();
+    ui.label(
+        RichText::new("Type the left command in chat and the proxy sends the right one. Both sides must start with \"/\". A running proxy picks up changes within a couple of seconds.")
+            .color(MUTED)
+            .size(13.0),
+    );
+    ui.add_space(12.0);
+
+    let mut remove: Option<usize> = None;
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            card(ui, SURFACE, |ui| {
+                if app.aliases.is_empty() {
+                    ui.label(
+                        RichText::new("No aliases yet — add one below.")
+                            .color(MUTED)
+                            .monospace(),
+                    );
+                }
+                for (i, (from, to)) in app.aliases.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(from)
+                                .hint_text("/bw4")
+                                .desired_width(150.0)
+                                .font(egui::TextStyle::Monospace),
+                        );
+                        ui.label(RichText::new("→").color(MUTED).size(16.0));
+                        ui.add(
+                            egui::TextEdit::singleline(to)
+                                .hint_text("/play bedwars_four_four")
+                                .desired_width(260.0)
+                                .font(egui::TextStyle::Monospace),
+                        );
+                        if button(
+                            ui,
+                            "✕",
+                            STOP,
+                            STOP.gamma_multiply(1.12),
+                            Color32::WHITE,
+                            13.0,
+                            egui::vec2(30.0, 28.0),
+                        )
+                        .on_hover_text("Remove")
+                        .clicked()
+                        {
+                            remove = Some(i);
+                        }
+                    });
+                    ui.add_space(6.0);
+                }
+            });
+
+            ui.add_space(14.0);
+            ui.horizontal(|ui| {
+                if accent(ui, "+  New Alias").clicked() {
+                    app.aliases.push(("/".to_string(), "/".to_string()));
+                }
+                if accent(ui, "Save Aliases").clicked() {
+                    app.save_aliases();
+                }
+                if !app.aliases_status.is_empty() {
+                    ui.add_space(10.0);
+                    ui.label(RichText::new(&app.aliases_status).color(ACCENT));
+                }
+            });
+        });
+
+    if let Some(i) = remove {
+        app.aliases.remove(i);
+        app.aliases_status.clear();
+    }
 }
 
 pub fn home(ui: &mut egui::Ui, app: &mut App) {
@@ -413,9 +485,20 @@ pub fn settings(ui: &mut egui::Ui, app: &mut App) {
             });
 
             group(ui, "Updates", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(format!("Current version: v{}", env!("CARGO_PKG_VERSION")))
+                            .color(MUTED),
+                    );
+                    if accent(ui, "Check for Updates").clicked() {
+                        app.check_updates();
+                    }
+                });
+                ui.add_space(4.0);
                 ui.label(
-                    RichText::new(format!("Current version: v{}", env!("CARGO_PKG_VERSION")))
-                        .color(MUTED),
+                    RichText::new("Results appear in the Log Monitor.")
+                        .color(MUTED)
+                        .size(12.0),
                 );
             });
 
