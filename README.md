@@ -154,6 +154,12 @@ For a comprehensive guide on all features of the Jagprox Launcher, please refer 
 * `/gt | /gametrack [hour|day|log] [hour count if used with hour]`
   Shows you the stats for the given hours/day or logs your last games.
 
+* `/bc <on|off|accept|deny|status>`
+  Live game broadcasting: let a friend spectate your Hypixel game through your proxy, peer-to-peer, with Hypixel only ever seeing you. `/bc on` starts broadcasting; a join request shows a clickable **[Accept]**/**[Deny]**. See [BROADCASTING.md](BROADCASTING.md).
+
+* `/watch <player>`
+  Spectate a friend's live broadcast (reconnect to JagProx to apply; `/unwatch` to return to Hypixel).
+
 ---
 
 ## Contributing

@@ -686,6 +686,14 @@ fn help(s: &Session) {
             "/link".into(),
             "Links your Minecraft account to your JagProx account.",
         ),
+        (
+            "/bc <on|off|accept|deny|status>".into(),
+            "Broadcasts your game so a friend can spectate it live.",
+        ),
+        (
+            "/watch <player>".into(),
+            "Spectates a friend's live broadcast (reconnect to apply; /unwatch to leave).",
+        ),
         ("/jagprox".into(), "Displays this help message."),
     ];
     // JS localeCompare: case-insensitive first.
