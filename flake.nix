@@ -106,8 +106,8 @@
             packages = with pkgs; [
               clippy
               rustfmt
-              cargo-packager
-              cargo-generate-rpm
+              # The packaging tools (cargo-packager, cargo-generate-rpm) aren't in
+              # nixpkgs; `cargo install` them if you need to build installers locally.
             ];
             # eframe loads these at run time; make `cargo run -p jagprox-gui` work in the shell.
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (
