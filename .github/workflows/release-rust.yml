@@ -71,6 +71,7 @@ jobs:
   app-linux:
     needs: version
     strategy:
+      fail-fast: false
       matrix:
         include:
           # 22.04: the oldest glibc we build against, so the launcher runs on older distros too.
@@ -104,7 +105,7 @@ jobs:
           mkdir -p crates/jagprox-gui/binaries
           cp target/release/jagprox crates/jagprox-gui/binaries/jagprox-${{ matrix.triple }}
       - name: Build the .deb and AppImage
-        run: cargo packager -p jagprox-gui --formats deb --formats appimage --out-dir dist-pkg
+        run: cargo packager -p jagprox-gui --formats deb --formats appimage --out-dir "$PWD/dist-pkg"
       - name: Build the .rpm
         run: cargo generate-rpm -p crates/jagprox-gui
       - name: Collect
@@ -236,7 +237,7 @@ jobs:
             target/aarch64-apple-darwin/release/jagprox \
             target/x86_64-apple-darwin/release/jagprox
       - name: Build the .app and .dmg
-        run: cargo packager -p jagprox-gui --formats app --formats dmg --out-dir dist-pkg
+        run: cargo packager -p jagprox-gui --formats app --formats dmg --out-dir "$PWD/dist-pkg"
       - name: Collect
         run: |
           mkdir -p dist
