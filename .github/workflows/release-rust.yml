@@ -17,8 +17,8 @@ env:
   # The native launcher (egui) is packaged with cargo-packager; rpm with
   # cargo-generate-rpm (cargo-packager has no rpm target); the Windows installer
   # with a hand-written NSIS script (crates/jagprox-gui/windows/installer.nsi).
-  PACKAGER: 'cargo-packager@0.11'
-  GENERATE_RPM: 'cargo-generate-rpm@0.16'
+  PACKAGER: 'cargo-packager@0.11.8'
+  GENERATE_RPM: 'cargo-generate-rpm@0.21.1'
 
 jobs:
   version:
@@ -160,24 +160,27 @@ jobs:
         run: choco install nsis -y --no-progress
       - name: Build the installer
         run: |
-          $staging = "$env:RUNNER_TEMP/nsis"
+          # NSIS needs native (back-slash) paths; Join-Path gives those.
+          $root = $PWD.Path
+          $staging = Join-Path $env:RUNNER_TEMP 'nsis'
           New-Item -ItemType Directory -Force $staging | Out-Null
           Copy-Item target/release/jagprox-launcher.exe $staging
           Copy-Item target/release/jagprox.exe $staging
           Copy-Item LICENSE $staging
           Copy-Item NOTICE $staging
           New-Item -ItemType Directory -Force dist | Out-Null
-          $nsi = "crates/jagprox-gui/windows/installer.nsi"
-          $win = "crates/jagprox-gui/windows"
+          $win = Join-Path $root 'crates\jagprox-gui\windows'
+          $icons = Join-Path $root 'crates\jagprox-gui\icons'
+          $out = Join-Path $root "dist\JagProx-Setup-$env:V.exe"
           & "$env:ProgramFiles (x86)\NSIS\makensis.exe" `
             "/DVERSION=$env:V" `
             "/DSOURCEDIR=$staging" `
-            "/DOUTFILE=$PWD/dist/JagProx-Setup-$env:V.exe" `
-            "/DICON=$PWD/crates/jagprox-gui/icons/icon.ico" `
-            "/DHEADER=$PWD/$win/installer-header.bmp" `
-            "/DSIDEBAR=$PWD/$win/installer-sidebar.bmp" `
-            "$PWD/$nsi"
-          if (-not (Test-Path "dist/JagProx-Setup-$env:V.exe")) { throw "installer was not built" }
+            "/DOUTFILE=$out" `
+            "/DICON=$icons\icon.ico" `
+            "/DHEADER=$win\installer-header.bmp" `
+            "/DSIDEBAR=$win\installer-sidebar.bmp" `
+            "$win\installer.nsi"
+          if (-not (Test-Path $out)) { throw "installer was not built" }
       - name: Test install over JagProx 2, PATH and uninstall
         run: |
           # JagProx 2.6.1 (Electron), as existing users have it.
