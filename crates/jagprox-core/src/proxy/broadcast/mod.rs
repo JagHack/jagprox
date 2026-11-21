@@ -37,7 +37,6 @@ use crate::log::log;
 pub const DEFAULT_COMPASS: &str = "77.42.31.200:7676";
 
 struct Inner {
-    game: GameState,
     /// One channel per connected spectator, carrying ready-to-send payloads.
     spectators: Vec<mpsc::Sender<Vec<u8>>>,
 }
@@ -57,6 +56,9 @@ impl Inner {
 /// A running broadcast: the rendezvous control channel and the live fan-out.
 pub struct Broadcast {
     inner: Mutex<Inner>,
+    /// The tracked world, shared with the owning session (which feeds it on every
+    /// clientbound packet, including the chunks loaded before broadcasting began).
+    game: Arc<Mutex<GameState>>,
     uuid: u128,
     /// Commands to send up the rendezvous control connection (accept/deny/ping).
     control_tx: mpsc::Sender<ClientMsg>,
@@ -70,12 +72,19 @@ impl Broadcast {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    fn game(&self) -> std::sync::MutexGuard<'_, GameState> {
+        self.game.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     /// Feeds one clientbound payload from Hypixel: track it, then forward to spectators.
+    ///
+    /// The world lock is held across the fan-out so [`add_spectator`](Self::add_spectator)
+    /// can't snapshot and register between the two and miss or duplicate a packet.
     pub fn observe(&self, payload: &[u8]) {
-        let mut inner = self.lock();
-        inner.game.observe(payload);
+        let mut game = self.game();
+        game.observe(payload);
         if let Some(forward) = transform::for_spectator(payload) {
-            inner.fanout(&forward);
+            self.lock().fanout(&forward);
         }
     }
 
@@ -83,29 +92,28 @@ impl Broadcast {
     /// Either part may be absent (the three serverbound movement packets carry
     /// position only, look only, or both).
     pub fn broadcaster_move(&self, pos: Option<(f64, f64, f64)>, look: Option<(f32, f32)>) {
-        let mut inner = self.lock();
-        let cur = inner.game.position.unwrap_or((0.0, 64.0, 0.0, 0.0, 0.0));
+        let mut game = self.game();
+        let cur = game.position.unwrap_or((0.0, 64.0, 0.0, 0.0, 0.0));
         let (x, y, z) = pos.unwrap_or((cur.0, cur.1, cur.2));
         let (yaw, pitch) = look.unwrap_or((cur.3, cur.4));
-        inner.game.position = Some((x, y, z, yaw, pitch));
-        let eid = inner.game.self_eid;
-        for p in transform::move_broadcaster(eid, x, y, z, yaw, pitch) {
+        game.position = Some((x, y, z, yaw, pitch));
+        let packets = transform::move_broadcaster(game.self_eid, x, y, z, yaw, pitch);
+        let mut inner = self.lock();
+        for p in packets {
             inner.fanout(&p);
         }
     }
 
     /// The broadcaster swung their arm.
     pub fn broadcaster_swung(&self) {
-        let mut inner = self.lock();
-        let eid = inner.game.self_eid;
-        let p = transform::swing_broadcaster(eid);
-        inner.fanout(&p);
+        let game = self.game();
+        let p = transform::swing_broadcaster(game.self_eid);
+        self.lock().fanout(&p);
     }
 
     /// The play packets to send a joining spectator before the world snapshot.
     pub fn spectator_join_sequence(&self) -> Vec<Vec<u8>> {
-        let inner = self.lock();
-        let dimension = inner.game.dimension as i8;
+        let dimension = self.game().dimension as i8;
         let join = cb::JoinGame {
             entity_id: host::SPECTATOR_EID,
             game_mode: 2, // adventure
@@ -123,17 +131,19 @@ impl Broadcast {
     /// packet is missed or duplicated. The snapshot already ends with the broadcaster
     /// model and a position for the spectator.
     pub fn add_spectator(&self) -> (Vec<Vec<u8>>, mpsc::Receiver<Vec<u8>>) {
-        let mut inner = self.lock();
-        let mut out = inner.game.snapshot();
-        let eid = inner.game.self_eid;
-        let pos = inner.game.position.unwrap_or((0.0, 64.0, 0.0, 0.0, 0.0));
+        // Hold the world lock across snapshot + register so no live packet handled
+        // by `observe` slips in between (it takes the same lock).
+        let game = self.game();
+        let mut out = game.snapshot();
+        let eid = game.self_eid;
+        let pos = game.position.unwrap_or((0.0, 64.0, 0.0, 0.0, 0.0));
         out.push(transform::spawn_broadcaster(
             eid, self.uuid, pos.0, pos.1, pos.2, pos.3, pos.4,
         ));
         // Place the spectator a couple of blocks above the broadcaster to start.
         out.push(host::position(pos.0, pos.1 + 2.0, pos.2, pos.3, pos.4));
         let (tx, rx) = mpsc::channel(2048);
-        inner.spectators.push(tx);
+        self.lock().spectators.push(tx);
         (out, rx)
     }
 
@@ -231,9 +241,9 @@ pub async fn start(session: &Session, compass_addr: &str) -> Result<Arc<Broadcas
     let (chat_tx, mut chat_rx) = mpsc::unbounded_channel::<(String, i8)>();
     let broadcast = Arc::new(Broadcast {
         inner: Mutex::new(Inner {
-            game: GameState::new(),
             spectators: Vec::new(),
         }),
+        game: session.game_handle(),
         uuid,
         control_tx,
         chat_tx,
@@ -314,9 +324,9 @@ impl Broadcast {
         let (chat_tx, _chat_rx) = mpsc::unbounded_channel();
         Arc::new(Self {
             inner: Mutex::new(Inner {
-                game: GameState::new(),
                 spectators: Vec::new(),
             }),
+            game: Arc::new(Mutex::new(GameState::new())),
             uuid,
             control_tx,
             chat_tx,

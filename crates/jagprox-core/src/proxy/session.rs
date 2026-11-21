@@ -41,6 +41,10 @@ struct Inner {
     tasks: Mutex<Vec<AbortHandle>>,
     /// Set while this session is broadcasting its game to spectators.
     broadcast: Mutex<Option<Arc<super::broadcast::Broadcast>>>,
+    /// The tracked world, fed on every clientbound packet so a broadcast started
+    /// mid-game already has the chunks/entities Hypixel sent at join. Shared with
+    /// the active `Broadcast`, if any.
+    game: Arc<Mutex<super::broadcast::GameState>>,
 }
 
 /// Handles modules and commands use to talk to both sides. Cheap to clone.
@@ -96,6 +100,22 @@ impl Session {
             .broadcast
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = broadcast;
+    }
+
+    /// Feeds one clientbound payload into the always-on world tracker. Used while
+    /// not broadcasting; a `Broadcast` updates the same shared state itself.
+    pub fn observe_world(&self, payload: &[u8]) {
+        self.inner
+            .game
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .observe(payload);
+    }
+
+    /// A handle to the tracked world, shared with a `Broadcast` so it snapshots the
+    /// world that was already loaded before broadcasting started.
+    pub fn game_handle(&self) -> Arc<Mutex<super::broadcast::GameState>> {
+        self.inner.game.clone()
     }
 
     /// Runs a task that is cancelled when the session ends.
@@ -207,6 +227,7 @@ pub(super) async fn run(
             state: Mutex::new(State::default()),
             tasks: Mutex::new(Vec::new()),
             broadcast: Mutex::new(None),
+            game: Arc::new(Mutex::new(super::broadcast::GameState::new())),
         }),
     };
     proxy.set_current(Some(session.clone()));
@@ -276,11 +297,15 @@ async fn server_to_client(
             }
             Err(e) => return Err(e.to_string()),
         };
-        // While broadcasting, track the world and forward to spectators.
-        if let Some(broadcast) = session.broadcast()
-            && let Ok(payload) = frame.payload()
-        {
-            broadcast.observe(&payload);
+        // Track the world on every packet so a broadcast started mid-game already
+        // has the chunks Hypixel sent at join; while broadcasting, also fan the
+        // live stream out to spectators (both update the same shared GameState).
+        if let Ok(payload) = frame.payload() {
+            if let Some(broadcast) = session.broadcast() {
+                broadcast.observe(&payload);
+            } else {
+                session.observe_world(&payload);
+            }
         }
         let out = inspect_server_frame(&session, frame);
         if session.inner.to_client.send(out).await.is_err() {
