@@ -83,8 +83,22 @@ impl Broadcast {
     pub fn observe(&self, payload: &[u8]) {
         let mut game = self.game();
         game.observe(payload);
-        if let Some(forward) = transform::for_spectator(payload) {
-            self.lock().fanout(&forward);
+        // The broadcaster's own inventory packets are dropped for spectators, so when
+        // their armor/held item changes, fan out synthesised EntityEquipment instead.
+        let equip = if changes_self_equipment(payload) {
+            game.self_equipment_packets()
+        } else {
+            Vec::new()
+        };
+        let forward = transform::for_spectator(payload);
+        if forward.is_some() || !equip.is_empty() {
+            let mut inner = self.lock();
+            if let Some(forward) = forward {
+                inner.fanout(&forward);
+            }
+            for p in &equip {
+                inner.fanout(p);
+            }
         }
     }
 
@@ -109,6 +123,17 @@ impl Broadcast {
         let game = self.game();
         let p = transform::swing_broadcaster(game.self_eid);
         self.lock().fanout(&p);
+    }
+
+    /// The broadcaster selected a different hotbar slot (serverbound); update the
+    /// held item their model shows to spectators.
+    pub fn broadcaster_held(&self, index: u8) {
+        let mut game = self.game();
+        let packets = game.set_held_index(index);
+        let mut inner = self.lock();
+        for p in &packets {
+            inner.fanout(p);
+        }
     }
 
     /// The play packets to send a joining spectator before the world snapshot.
@@ -140,6 +165,9 @@ impl Broadcast {
         out.push(transform::spawn_broadcaster(
             eid, self.uuid, pos.0, pos.1, pos.2, pos.3, pos.4,
         ));
+        // Dress the model: Hypixel never sends equipment for the player themselves,
+        // so synthesise it from the broadcaster's tracked inventory.
+        out.extend(game.self_equipment_packets());
         // Place the spectator a couple of blocks above the broadcaster to start.
         out.push(host::position(pos.0, pos.1 + 2.0, pos.2, pos.3, pos.4));
         let (tx, rx) = mpsc::channel(2048);
@@ -201,6 +229,18 @@ impl Broadcast {
         self.closed.store(true, Ordering::Relaxed);
         self.lock().spectators.clear();
     }
+}
+
+/// Whether a clientbound packet changes the broadcaster's own inventory or held
+/// slot, i.e. their visible equipment needs re-sending to spectators.
+fn changes_self_equipment(payload: &[u8]) -> bool {
+    let mut r: &[u8] = payload;
+    matches!(
+        mcproto::buf::Read::varint(&mut r),
+        Ok(id) if id == mcproto::world::id::SET_SLOT
+            || id == mcproto::world::id::WINDOW_ITEMS
+            || id == mcproto::world::id::HELD_ITEM_CHANGE
+    )
 }
 
 /// Starts broadcasting for the current session: connects to the rendezvous server,

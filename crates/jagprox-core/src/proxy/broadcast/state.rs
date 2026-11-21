@@ -11,8 +11,22 @@
 use std::collections::HashMap;
 
 use indexmap::IndexMap;
+use mcproto::buf::Read;
 use mcproto::packets::{Packet, clientbound as cb};
 use mcproto::world::{self, EntityPos};
+
+/// Maps a window-0 inventory slot to the armor piece's EntityEquipment slot, or
+/// `None` if it isn't armor. Inventory: 5 helmet, 6 chestplate, 7 leggings, 8 boots;
+/// EntityEquipment: 4 helmet, 3 chestplate, 2 leggings, 1 boots.
+fn armor_equipment_slot(inventory_slot: i16) -> Option<i16> {
+    match inventory_slot {
+        5 => Some(4),
+        6 => Some(3),
+        7 => Some(2),
+        8 => Some(1),
+        _ => None,
+    }
+}
 
 /// One tracked entity: its spawn packet (replayed as-is), current position, and the
 /// latest metadata/equipment/properties so a late spectator sees it correctly.
@@ -65,6 +79,15 @@ pub struct GameState {
     /// uuid -> the player's tab-list entry.
     tab: IndexMap<u128, cb::PlayerAdd>,
     scoreboard: Scoreboard,
+    /// The broadcaster's own equipment (EntityEquipment slot -> raw item bytes:
+    /// 0 held, 1 boots, 2 leggings, 3 chestplate, 4 helmet), derived from their
+    /// inventory. Hypixel never sends equipment for the player themselves, so
+    /// without this a spectator sees the broadcaster's model naked.
+    self_equipment: HashMap<i16, Vec<u8>>,
+    /// Hotbar contents (inventory slots 36..=44) as raw item bytes, and the selected
+    /// index, so the held item (equipment slot 0) can be kept in sync.
+    self_hotbar: HashMap<u8, Vec<u8>>,
+    self_held_index: u8,
 }
 
 impl GameState {
@@ -168,6 +191,12 @@ impl GameState {
                     e.properties = Some(payload.to_vec());
                 }
             }
+            world::id::WINDOW_ITEMS => self.on_window_items(&mut r)?,
+            world::id::SET_SLOT => self.on_set_slot(&mut r)?,
+            world::id::HELD_ITEM_CHANGE => {
+                self.self_held_index = r.i8()?.clamp(0, 8) as u8;
+                self.refresh_held();
+            }
             cb::DestroyEntities::ID => {
                 let d = cb::DestroyEntities::from_payload(payload)?;
                 for eid in d.entity_ids {
@@ -236,6 +265,71 @@ impl GameState {
         let location = mcproto::buf::Read::i64(r)?;
         self.block_entities.insert(location, payload.to_vec());
         Ok(())
+    }
+
+    /// The full player inventory (Window Items, window 0): read the armor slots
+    /// (5..=8) and hotbar (36..=44) so the broadcaster's model can be equipped.
+    fn on_window_items(&mut self, r: &mut &[u8]) -> mcproto::Result<()> {
+        let window = r.u8()?;
+        let count = r.i16()?;
+        for slot in 0..count {
+            let item = world::read_slot(r)?.to_vec();
+            if window == 0 {
+                self.store_inventory_slot(slot, item);
+            }
+        }
+        self.refresh_held();
+        Ok(())
+    }
+
+    /// A single changed inventory slot (Set Slot). Only window 0 (the player's own
+    /// inventory) carries their armor/hotbar.
+    fn on_set_slot(&mut self, r: &mut &[u8]) -> mcproto::Result<()> {
+        let window = r.i8()?;
+        let slot = r.i16()?;
+        let item = world::read_slot(r)?.to_vec();
+        if window == 0 {
+            self.store_inventory_slot(slot, item);
+            self.refresh_held();
+        }
+        Ok(())
+    }
+
+    /// Files one window-0 inventory slot into the armor map or the hotbar.
+    fn store_inventory_slot(&mut self, slot: i16, item: Vec<u8>) {
+        // Inventory armor slots 5..=8 map to EntityEquipment slots 4..=1.
+        if let Some(eq) = armor_equipment_slot(slot) {
+            self.self_equipment.insert(eq, item);
+        } else if (36..=44).contains(&slot) {
+            self.self_hotbar.insert((slot - 36) as u8, item);
+        }
+    }
+
+    /// Recompute the held item (EntityEquipment slot 0) from the selected hotbar slot.
+    fn refresh_held(&mut self) {
+        if let Some(item) = self.self_hotbar.get(&self.self_held_index) {
+            self.self_equipment.insert(0, item.clone());
+        }
+    }
+
+    /// EntityEquipment packets that dress the broadcaster's own player model, so a
+    /// spectator sees their armor and held item rather than a naked model.
+    pub fn self_equipment_packets(&self) -> Vec<Vec<u8>> {
+        let mut out = Vec::new();
+        for slot in 0..=4i16 {
+            if let Some(item) = self.self_equipment.get(&slot) {
+                out.push(world::entity_equipment(self.self_eid, slot, item));
+            }
+        }
+        out
+    }
+
+    /// The broadcaster changed their selected hotbar slot (serverbound); keep the
+    /// held item in sync. Returns the refreshed equipment packets to fan out live.
+    pub fn set_held_index(&mut self, index: u8) -> Vec<Vec<u8>> {
+        self.self_held_index = index.min(8);
+        self.refresh_held();
+        self.self_equipment_packets()
     }
 
     fn on_spawn(&mut self, payload: &[u8], parsed: (i32, EntityPos)) -> mcproto::Result<()> {
@@ -495,6 +589,45 @@ mod tests {
             reduced_debug_info: false,
         }
         .to_payload()
+    }
+
+    #[test]
+    fn broadcaster_armor_and_held_item_become_equipment() {
+        use mcproto::buf::Write;
+        let mut gs = GameState::new();
+        gs.observe(&join_game(7)); // self_eid = 7
+
+        // Window Items (window 0, 45 slots): a helmet in armor slot 5, a sword in
+        // hotbar slot 36, everything else empty.
+        let mut wi = Vec::new();
+        wi.varint(world::id::WINDOW_ITEMS);
+        wi.u8(0);
+        wi.i16(45);
+        for slot in 0..45i16 {
+            match slot {
+                5 | 36 => {
+                    wi.i16(if slot == 5 { 310 } else { 267 });
+                    wi.i8(1);
+                    wi.i16(0);
+                    wi.u8(0); // no NBT
+                }
+                _ => wi.i16(-1), // empty
+            }
+        }
+        gs.observe(&wi);
+
+        // Every packet is an EntityEquipment for the broadcaster's own entity, and
+        // the set includes the held item (slot 0) and the helmet (slot 4).
+        let packets = gs.self_equipment_packets();
+        let mut slots = Vec::new();
+        for p in &packets {
+            let mut r: &[u8] = p;
+            assert_eq!(Read::varint(&mut r).unwrap(), world::id::ENTITY_EQUIPMENT);
+            assert_eq!(Read::varint(&mut r).unwrap(), 7);
+            slots.push(Read::i16(&mut r).unwrap());
+        }
+        assert!(slots.contains(&0), "held item is equipped");
+        assert!(slots.contains(&4), "helmet is equipped");
     }
 
     #[test]

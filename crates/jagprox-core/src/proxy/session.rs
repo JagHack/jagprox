@@ -424,6 +424,16 @@ fn feed_broadcaster_movement(broadcast: &super::broadcast::Broadcast, frame: &Fr
             }
         }
         sb::ArmAnimation::ID => broadcast.broadcaster_swung(),
+        // Serverbound Held Item Change (0x09): the broadcaster picked a hotbar slot.
+        0x09 => {
+            let mut r: &[u8] = &payload;
+            let _ = mcproto::buf::Read::varint(&mut r);
+            if let Ok(slot) = mcproto::buf::Read::i16(&mut r)
+                && (0..=8).contains(&slot)
+            {
+                broadcast.broadcaster_held(slot as u8);
+            }
+        }
         _ => {}
     }
 }

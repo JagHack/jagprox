@@ -41,7 +41,10 @@ pub mod id {
     pub const MULTI_BLOCK_CHANGE: i32 = 0x22;
     pub const BLOCK_CHANGE: i32 = 0x23;
     pub const MAP_CHUNK_BULK: i32 = 0x26;
+    pub const HELD_ITEM_CHANGE: i32 = 0x09;
     pub const CHANGE_GAME_STATE: i32 = 0x2B;
+    pub const SET_SLOT: i32 = 0x2F;
+    pub const WINDOW_ITEMS: i32 = 0x30;
     pub const UPDATE_BLOCK_ENTITY: i32 = 0x35;
     pub const WORLD_BORDER: i32 = 0x44;
 }
@@ -403,6 +406,99 @@ impl ChunkDataHeader {
     }
 }
 
+/// Builds a 0x04 Entity Equipment payload: which slot of an entity holds which item.
+///
+/// `item` is the raw 1.8 item-stack bytes, taken verbatim from an inventory packet
+/// (see [`read_slot`]). Slots: 0 held, 1 boots, 2 leggings, 3 chestplate, 4 helmet.
+pub fn entity_equipment(eid: i32, slot: i16, item: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(item.len() + 8);
+    out.varint(id::ENTITY_EQUIPMENT);
+    out.varint(eid);
+    out.i16(slot);
+    out.put(item);
+    out
+}
+
+/// Reads one 1.8 item-stack ("Slot") and returns its exact raw bytes, advancing the
+/// cursor past it. An empty slot is a single `-1` short; a present item is
+/// `id:i16, count:i8, damage:i16` followed by optional item NBT (a `0` byte for
+/// none, otherwise a named TAG_Compound). Used to split inventory packets into
+/// per-slot item bytes without decoding the NBT itself.
+pub fn read_slot<'a>(r: &mut &'a [u8]) -> Result<&'a [u8]> {
+    // Copy the reference so we keep the original 'a slice while `r` advances.
+    let start = *r;
+    let item_id = r.i16()?;
+    if item_id >= 0 {
+        let _count = r.i8()?;
+        let _damage = r.i16()?;
+        skip_nbt_tag(r, 0)?;
+    }
+    let consumed = start.len() - r.len();
+    Ok(&start[..consumed])
+}
+
+/// Skips one *named* NBT tag (type byte, then name + payload), as found at the top
+/// of an item's optional NBT. A `0` (TAG_End) type means "no NBT". `depth` guards
+/// against a malformed packet recursing without bound.
+fn skip_nbt_tag(r: &mut &[u8], depth: u32) -> Result<()> {
+    if depth > 32 {
+        return Err(Error::Malformed("NBT nested too deep".into()));
+    }
+    let tag = r.u8()?;
+    if tag == 0 {
+        return Ok(());
+    }
+    let name_len = r.u16()? as usize; // tag name
+    r.take(name_len)?;
+    skip_nbt_payload(r, tag, depth)
+}
+
+/// Skips the payload of an NBT tag of the given type.
+fn skip_nbt_payload(r: &mut &[u8], tag: u8, depth: u32) -> Result<()> {
+    if depth > 32 {
+        return Err(Error::Malformed("NBT nested too deep".into()));
+    }
+    match tag {
+        1 => drop(r.take(1)?),     // byte
+        2 => drop(r.take(2)?),     // short
+        3 | 5 => drop(r.take(4)?), // int / float
+        4 | 6 => drop(r.take(8)?), // long / double
+        7 => {
+            let n = r.i32()?.max(0) as usize; // byte array
+            r.take(n)?;
+        }
+        8 => {
+            let n = r.u16()? as usize; // string
+            r.take(n)?;
+        }
+        9 => {
+            let elem = r.u8()?; // list: element type, length, then payloads
+            let n = r.i32()?.max(0);
+            for _ in 0..n {
+                skip_nbt_payload(r, elem, depth + 1)?;
+            }
+        }
+        10 => {
+            loop {
+                // compound: named tags until TAG_End
+                let child = r.u8()?;
+                if child == 0 {
+                    break;
+                }
+                let name_len = r.u16()? as usize;
+                r.take(name_len)?;
+                skip_nbt_payload(r, child, depth + 1)?;
+            }
+        }
+        11 => {
+            let n = r.i32()?.max(0) as usize; // int array
+            r.take(n.saturating_mul(4))?;
+        }
+        other => return Err(Error::Malformed(format!("unknown NBT tag {other}"))),
+    }
+    Ok(())
+}
+
 /// Builds a 0x21 Chunk Data payload (id + fields) from a column's raw section data.
 pub fn chunk_data_payload(x: i32, z: i32, ground_up: bool, bitmask: u16, data: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len() + 16);
@@ -541,6 +637,39 @@ impl Packet for MultiBlockChange {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_slot_delimits_empty_present_and_nbt_items() {
+        // An empty slot (-1), a plain item (id 5, count 1, dmg 0, no NBT), and an
+        // item carrying a small NBT compound, concatenated. read_slot must split
+        // them at the right byte boundaries, NBT and all.
+        let mut buf = Vec::new();
+        buf.i16(-1); // empty
+        buf.i16(5);
+        buf.i8(1);
+        buf.i16(0);
+        buf.u8(0); // no NBT
+        buf.i16(276);
+        buf.i8(1);
+        buf.i16(3);
+        // NBT: compound { byte "Unbreakable" = 1 } then TAG_End.
+        buf.u8(10); // TAG_Compound
+        buf.u16(0); // empty name
+        buf.u8(1); // TAG_Byte
+        buf.u16(11);
+        buf.put(b"Unbreakable");
+        buf.u8(1); // value
+        buf.u8(0); // end compound
+
+        let mut r: &[u8] = &buf;
+        let empty = read_slot(&mut r).unwrap();
+        assert_eq!(empty, &[0xFF, 0xFF]); // -1 as i16
+        let plain = read_slot(&mut r).unwrap();
+        assert_eq!(plain.len(), 2 + 1 + 2 + 1); // id, count, dmg, no-nbt byte
+        let with_nbt = read_slot(&mut r).unwrap();
+        assert_eq!(with_nbt.len(), buf.len() - empty.len() - plain.len());
+        assert!(r.is_empty(), "all three slots consumed exactly");
+    }
 
     #[test]
     fn position_round_trips_with_negatives() {
