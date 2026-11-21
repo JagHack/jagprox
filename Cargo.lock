@@ -2179,7 +2179,7 @@ checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
 
 [[package]]
 name = "jagprox-cli"
-version = "3.2.1"
+version = "3.2.2"
 dependencies = [
  "clap",
  "crossterm",
@@ -2199,7 +2199,7 @@ dependencies = [
 
 [[package]]
 name = "jagprox-compass"
-version = "3.2.1"
+version = "3.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -2208,7 +2208,7 @@ dependencies = [
 
 [[package]]
 name = "jagprox-core"
-version = "3.2.1"
+version = "3.2.2"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2237,7 +2237,7 @@ dependencies = [
 
 [[package]]
 name = "jagprox-gui"
-version = "3.2.1"
+version = "3.2.2"
 dependencies = [
  "discord-rich-presence",
  "eframe",
@@ -2469,7 +2469,7 @@ dependencies = [
 
 [[package]]
 name = "mcproto"
-version = "3.2.1"
+version = "3.2.2"
 dependencies = [
  "aes 0.8.4",
  "flate2",
