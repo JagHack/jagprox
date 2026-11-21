@@ -133,6 +133,12 @@ impl Config {
         self.get("stats_telemetry").and_then(|v| v.as_bool()) == Some(true)
     }
 
+    /// Start broadcasting automatically on login (off by default). While it's off,
+    /// `/bc on` and `/bc off` show a tip that it can be enabled.
+    pub fn auto_broadcast(&self) -> bool {
+        self.get("auto_broadcast").and_then(|v| v.as_bool()) == Some(true)
+    }
+
     /// Changes the in-memory config and writes the given keys back to the file
     /// (read-modify-write, so keys the launcher changed meanwhile are kept).
     pub fn update(

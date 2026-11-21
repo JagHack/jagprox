@@ -168,6 +168,7 @@ fn broadcast_command(s: &Session, args: Vec<String>) {
                             "§a§lBroadcasting! §r§7A friend can watch with §f/watch {}",
                             s2.username()
                         ));
+                        auto_broadcast_hint(&s2);
                     }
                     Err(e) => s2.chat(&format!("§cCouldn't start broadcasting: {e}")),
                 }
@@ -178,6 +179,7 @@ fn broadcast_command(s: &Session, args: Vec<String>) {
                 b.close();
                 s.set_broadcast(None);
                 s.chat("§aStopped broadcasting.");
+                auto_broadcast_hint(s);
             }
             None => s.chat("§eYou aren't broadcasting."),
         },
@@ -206,6 +208,17 @@ fn broadcast_command(s: &Session, args: Vec<String>) {
             None => s.chat("§7Not broadcasting. §fUse /bc on."),
         },
         _ => s.chat("§cUsage: §f/bc on|off|accept <name>|deny <name>|status"),
+    }
+}
+
+/// While auto-broadcast is off (the default), remind the player it exists each time
+/// they manually start or stop a broadcast.
+fn auto_broadcast_hint(s: &Session) {
+    if !s.proxy().config().auto_broadcast() {
+        s.chat(
+            "§7Tip: set §eauto_broadcast: true §7in settings (config.yml) to broadcast \
+             automatically every game.",
+        );
     }
 }
 

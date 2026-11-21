@@ -22,3 +22,6 @@ discord_rpc:
   enabled: false
 # Opt-in: share the win counts of players you /sc with the JagProx website.
 stats_telemetry: false
+# Start broadcasting your game automatically on login, so a friend can /watch you
+# without running /bc on each time. Off by default.
+auto_broadcast: false

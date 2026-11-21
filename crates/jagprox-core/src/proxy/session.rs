@@ -237,6 +237,26 @@ pub(super) async fn run(
     let mut upstream = tokio::spawn(server_to_client(session.clone(), server.reader));
     let mut downstream = tokio::spawn(client_to_server(session.clone(), client.reader));
     session.spawn(modules::super_friends::run(session.clone()));
+    // Auto-broadcast: if enabled in settings, register a broadcast on login so a
+    // friend can /watch without the player running /bc on each game. Quiet on
+    // failure (e.g. the rendezvous server being unreachable) so a normal game isn't
+    // disrupted. Spectate logins never reach here, so they don't auto-broadcast.
+    if proxy.config().auto_broadcast() {
+        let s = session.clone();
+        let addr = proxy.compass_addr();
+        session.spawn(async move {
+            match super::broadcast::start(&s, &addr).await {
+                Ok(b) => {
+                    s.set_broadcast(Some(b));
+                    s.chat(&format!(
+                        "§a§lAuto-broadcasting! §r§7A friend can watch with §f/watch {}",
+                        s.username()
+                    ));
+                }
+                Err(e) => log(format!("Auto-broadcast couldn't start: {e}")),
+            }
+        });
+    }
     let _guard = AbortOnDrop(vec![
         upstream.abort_handle(),
         downstream.abort_handle(),

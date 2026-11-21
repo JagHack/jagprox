@@ -15,6 +15,10 @@ client over from Hypixel to your feed.
 - `/bc status` — how many people are watching.
 - `/bc off` — stop broadcasting and disconnect spectators.
 
+Set `auto_broadcast: true` in `config.yml` to start broadcasting automatically on
+login, so a friend can `/watch` you without you running `/bc on` each game. It's
+off by default; while off, `/bc on`/`/bc off` remind you it exists.
+
 **Watch a friend:**
 
 - `/watch <their name>` — JagProx disconnects you with a message; **reconnect** and
