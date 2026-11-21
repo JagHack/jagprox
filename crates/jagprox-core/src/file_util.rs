@@ -8,16 +8,54 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value};
 
 /// Writes to a temp file in the same directory, then renames it over the target, so a
-/// crash mid-write never leaves a half-written file behind.
+/// crash mid-write never leaves a half-written file behind. Owner-only (0600) on Unix:
+/// some of these files hold tokens, and the data folder itself is world-readable.
 pub fn write_file_atomic(path: &Path, content: &str) -> io::Result<()> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    // The launcher and the proxy share a process, so the pid alone can collide.
+    static NEXT: AtomicU64 = AtomicU64::new(0);
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy())
         .unwrap_or_default();
-    let tmp = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
-    fs::write(&tmp, content)?;
-    fs::rename(&tmp, path).inspect_err(|_| {
-        let _ = fs::remove_file(&tmp);
+    let tmp = path.with_file_name(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let written = options.open(&tmp).and_then(|mut file| {
+        file.write_all(content.as_bytes())?;
+        file.sync_all()
+    });
+    written
+        .and_then(|()| fs::rename(&tmp, path))
+        .inspect_err(|_| {
+            let _ = fs::remove_file(&tmp);
+        })
+}
+
+/// Calls `on_change` whenever `path`'s modification time changes, checking every 2 s.
+/// Abort the returned task to stop watching.
+pub fn watch_file(
+    path: PathBuf,
+    mut on_change: impl FnMut() + Send + 'static,
+) -> tokio::task::JoinHandle<()> {
+    let modified = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).ok();
+    tokio::spawn(async move {
+        let mut last = modified(&path);
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let now = modified(&path);
+            if now != last {
+                last = now;
+                on_change();
+            }
+        }
     })
 }
 
@@ -289,6 +327,25 @@ mod tests {
             }
             other => panic!("expected Unparseable, got {other:?}"),
         }
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn atomic_writes_replace_and_are_private() {
+        let dir = temp_dir("atomic");
+        let path = dir.join("accounts.json");
+        write_file_atomic(&path, "one").unwrap();
+        write_file_atomic(&path, "two").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "two");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1, "no temp files left");
         fs::remove_dir_all(&dir).unwrap();
     }
 

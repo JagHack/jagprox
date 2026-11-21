@@ -241,6 +241,57 @@ pub fn player_name_color(player: Option<&Value>) -> &'static str {
     }
 }
 
+/// Splits legacy `§` text into (color, bold, text) runs for the log views, so every
+/// front end shows the same `MC_COLORS`. `None` is the view's default color; a color
+/// code or §r ends bold, as in Minecraft; other format codes are dropped.
+pub fn legacy_segments(text: &str) -> Vec<(Option<[u8; 3]>, bool, String)> {
+    let mut out = Vec::new();
+    let (mut color, mut bold, mut cur) = (None, false, String::new());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        let Some(code) = chars.peek().copied().filter(|_| ch == '§') else {
+            cur.push(ch);
+            continue;
+        };
+        chars.next();
+        if !cur.is_empty() {
+            out.push((color, bold, std::mem::take(&mut cur)));
+        }
+        match code.to_ascii_lowercase() {
+            hex @ ('0'..='9' | 'a'..='f') => {
+                color = hex
+                    .to_digit(16)
+                    .map(|i| crate::constants::MC_COLORS[i as usize].1);
+                bold = false;
+            }
+            'l' => bold = true,
+            'r' => (color, bold) = (None, false),
+            _ => {}
+        }
+    }
+    if !cur.is_empty() {
+        out.push((color, bold, cur));
+    }
+    out
+}
+
+#[cfg(test)]
+mod legacy_segments_tests {
+    use super::legacy_segments;
+
+    #[test]
+    fn colors_bold_and_reset() {
+        assert_eq!(
+            legacy_segments("a§4§lb§rc§"),
+            vec![
+                (None, false, "a".to_string()),
+                (Some([170, 0, 0]), true, "b".to_string()),
+                (None, false, "c§".to_string()),
+            ]
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

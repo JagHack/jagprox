@@ -71,6 +71,9 @@ pub struct GameState {
     world_border: Option<Vec<u8>>,
     /// Raw ChunkData payload per column.
     chunks: IndexMap<(i32, i32), Vec<u8>>,
+    /// Non-ground-up ChunkData (section updates) since each column was loaded,
+    /// replayed in order after the full column.
+    partials: HashMap<(i32, i32), Vec<Vec<u8>>>,
     /// Block changes since each column was (re)loaded: (local x<<4|z, y) -> block.
     overlay: HashMap<(i32, i32), HashMap<(u8, u8), i32>>,
     /// Raw UpdateBlockEntity payload per block position.
@@ -117,6 +120,7 @@ impl GameState {
                 self.join_game = Some(payload.to_vec());
                 // A new world: forget the old one.
                 self.chunks.clear();
+                self.partials.clear();
                 self.overlay.clear();
                 self.block_entities.clear();
                 self.entities.clear();
@@ -125,6 +129,7 @@ impl GameState {
                 let rp = cb::Respawn::from_payload(payload)?;
                 self.dimension = rp.dimension;
                 self.chunks.clear();
+                self.partials.clear();
                 self.overlay.clear();
                 self.block_entities.clear();
                 self.entities.clear();
@@ -218,11 +223,26 @@ impl GameState {
         let key = (h.x, h.z);
         if h.is_unload() {
             self.chunks.shift_remove(&key);
+            self.partials.remove(&key);
             self.overlay.remove(&key);
-        } else {
+            self.block_entities
+                .retain(|&loc, _| world::Position::decode(loc).chunk() != key);
+        } else if h.ground_up {
             self.chunks.insert(key, payload.to_vec());
-            // A fresh column supersedes any accumulated block changes.
+            // A fresh column supersedes any accumulated section updates/block changes.
+            self.partials.remove(&key);
             self.overlay.remove(&key);
+        } else if self.chunks.contains_key(&key) {
+            // A section update: replayed after the base column, and it supersedes
+            // earlier updates and block changes in the sections it covers.
+            let partials = self.partials.entry(key).or_default();
+            partials.retain(|old| {
+                world::ChunkDataHeader::parse(old).is_ok_and(|o| o.bitmask & !h.bitmask != 0)
+            });
+            partials.push(payload.to_vec());
+            if let Some(overlay) = self.overlay.get_mut(&key) {
+                overlay.retain(|&(_, y), _| h.bitmask & (1 << (y >> 4)) == 0);
+            }
         }
         Ok(())
     }
@@ -231,6 +251,7 @@ impl GameState {
         for col in world::split_map_chunk_bulk(payload)? {
             let key = (col.x, col.z);
             self.chunks.insert(key, col.chunk_data);
+            self.partials.remove(&key);
             self.overlay.remove(&key);
         }
         Ok(())
@@ -475,6 +496,9 @@ impl GameState {
         // Chunks, each followed by the block changes that have happened since.
         for (col, data) in &self.chunks {
             out.push(data.clone());
+            for partial in self.partials.get(col).into_iter().flatten() {
+                out.push(partial.clone());
+            }
             if let Some(overlay) = self.overlay.get(col)
                 && !overlay.is_empty()
             {
@@ -690,6 +714,47 @@ mod tests {
             .find(|t| t.eid == 100)
             .expect("mob teleport in snapshot");
         assert_eq!(tp.x, 32 * 11);
+    }
+
+    #[test]
+    fn partial_chunk_keeps_base_and_unload_drops_block_entities() {
+        let mut gs = GameState::new();
+        gs.observe(&join_game(1));
+        let base = world::chunk_data_payload(0, 0, true, 0b11, &[1u8; 64]);
+        gs.observe(&base);
+        // A block change in section 1 (y 16..32), then a section-1 update covering it.
+        let bc = world::BlockChange {
+            position: world::Position { x: 1, y: 20, z: 1 },
+            block: 1 << 4,
+        };
+        gs.observe(&bc.to_payload());
+        let partial = world::chunk_data_payload(0, 0, false, 0b10, &[2u8; 32]);
+        gs.observe(&partial);
+        let snap = gs.snapshot();
+        let base_at = snap.iter().position(|p| *p == base).expect("base kept");
+        let partial_at = snap
+            .iter()
+            .position(|p| *p == partial)
+            .expect("partial kept");
+        assert!(base_at < partial_at);
+        // The block change was superseded by the section update.
+        assert!(
+            !snap
+                .iter()
+                .any(|p| p.first() == Some(&(world::id::MULTI_BLOCK_CHANGE as u8)))
+        );
+
+        // A block entity in the column goes away with the column.
+        let mut be = Vec::new();
+        mcproto::buf::Write::varint(&mut be, world::id::UPDATE_BLOCK_ENTITY);
+        mcproto::buf::Write::i64(&mut be, world::Position { x: 2, y: 64, z: 3 }.encode());
+        mcproto::buf::Write::u8(&mut be, 1);
+        mcproto::buf::Write::u8(&mut be, 0);
+        gs.observe(&be);
+        assert_eq!(gs.block_entities.len(), 1);
+        gs.observe(&world::chunk_data_payload(0, 0, true, 0, &[]));
+        assert!(gs.block_entities.is_empty());
+        assert!(gs.snapshot().iter().all(|p| *p != partial));
     }
 
     #[test]

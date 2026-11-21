@@ -24,7 +24,7 @@ discord-rich-presence = "1"
 
 # cargo-packager builds the deb, AppImage, macOS .app and .dmg from the egui binary
 # plus the static `jagprox` CLI as an external binary. rpm is cargo-generate-rpm (below);
-# the Windows installer is a hand-written NSIS script (packaging/windows). The release
+# the Windows installer is a hand-written NSIS script (windows/installer.nsi). The release
 # workflow builds jagprox-launcher and the jagprox sidecar, then runs these tools.
 [package.metadata.packager]
 product-name = "JagProx"

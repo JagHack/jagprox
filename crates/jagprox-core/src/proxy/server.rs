@@ -121,12 +121,14 @@ impl Proxy {
         }))
     }
 
-    /// The broadcaster the next login should spectate, if any.
+    /// The broadcaster the next login should spectate, if any. One-shot: while
+    /// spectating there is no way to run `/unwatch`, so the login after returns to
+    /// Hypixel.
     pub fn spectate_target(&self) -> Option<String> {
         self.spectate
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .clone()
+            .take()
     }
 
     /// Sets (or clears) spectate mode for the next login.
@@ -197,7 +199,14 @@ impl Proxy {
                 }
             })?;
         log(format!("JagProx server started on {host}:{port}."));
-        self.aliases.watch();
+        // Stopping the proxy aborts this task: take the alias watcher and the
+        // player's session down with it.
+        let watcher = self.aliases.watch();
+        let proxy = self.clone();
+        let _stop = session::scopeguard(move || {
+            watcher.abort();
+            proxy.shutdown();
+        });
         self.emit(ProxyEvent::Started { host, port });
         loop {
             let (stream, addr) = match listener.accept().await {
@@ -358,18 +367,26 @@ impl Proxy {
         let mut server = Connection::new(ur, uw);
         let login_name = session.as_ref().map_or(name.clone(), |s| s.name.clone());
         let join_session = session.clone();
-        let login = conn::client_login(&mut server, &host, port, &login_name, |hash| async move {
-            match join_session {
-                Some(s) => msauth::session_join(&s, &hash)
-                    .await
-                    .map_err(|e| e.to_string()),
-                None => Err(
-                    "this server needs a Microsoft account, but the proxy is in offline mode"
-                        .into(),
-                ),
-            }
-        })
+        // Bounded: a stalled login would hold the single player slot.
+        let login = tokio::time::timeout(
+            Duration::from_secs(30),
+            conn::client_login(&mut server, &host, port, &login_name, |hash| async move {
+                match join_session {
+                    Some(s) => msauth::session_join(&s, &hash)
+                        .await
+                        .map_err(|e| e.to_string()),
+                    None => Err(
+                        "this server needs a Microsoft account, but the proxy is in offline mode"
+                            .into(),
+                    ),
+                }
+            }),
+        )
         .await;
+        let login = match login {
+            Err(_) => kick!(format!("§cCould not log in to {host}: timed out")),
+            Ok(login) => login,
+        };
         let login = match login {
             Ok(login) => login,
             Err(mcproto::Error::Disconnected(reason)) => {

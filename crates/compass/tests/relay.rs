@@ -118,3 +118,122 @@ async fn join_offline_broadcaster_is_denied() {
         ServerMsg::Denied { .. }
     ));
 }
+
+async fn start() -> std::net::SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(jagprox_compass::serve(listener));
+    addr
+}
+
+async fn register(addr: std::net::SocketAddr, name: &str) -> (TcpStream, ServerMsg) {
+    let mut s = TcpStream::connect(addr).await.unwrap();
+    send(
+        &mut s,
+        &ClientMsg::Register {
+            name: name.into(),
+            uuid: "u".into(),
+        },
+    )
+    .await;
+    let reply = recv(&mut s).await;
+    (s, reply)
+}
+
+async fn join(addr: std::net::SocketAddr, target: &str, from: &str) -> TcpStream {
+    let mut s = TcpStream::connect(addr).await.unwrap();
+    send(
+        &mut s,
+        &ClientMsg::Join {
+            target: target.into(),
+            from: from.into(),
+        },
+    )
+    .await;
+    s
+}
+
+#[tokio::test]
+async fn register_of_live_name_is_refused() {
+    let addr = start().await;
+    let (_host, reply) = register(addr, "Host").await;
+    assert!(matches!(reply, ServerMsg::Registered));
+    let (_thief, reply) = register(addr, "host").await;
+    assert!(matches!(reply, ServerMsg::Error { .. }), "got {reply:?}");
+}
+
+#[tokio::test]
+async fn duplicate_pending_from_is_denied() {
+    let addr = start().await;
+    let (mut host, _) = register(addr, "Host").await;
+    let _first = join(addr, "Host", "Watcher").await;
+    assert!(matches!(
+        recv(&mut host).await,
+        ServerMsg::JoinRequest { .. }
+    ));
+    let mut second = join(addr, "Host", "watcher").await;
+    assert!(matches!(recv(&mut second).await, ServerMsg::Denied { .. }));
+}
+
+#[tokio::test]
+async fn invalid_names_are_rejected() {
+    let addr = start().await;
+    let (_bad, reply) = register(addr, "not a name!").await;
+    assert!(matches!(reply, ServerMsg::Error { .. }), "got {reply:?}");
+    let (_long, reply) = register(addr, "abcdefghijklmnopq").await;
+    assert!(matches!(reply, ServerMsg::Error { .. }), "got {reply:?}");
+    let (_host, _) = register(addr, "Host").await;
+    let mut spec = join(addr, "Host", "x y").await;
+    assert!(matches!(recv(&mut spec).await, ServerMsg::Denied { .. }));
+}
+
+#[tokio::test]
+async fn unknown_relay_token_is_not_piped() {
+    let addr = start().await;
+    let mut a = TcpStream::connect(addr).await.unwrap();
+    send(
+        &mut a,
+        &ClientMsg::Relay {
+            token: "guess".into(),
+        },
+    )
+    .await;
+    let mut b = TcpStream::connect(addr).await.unwrap();
+    send(
+        &mut b,
+        &ClientMsg::Relay {
+            token: "guess".into(),
+        },
+    )
+    .await;
+    // Both are closed by the server instead of being paired.
+    let mut buf = [0u8; 1];
+    for s in [&mut a, &mut b] {
+        let n = tokio::time::timeout(std::time::Duration::from_secs(5), s.read(&mut buf))
+            .await
+            .expect("server should close an unknown-token relay")
+            .unwrap_or(0);
+        assert_eq!(n, 0);
+    }
+}
+
+#[tokio::test]
+async fn reregister_after_disconnect_keeps_new_registration() {
+    let addr = start().await;
+    let (old, _) = register(addr, "Host").await;
+    drop(old);
+    // The server frees the name once it sees the old connection close.
+    let mut host = loop {
+        match register(addr, "Host").await {
+            (s, ServerMsg::Registered) => break s,
+            _ => tokio::time::sleep(std::time::Duration::from_millis(20)).await,
+        }
+    };
+    // The old connection's cleanup must not have removed the new registration.
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let _spec = join(addr, "Host", "Watcher").await;
+    assert!(matches!(
+        recv(&mut host).await,
+        ServerMsg::JoinRequest { .. }
+    ));
+}

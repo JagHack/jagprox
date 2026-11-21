@@ -83,8 +83,19 @@ Section "Install"
   !insertmacro RemoveJagProx2
 
   SetOutPath "$INSTDIR"
-  ; 3.0.0-alpha downloaded updates into the install folder; clear that out.
-  RMDir /r "$INSTDIR\updates"
+  ; 3.0.0-alpha downloaded updates into the default install folder; clear that out
+  ; (only there: under a custom /D= an "updates" folder isn't ours).
+  ${If} $INSTDIR == "$LOCALAPPDATA\JagProx"
+    RMDir /r "$INSTDIR\updates"
+  ${EndIf}
+
+  ; A running launcher or jagprox (including a `jagprox update` that started us and
+  ; is exiting) locks its .exe, and the silent update would fail to replace it.
+  nsExec::Exec 'taskkill /IM ${MAINBIN} /F'
+  Pop $0
+  nsExec::Exec 'taskkill /IM jagprox.exe /F'
+  Pop $0
+  Sleep 500
 
   File "${SOURCEDIR}\${MAINBIN}"
   File "${SOURCEDIR}\jagprox.exe"
@@ -110,8 +121,10 @@ Section "Install"
   nsExec::Exec '"$INSTDIR\jagprox.exe" __windows-path add "$INSTDIR"'
   Pop $0
 
-  ; Started by JagProx 2's updater (it passes --force-run): start the new launcher.
-  ${GetOptions} $CMDLINE "--force-run" $0
+  ; Started by an updater (JagProx 2's and ours pass --force-run): start the new launcher.
+  ${GetParameters} $1
+  ClearErrors
+  ${GetOptions} $1 "--force-run" $0
   ${IfNot} ${Errors}
   ${AndIf} ${Silent}
     Exec '"$INSTDIR\${MAINBIN}"'
@@ -127,7 +140,9 @@ Section "Uninstall"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\NOTICE"
   Delete "$INSTDIR\uninstall.exe"
-  RMDir /r "$INSTDIR\updates"
+  ${If} $INSTDIR == "$LOCALAPPDATA\JagProx"
+    RMDir /r "$INSTDIR\updates"
+  ${EndIf}
   RMDir "$INSTDIR"
 
   Delete "$SMPROGRAMS\JagProx.lnk"

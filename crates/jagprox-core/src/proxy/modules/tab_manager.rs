@@ -149,6 +149,8 @@ async fn tag_player(s: &Session, name: &str, game_key: &str) {
     if name.is_empty() {
         return;
     }
+    // Chat shows nicknames, but stats and Hypixel's teams use the real name.
+    let name = &crate::reports::resolve_nickname(name, &s.proxy().config().nicknames());
     let Some((prefix, suffix)) = lookups::tab_data(s, name, game_key).await else {
         return;
     };

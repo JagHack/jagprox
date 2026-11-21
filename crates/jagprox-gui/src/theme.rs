@@ -471,11 +471,17 @@ pub fn settings(ui: &mut egui::Ui, app: &mut App) {
                     ui.add(
                         egui::TextEdit::singleline(&mut app.api_key)
                             .password(true)
-                            .hint_text(if app.api_key_set {
-                                "A key is set — enter a new one to change it"
-                            } else {
-                                "Enter your Hypixel API key"
-                            })
+                            .hint_text(
+                                if app
+                                    .shared
+                                    .api_key_set
+                                    .load(std::sync::atomic::Ordering::SeqCst)
+                                {
+                                    "A key is set — enter a new one to change it"
+                                } else {
+                                    "Enter your Hypixel API key"
+                                },
+                            )
                             .desired_width(300.0),
                     );
                     if accent(ui, "Save Key").clicked() {
@@ -555,57 +561,11 @@ fn colored_line(ui: &mut egui::Ui, line: &str) {
 }
 
 fn segments(line: &str) -> Vec<(Color32, bool, String)> {
-    let default = Color32::from_rgb(210, 208, 214);
-    let mut out = Vec::new();
-    let mut color = default;
-    let mut bold = false;
-    let mut cur = String::new();
-    let mut chars = line.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '§'
-            && let Some(&code) = chars.peek()
-        {
-            chars.next();
-            if !cur.is_empty() {
-                out.push((color, bold, std::mem::take(&mut cur)));
-            }
-            if let Some(c) = code_color(code) {
-                color = c;
-                bold = false;
-            } else if code == 'l' {
-                bold = true;
-            } else if code == 'r' {
-                color = default;
-                bold = false;
-            }
-        } else {
-            cur.push(ch);
-        }
-    }
-    if !cur.is_empty() {
-        out.push((color, bold, cur));
-    }
-    out
-}
-
-fn code_color(c: char) -> Option<Color32> {
-    Some(match c {
-        '0' => Color32::from_rgb(0, 0, 0),
-        '1' => Color32::from_rgb(0, 0, 170),
-        '2' => Color32::from_rgb(0, 170, 0),
-        '3' => Color32::from_rgb(0, 170, 170),
-        '4' => Color32::from_rgb(200, 40, 40),
-        '5' => Color32::from_rgb(170, 0, 170),
-        '6' => Color32::from_rgb(255, 170, 0),
-        '7' => Color32::from_rgb(170, 170, 170),
-        '8' => Color32::from_rgb(85, 85, 85),
-        '9' => Color32::from_rgb(85, 85, 255),
-        'a' => Color32::from_rgb(85, 255, 85),
-        'b' => Color32::from_rgb(85, 255, 255),
-        'c' => Color32::from_rgb(255, 85, 85),
-        'd' => Color32::from_rgb(255, 85, 255),
-        'e' => Color32::from_rgb(255, 255, 85),
-        'f' => Color32::from_rgb(255, 255, 255),
-        _ => return None,
-    })
+    jagprox_core::formatter::legacy_segments(line)
+        .into_iter()
+        .map(|(color, bold, text)| {
+            let [r, g, b] = color.unwrap_or([210, 208, 214]);
+            (Color32::from_rgb(r, g, b), bold, text)
+        })
+        .collect()
 }

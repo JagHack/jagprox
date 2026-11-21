@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 
 use eframe::egui;
 use jagprox_core::account;
-use jagprox_core::api::{Backend, Hypixel, OnlineStatus};
+use jagprox_core::api::{ApiError, Backend, Hypixel, OnlineStatus};
 use jagprox_core::config::Config;
 use jagprox_core::constants::{self, GAME_MODES};
 use jagprox_core::formatter::{format_rank, player_name_color};
@@ -58,6 +58,7 @@ struct Shared {
     hypixel: Mutex<Option<Hypixel>>,
     proxy: Mutex<Option<(Arc<Proxy>, AbortHandle)>>,
     proxy_running: AtomicBool,
+    api_key_set: AtomicBool,
     login_task: Mutex<Option<AbortHandle>>,
     logging_in: AtomicBool,
     logs: Mutex<Vec<String>>,
@@ -114,8 +115,9 @@ impl Shared {
 }
 
 /// Checks a token with the backend and makes it the session.
-async fn establish_session(shared: &Arc<Shared>, token: String) -> bool {
-    match Backend::new(Some(token.clone())).profile().await {
+async fn establish_session(shared: &Arc<Shared>, token: String) -> Result<(), ApiError> {
+    let backend = Backend::new(Some(token.clone()));
+    match backend.profile().await {
         Ok(profile) => {
             let name = profile
                 .get("username")
@@ -127,13 +129,16 @@ async fn establish_session(shared: &Arc<Shared>, token: String) -> bool {
             *shared.hypixel.lock().unwrap_or_else(|e| e.into_inner()) = None;
             log("Session established.");
             shared.ctx.request_repaint();
-            true
+            let key_set = matches!(backend.get_api_key().await, Ok(Some(_)));
+            shared.api_key_set.store(key_set, Ordering::SeqCst);
+            shared.ctx.request_repaint();
+            Ok(())
         }
         Err(e) => {
             log(format!("Login failed: {e}"));
             *shared.session.lock().unwrap_or_else(|e| e.into_inner()) = None;
             shared.ctx.request_repaint();
-            false
+            Err(e)
         }
     }
 }
@@ -143,7 +148,10 @@ fn restore_session(shared: &Arc<Shared>) {
         let shared = shared.clone();
         let rt = shared.rt.clone();
         rt.spawn(async move {
-            if !establish_session(&shared, token).await {
+            // Only a rejected token is a logout; offline keeps the saved login.
+            if let Err(ApiError::NotLoggedIn | ApiError::Status(401 | 403, _)) =
+                establish_session(&shared, token).await
+            {
                 account::clear();
             }
         });
@@ -164,7 +172,7 @@ fn start_login(shared: &Arc<Shared>) {
         .await;
         match result {
             Ok(token) => {
-                if establish_session(&shared, token.clone()).await
+                if establish_session(&shared, token.clone()).await.is_ok()
                     && let Err(e) = account::save(&token)
                 {
                     log(format!("Could not save the login: {e}"));
@@ -211,6 +219,10 @@ fn start_proxy(shared: &Arc<Shared>) {
     };
     let runner = proxy.clone();
     let s = shared.clone();
+    // Held until the slot is filled, so a proxy that fails at once can't take() the
+    // empty slot and leave itself stored as running. The task runs on the runtime,
+    // so waiting for this lock there doesn't block the UI thread.
+    let mut slot = shared.proxy.lock().unwrap_or_else(|e| e.into_inner());
     let task = shared.rt.spawn(async move {
         if let Err(e) = runner.run().await {
             s.push_log(format!("§c❌ FATAL ERROR: {e}"));
@@ -220,8 +232,9 @@ fn start_proxy(shared: &Arc<Shared>) {
         s.discord.set_playing(false);
         s.ctx.request_repaint();
     });
-    *shared.proxy.lock().unwrap_or_else(|e| e.into_inner()) = Some((proxy, task.abort_handle()));
     shared.proxy_running.store(true, Ordering::SeqCst);
+    *slot = Some((proxy, task.abort_handle()));
+    drop(slot);
 
     let s = shared.clone();
     shared.rt.spawn(async move {
@@ -358,7 +371,6 @@ struct App {
     autogg_msg: String,
     autogg_delay: String,
     api_key: String,
-    api_key_set: bool,
     discord_rpc: bool,
     cli_status: String,
     // Lookups
@@ -414,7 +426,6 @@ impl App {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
             api_key: String::new(),
-            api_key_set: false,
             cli_status: String::new(),
             stat_name: String::new(),
             stat_mode: gamemodes
@@ -482,7 +493,7 @@ impl eframe::App for App {
 #[cfg(target_os = "linux")]
 fn run_cli_if_called_as_jagprox() {
     use std::os::unix::process::CommandExt;
-    if std::env::var_os("APPIMAGE").is_none() {
+    if install::appimage_path().is_none() {
         return;
     }
     let Some(argv0) = std::env::var_os("ARGV0") else {
@@ -563,6 +574,7 @@ fn main() -> eframe::Result<()> {
                 hypixel: Mutex::new(None),
                 proxy: Mutex::new(None),
                 proxy_running: AtomicBool::new(false),
+                api_key_set: AtomicBool::new(false),
                 login_task: Mutex::new(None),
                 logging_in: AtomicBool::new(false),
                 logs: Mutex::new(Vec::new()),
@@ -625,6 +637,7 @@ impl App {
             .hypixel
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = None;
+        self.shared.api_key_set.store(false, Ordering::SeqCst);
         self.shared.stop_proxy();
         log("Logged out.");
     }
@@ -652,7 +665,10 @@ impl App {
         self.api_key.clear();
         self.shared.rt.spawn(async move {
             match Backend::new(Some(jwt)).save_api_key(&key).await {
-                Ok(_) => log("API Key saved."),
+                Ok(_) => {
+                    shared.api_key_set.store(true, Ordering::SeqCst);
+                    log("API Key saved.");
+                }
                 Err(e) => log(format!("Could not save API key: {e}")),
             }
             *shared.hypixel.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -693,18 +709,7 @@ impl App {
             return;
         }
         self.aliases_loaded = true;
-        let text =
-            std::fs::read_to_string(self.shared.data_dir.join("aliases.json")).unwrap_or_default();
-        if let Ok(serde_json::Value::Object(map)) =
-            serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
-        {
-            let mut pairs: Vec<(String, String)> = map
-                .iter()
-                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-                .collect();
-            pairs.sort();
-            self.aliases = pairs;
-        }
+        self.aliases = jagprox_core::aliases::list(&self.shared.data_dir);
     }
 
     fn save_aliases(&mut self) {

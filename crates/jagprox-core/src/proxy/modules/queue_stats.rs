@@ -48,15 +48,6 @@ pub struct QueueStats {
 }
 
 impl QueueStats {
-    pub fn reset(&mut self) {
-        debug("Queue Stats Handler reset.");
-        self.current_game_key = None;
-        self.has_triggered = false;
-        self.awaiting_teleport = false;
-        self.who = None;
-        self.current_map = None;
-    }
-
     /// Game over: allow the next game to trigger again.
     pub fn reset_trigger(&mut self) {
         if self.has_triggered {
@@ -116,6 +107,8 @@ pub fn handle(st: &mut State, s: &Session, packet: &mut ServerPacket) -> bool {
             st.queue.awaiting_teleport = false;
             st.queue.who = None;
         }
+        // A server switch: the map belongs to the server just left.
+        ServerPacket::JoinGame(_) | ServerPacket::Respawn(_) => st.queue.current_map = None,
         ServerPacket::Position(_) if st.queue.awaiting_teleport => {
             st.queue.awaiting_teleport = false;
             // /who is only useful for Bed Wars and SkyWars; Duels uses the "Opponent:" line.
@@ -155,6 +148,8 @@ pub fn handle(st: &mut State, s: &Session, packet: &mut ServerPacket) -> bool {
                         reset_for_new_game(st, s, key);
                     }
                     st.queue.has_triggered = false;
+                    // Lobby and game share a title ("BED WARS"), so the key alone can't re-arm.
+                    st.auto_gg.reset();
                 }
             }
         }
@@ -168,10 +163,26 @@ pub fn handle(st: &mut State, s: &Session, packet: &mut ServerPacket) -> bool {
     false
 }
 
+/// The end of the first `needle` that starts a line (only whitespace before it), so
+/// player chat ("Bob: Opponent: X") can't pass for Hypixel's own lines.
+fn after_line_start(clean: &str, needle: &str) -> Option<usize> {
+    clean
+        .match_indices(needle)
+        .map(|(i, _)| i)
+        .find(|&i| {
+            clean[..i]
+                .rsplit(['\n', '\r'])
+                .next()
+                .unwrap_or("")
+                .trim()
+                .is_empty()
+        })
+        .map(|i| i + needle.len())
+}
+
 /// JS `/You are currently playing on (?:map: )?(.+)/`.
 fn map_name(clean: &str) -> Option<String> {
-    let start =
-        clean.find("You are currently playing on ")? + "You are currently playing on ".len();
+    let start = after_line_start(clean, "You are currently playing on ")?;
     let rest = &clean[start..];
     let rest = rest
         .strip_prefix("map: ")
@@ -183,7 +194,7 @@ fn map_name(clean: &str) -> Option<String> {
 
 /// JS `/Opponent: (.+)/`.
 fn opponent(clean: &str) -> Option<String> {
-    let start = clean.find("Opponent: ")? + "Opponent: ".len();
+    let start = after_line_start(clean, "Opponent: ")?;
     let line = clean[start..].split(['\n', '\r']).next().unwrap_or("");
     (!line.is_empty()).then(|| line.trim().to_string())
 }
@@ -301,5 +312,17 @@ mod tests {
             Some("[MVP+] Notch")
         );
         assert_eq!(opponent("Opponent: "), None);
+    }
+
+    #[test]
+    fn only_hypixels_own_lines_match() {
+        let banner = "▬▬▬▬▬▬▬▬▬▬▬▬\n                 Bed Wars Duel\n\n         Opponent: [MVP+] Notch\n▬▬▬▬▬▬▬▬▬▬▬▬";
+        assert_eq!(opponent(banner).as_deref(), Some("[MVP+] Notch"));
+        assert_eq!(opponent("[VIP] Bob: Opponent: Technoblade"), None);
+        assert_eq!(
+            map_name("Bob: You are currently playing on §kLOL"),
+            None,
+            "player chat must not set the map"
+        );
     }
 }

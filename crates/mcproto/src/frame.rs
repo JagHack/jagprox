@@ -373,6 +373,109 @@ mod tests {
         assert_eq!(frame.payload().unwrap().as_ref(), &original[..]);
     }
 
+    /// Reads one frame from `bytes` followed by EOF.
+    async fn read_raw(bytes: &[u8], compression: bool) -> Result<Frame> {
+        let mut reader = FrameReader::new(bytes);
+        if compression {
+            reader.enable_compression();
+        }
+        reader.read_frame().await
+    }
+
+    #[tokio::test]
+    async fn oversized_frame_is_rejected_before_buffering() {
+        let mut bytes = Vec::new();
+        bytes.length(MAX_FRAME + 1);
+        assert!(matches!(
+            read_raw(&bytes, false).await,
+            Err(Error::FrameTooLarge(n)) if n == MAX_FRAME + 1
+        ));
+        // A negative and an over-long length VarInt are errors too.
+        assert!(
+            read_raw(&[0xff, 0xff, 0xff, 0xff, 0x0f], false)
+                .await
+                .is_err()
+        );
+        assert!(matches!(
+            read_raw(&[0xff; 6], false).await,
+            Err(Error::VarIntTooLong)
+        ));
+    }
+
+    #[tokio::test]
+    async fn eof_inside_length_or_body_is_closed() {
+        assert!(matches!(
+            read_raw(&[0x80, 0x80], false).await,
+            Err(Error::Closed)
+        ));
+        assert!(matches!(
+            read_raw(&[5, 1, 2], false).await,
+            Err(Error::Closed)
+        ));
+    }
+
+    #[tokio::test]
+    async fn zero_length_frame_reads_but_has_no_id() {
+        let frame = read_raw(&[0], false).await.unwrap();
+        assert!(frame.payload().unwrap().is_empty());
+        assert!(matches!(frame.id(), Err(Error::Truncated)));
+        let frame = read_raw(&[0], true).await.unwrap();
+        assert!(frame.payload().is_err());
+        assert!(frame.id().is_err());
+    }
+
+    fn compressed_frame(data_len: usize, zlib: &[u8]) -> Frame {
+        let mut body = Vec::new();
+        body.length(data_len);
+        body.put(zlib);
+        Frame {
+            body,
+            compression: true,
+        }
+    }
+
+    #[test]
+    fn compressed_payload_with_wrong_length_or_bad_zlib_errors() {
+        let original = packet(0x21, &[7u8; 600]);
+        let mut writer = FrameWriter::new(Vec::new());
+        let zlib = writer.compress(&original).unwrap();
+        assert_eq!(
+            compressed_frame(original.len(), &zlib)
+                .payload()
+                .unwrap()
+                .as_ref(),
+            &original[..]
+        );
+        for wrong in [1, original.len() - 1, original.len() + 1, MAX_PACKET] {
+            assert!(
+                matches!(
+                    compressed_frame(wrong, &zlib).payload(),
+                    Err(Error::Zlib(_))
+                ),
+                "data_len {wrong}"
+            );
+        }
+        assert!(matches!(
+            compressed_frame(MAX_PACKET + 1, &zlib).payload(),
+            Err(Error::FrameTooLarge(_))
+        ));
+        let mut corrupt = zlib.clone();
+        corrupt[0] ^= 0xff; // bad zlib header
+        assert!(
+            compressed_frame(original.len(), &corrupt)
+                .payload()
+                .is_err()
+        );
+        assert!(compressed_frame(original.len(), &corrupt).id().is_err());
+        let garbage = [0xde, 0xad, 0xbe, 0xef, 0x00, 0x11];
+        assert!(compressed_frame(600, &garbage).payload().is_err());
+        assert!(
+            compressed_frame(600, &zlib[..zlib.len() / 2])
+                .payload()
+                .is_err()
+        );
+    }
+
     #[tokio::test]
     async fn closed_stream_is_reported() {
         let (a, b) = tokio::io::duplex(64);

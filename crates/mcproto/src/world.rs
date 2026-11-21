@@ -71,11 +71,10 @@ pub struct Position {
 
 impl Position {
     pub fn decode(value: i64) -> Self {
+        // Arithmetic shifts on the i64 sign-extend each field, as BlockPos.fromLong does.
         let x = (value >> 38) as i32;
-        let y = ((value >> 26) & 0xFFF) as i32;
+        let y = (value << 26 >> 52) as i32;
         let z = (value << 38 >> 38) as i32;
-        // Sign-extend x and z from 26 bits.
-        let x = x << 6 >> 6;
         Self { x, y, z }
     }
 
@@ -453,6 +452,12 @@ fn skip_nbt_tag(r: &mut &[u8], depth: u32) -> Result<()> {
     skip_nbt_payload(r, tag, depth)
 }
 
+/// An NBT array length; negative is malformed (vanilla throws on it).
+fn nbt_len(r: &mut &[u8]) -> Result<usize> {
+    let n = r.i32()?;
+    usize::try_from(n).map_err(|_| Error::Malformed(format!("negative NBT length {n}")))
+}
+
 /// Skips the payload of an NBT tag of the given type.
 fn skip_nbt_payload(r: &mut &[u8], tag: u8, depth: u32) -> Result<()> {
     if depth > 32 {
@@ -464,7 +469,7 @@ fn skip_nbt_payload(r: &mut &[u8], tag: u8, depth: u32) -> Result<()> {
         3 | 5 => drop(r.take(4)?), // int / float
         4 | 6 => drop(r.take(8)?), // long / double
         7 => {
-            let n = r.i32()?.max(0) as usize; // byte array
+            let n = nbt_len(r)?; // byte array
             r.take(n)?;
         }
         8 => {
@@ -473,7 +478,7 @@ fn skip_nbt_payload(r: &mut &[u8], tag: u8, depth: u32) -> Result<()> {
         }
         9 => {
             let elem = r.u8()?; // list: element type, length, then payloads
-            let n = r.i32()?.max(0);
+            let n = r.i32()?.max(0); // vanilla reads a negative list length as empty
             for _ in 0..n {
                 skip_nbt_payload(r, elem, depth + 1)?;
             }
@@ -491,7 +496,7 @@ fn skip_nbt_payload(r: &mut &[u8], tag: u8, depth: u32) -> Result<()> {
             }
         }
         11 => {
-            let n = r.i32()?.max(0) as usize; // int array
+            let n = nbt_len(r)?; // int array
             r.take(n.saturating_mul(4))?;
         }
         other => return Err(Error::Malformed(format!("unknown NBT tag {other}"))),
@@ -671,6 +676,114 @@ mod tests {
         assert!(r.is_empty(), "all three slots consumed exactly");
     }
 
+    /// A present item (id 1, count 1, damage 0) carrying `nbt` as its tag bytes.
+    fn item_with_nbt(nbt: &[u8]) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.i16(1);
+        buf.i8(1);
+        buf.i16(0);
+        buf.put(nbt);
+        buf
+    }
+
+    #[test]
+    fn read_slot_skips_lists_and_int_arrays() {
+        let mut nbt = Vec::new();
+        nbt.u8(10); // root compound
+        nbt.u16(0);
+        nbt.u8(9); // list "ench" of 2 compounds { short "id" }
+        nbt.u16(4);
+        nbt.put(b"ench");
+        nbt.u8(10);
+        nbt.i32(2);
+        for id in [16i16, 34] {
+            nbt.u8(2);
+            nbt.u16(2);
+            nbt.put(b"id");
+            nbt.i16(id);
+            nbt.u8(0);
+        }
+        nbt.u8(11); // int array "a" of 3
+        nbt.u16(1);
+        nbt.put(b"a");
+        nbt.i32(3);
+        for v in [1i32, 2, 3] {
+            nbt.i32(v);
+        }
+        nbt.u8(0); // end root
+        let mut buf = item_with_nbt(&nbt);
+        buf.put(b"tail");
+        let mut r: &[u8] = &buf;
+        assert_eq!(read_slot(&mut r).unwrap().len(), buf.len() - 4);
+        assert_eq!(r, b"tail");
+    }
+
+    #[test]
+    fn read_slot_rejects_nesting_past_depth_limit() {
+        // Unnamed-element lists nested 40 deep: list<list<...>> each holding one element.
+        let mut nbt = vec![10, 0, 0, 9, 0, 0];
+        for _ in 0..40 {
+            nbt.u8(9);
+            nbt.i32(1);
+        }
+        nbt.u8(1);
+        nbt.i32(1);
+        nbt.u8(0);
+        assert!(matches!(
+            read_slot(&mut &item_with_nbt(&nbt)[..]),
+            Err(Error::Malformed(_))
+        ));
+        // Compounds nested 40 deep.
+        let mut nbt = vec![10, 0, 0];
+        for _ in 0..40 {
+            nbt.put(&[10, 0, 0]);
+        }
+        nbt.extend(std::iter::repeat_n(0, 41));
+        assert!(matches!(
+            read_slot(&mut &item_with_nbt(&nbt)[..]),
+            Err(Error::Malformed(_))
+        ));
+    }
+
+    #[test]
+    fn read_slot_rejects_negative_nbt_lengths() {
+        for tag in [7u8, 9, 11] {
+            let mut nbt = vec![10, 0, 0, tag, 0, 0];
+            if tag == 9 {
+                nbt.u8(1); // element type
+            }
+            nbt.i32(-1);
+            nbt.u8(0);
+            // Arrays throw in vanilla; a list just loops zero times.
+            assert_eq!(
+                read_slot(&mut &item_with_nbt(&nbt)[..]).is_err(),
+                tag != 9,
+                "tag {tag}"
+            );
+        }
+    }
+
+    #[test]
+    fn read_slot_rejects_truncated_input() {
+        let mut nbt = vec![10, 0, 0, 11, 0, 1, b'a'];
+        nbt.i32(3);
+        nbt.i32(1);
+        nbt.i32(2);
+        nbt.i32(3);
+        nbt.u8(0);
+        let buf = item_with_nbt(&nbt);
+        for cut in 0..buf.len() {
+            assert!(read_slot(&mut &buf[..cut]).is_err(), "cut at {cut}");
+        }
+        // A huge declared length must fail on truncation, not allocate.
+        let mut nbt = vec![10, 0, 0, 11, 0, 0];
+        nbt.i32(i32::MAX);
+        assert!(matches!(
+            read_slot(&mut &item_with_nbt(&nbt)[..]),
+            Err(Error::Truncated)
+        ));
+    }
+
     #[test]
     fn position_round_trips_with_negatives() {
         for p in [
@@ -684,6 +797,17 @@ mod tests {
                 x: -33_554_432,
                 y: 255,
                 z: 33_554_431,
+            },
+            Position { x: 0, y: -1, z: 0 },
+            Position {
+                x: -1,
+                y: -2048,
+                z: -33_554_432,
+            },
+            Position {
+                x: -7,
+                y: 2047,
+                z: -1,
             },
         ] {
             assert_eq!(Position::decode(p.encode()), p, "{p:?}");

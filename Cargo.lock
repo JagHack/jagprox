@@ -2183,14 +2183,10 @@ version = "3.2.2"
 dependencies = [
  "clap",
  "crossterm",
- "dirs",
  "enable-ansi-support",
- "getrandom 0.3.4",
  "jagprox-core",
- "keyring",
  "open",
  "ratatui",
- "reqwest",
  "rpassword",
  "serde_json",
  "tokio",
@@ -2201,8 +2197,10 @@ dependencies = [
 name = "jagprox-compass"
 version = "3.2.2"
 dependencies = [
+ "getrandom 0.3.4",
  "serde",
  "serde_json",
+ "socket2",
  "tokio",
 ]
 

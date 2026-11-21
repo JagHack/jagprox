@@ -43,7 +43,35 @@ pub fn for_spectator(payload: &[u8]) -> Option<Vec<u8>> {
     if is_dropped(id) {
         return None;
     }
+    match id {
+        // Keep the spectator in adventure mode: the broadcaster's own gamemode would
+        // let them break blocks client-side (flight is re-sent after the teleport).
+        cb::Respawn::ID => {
+            if let Ok(mut rp) = cb::Respawn::from_payload(payload) {
+                rp.game_mode = 2;
+                return Some(rp.to_payload());
+            }
+        }
+        cb::Chat::ID if is_private_chat(payload) => return None,
+        _ => {}
+    }
     Some(payload.to_vec())
+}
+
+/// Whispers and party/guild chat are the broadcaster's private conversations.
+fn is_private_chat(payload: &[u8]) -> bool {
+    let Ok(chat) = cb::Chat::from_payload(payload) else {
+        return false;
+    };
+    let text = match serde_json::from_str::<serde_json::Value>(&chat.message) {
+        Ok(v) => crate::formatter::extract_text(&v),
+        Err(_) => chat.message,
+    };
+    let text = crate::formatter::strip_colors(&text);
+    let text = text.trim_start();
+    ["From ", "To ", "Party >", "Guild >", "Officer >"]
+        .iter()
+        .any(|p| text.starts_with(p))
 }
 
 /// A whole-degree angle as the protocol's single-byte 0–256 unit.
@@ -124,6 +152,37 @@ mod tests {
         }
         .to_payload();
         assert_eq!(for_spectator(&chat).as_deref(), Some(chat.as_slice()));
+    }
+
+    #[test]
+    fn private_chat_is_dropped() {
+        let whisper = cb::Chat {
+            message:
+                r#"{"text":"","extra":[{"text":"§dFrom §b[MVP§c+§b] Bob§7: "},{"text":"hi"}]}"#
+                    .into(),
+            position: 0,
+        }
+        .to_payload();
+        assert!(for_spectator(&whisper).is_none());
+        let party = cb::Chat {
+            message: r#"{"text":"§9Party §8> §bBob§f: gg"}"#.into(),
+            position: 0,
+        }
+        .to_payload();
+        assert!(for_spectator(&party).is_none());
+    }
+
+    #[test]
+    fn respawn_keeps_spectator_in_adventure() {
+        let rp = cb::Respawn {
+            dimension: -1,
+            difficulty: 2,
+            game_mode: 0,
+            level_type: "default".into(),
+        }
+        .to_payload();
+        let out = cb::Respawn::from_payload(&for_spectator(&rp).unwrap()).unwrap();
+        assert_eq!((out.dimension, out.game_mode), (-1, 2));
     }
 
     #[test]

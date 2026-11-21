@@ -28,11 +28,6 @@ pub fn truthy(value: Option<&Value>) -> bool {
     }
 }
 
-/// `obj.key` as a string slice, if it is one.
-pub fn str_field<'a>(obj: Option<&'a Value>, key: &str) -> Option<&'a str> {
-    obj.and_then(|o| o.get(key)).and_then(Value::as_str)
-}
-
 /// JS `Number.prototype.toFixed(digits)`: ties round away from zero, unlike Rust's
 /// formatter, which rounds ties to even (`0.125` must print `0.13`, not `0.12`).
 pub fn to_fixed(value: f64, digits: usize) -> String {

@@ -93,6 +93,8 @@ fn announce_pending(ranks: &mut RankTracker, s: &Session) {
 pub fn handle(st: &mut State, s: &Session, packet: &ServerPacket) {
     let ranks = &mut st.ranks;
     match packet {
+        // A server switch: its hidden players and teams arrive after this packet.
+        ServerPacket::JoinGame(_) | ServerPacket::Respawn(_) => ranks.reset(),
         ServerPacket::PlayerList(list) => {
             // Removals are ignored on purpose: Hypixel drops hidden opponents from the
             // tab list right away, but they're still in the game.

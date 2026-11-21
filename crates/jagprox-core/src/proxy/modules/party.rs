@@ -58,20 +58,18 @@ fn finish(s: &Session, capture: PartyCapture) {
     }
 }
 
-pub fn handle(st: &mut State, s: &Session, packet: &ServerPacket) {
-    let ServerPacket::Chat(chat) = packet else {
-        return;
-    };
-    let Some(clean) = &chat.clean else { return };
-    let Some(capture) = &mut st.party else { return };
+/// What one chat line does to a running capture.
+#[derive(Debug, PartialEq)]
+enum Step {
+    Continue,
+    Done,
+    NotInParty,
+}
 
+fn step(capture: &mut PartyCapture, clean: &str) -> Step {
     if clean.contains("You are not currently in a party.") {
         capture.not_in_party = true;
-        s.chat("§cYou are not in a party.");
-        if let Some(capture) = st.party.take() {
-            finish(s, capture);
-        }
-        return;
+        return Step::NotInParty;
     }
     if clean.starts_with("Party Members (") || clean.starts_with("Party Leader:") {
         capture.capturing = true;
@@ -84,11 +82,68 @@ pub fn handle(st: &mut State, s: &Session, packet: &ServerPacket) {
                 }
             }
         }
-        if clean.starts_with("-----")
-            && !capture.members.is_empty()
-            && let Some(capture) = st.party.take()
-        {
-            finish(s, capture);
+        if clean.starts_with("-----") && !capture.members.is_empty() {
+            return Step::Done;
         }
+    }
+    Step::Continue
+}
+
+pub fn handle(st: &mut State, s: &Session, packet: &ServerPacket) {
+    let ServerPacket::Chat(chat) = packet else {
+        return;
+    };
+    let Some(clean) = &chat.clean else { return };
+    let Some(capture) = &mut st.party else { return };
+    match step(capture, clean) {
+        Step::Continue => return,
+        Step::NotInParty => s.chat("§cYou are not in a party."),
+        Step::Done => {}
+    }
+    if let Some(capture) = st.party.take() {
+        finish(s, capture);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn capture() -> PartyCapture {
+        PartyCapture {
+            id: 1,
+            members: Vec::new(),
+            capturing: false,
+            not_in_party: false,
+            mode: None,
+        }
+    }
+
+    #[test]
+    fn collects_members_until_the_closing_line() {
+        let mut c = capture();
+        // The opening divider comes before any member, so it must not end the capture.
+        assert_eq!(
+            step(&mut c, "-----------------------------"),
+            Step::Continue
+        );
+        assert_eq!(step(&mut c, "Party Members (3)"), Step::Continue);
+        assert_eq!(step(&mut c, "Party Leader: [MVP+] Alice ●"), Step::Continue);
+        assert_eq!(
+            step(&mut c, "Party Members: Bob ● [VIP] Carol ●"),
+            Step::Continue
+        );
+        assert_eq!(step(&mut c, "-----------------------------"), Step::Done);
+        assert_eq!(c.members, ["Alice", "Bob", "Carol"]);
+    }
+
+    #[test]
+    fn not_in_a_party() {
+        let mut c = capture();
+        assert_eq!(
+            step(&mut c, "You are not currently in a party."),
+            Step::NotInParty
+        );
+        assert!(c.not_in_party && c.members.is_empty());
     }
 }

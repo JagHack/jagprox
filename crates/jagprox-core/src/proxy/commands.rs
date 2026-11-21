@@ -157,22 +157,7 @@ fn broadcast_command(s: &Session, args: Vec<String>) {
                 s.chat("§eYou're already broadcasting. §7Use §f/bc off§7 to stop.");
                 return;
             }
-            let addr = s.proxy().compass_addr();
-            let s2 = s.clone();
-            s.spawn(async move {
-                s2.chat("§7Starting broadcast…");
-                match broadcast::start(&s2, &addr).await {
-                    Ok(b) => {
-                        s2.set_broadcast(Some(b));
-                        s2.chat(&format!(
-                            "§a§lBroadcasting! §r§7A friend can watch with §f/watch {}",
-                            s2.username()
-                        ));
-                        auto_broadcast_hint(&s2);
-                    }
-                    Err(e) => s2.chat(&format!("§cCouldn't start broadcasting: {e}")),
-                }
-            });
+            begin_broadcast(s, false);
         }
         "off" | "stop" => match s.broadcast() {
             Some(b) => {
@@ -211,6 +196,42 @@ fn broadcast_command(s: &Session, args: Vec<String>) {
     }
 }
 
+/// Starts a broadcast in the background (`/bc on`, or `auto` on login). Both can
+/// race while the rendezvous server answers, so only the first one is kept.
+pub(super) fn begin_broadcast(s: &Session, auto: bool) {
+    let addr = s.proxy().compass_addr();
+    let s2 = s.clone();
+    s.spawn(async move {
+        if !auto {
+            s2.chat("§7Starting broadcast…");
+        }
+        match broadcast::start(&s2, &addr).await {
+            Ok(b) => {
+                if !s2.claim_broadcast(b.clone()) {
+                    b.close();
+                    return;
+                }
+                if auto {
+                    s2.chat(&format!(
+                        "§a§lAuto-broadcasting! §r§7A friend can watch with §f/watch {}",
+                        s2.username()
+                    ));
+                } else {
+                    s2.chat(&format!(
+                        "§a§lBroadcasting! §r§7A friend can watch with §f/watch {}",
+                        s2.username()
+                    ));
+                    auto_broadcast_hint(&s2);
+                }
+            }
+            // The other start won (the rendezvous server refuses a second register).
+            Err(_) if s2.broadcast().is_some() => {}
+            Err(e) if auto => log(format!("Auto-broadcast couldn't start: {e}")),
+            Err(e) => s2.chat(&format!("§cCouldn't start broadcasting: {e}")),
+        }
+    });
+}
+
 /// While auto-broadcast is off (the default), remind the player it exists each time
 /// they manually start or stop a broadcast.
 fn auto_broadcast_hint(s: &Session) {
@@ -236,18 +257,16 @@ fn watch_command(s: &Session, args: Vec<String>) {
     kick(
         s,
         &format!(
-            "§aConnecting you to §f{target}§a's broadcast…\n\n§7Reconnect to JagProx to start watching."
+            "§aConnecting you to §f{target}§a's broadcast…\n\n§7Reconnect to JagProx to start watching.\n§7The reconnect after that returns you to Hypixel."
         ),
     );
 }
 
-/// `/unwatch`: leave spectate mode and reconnect to Hypixel normally.
+/// `/unwatch`: only reachable on Hypixel, where spectate mode is already over (it
+/// is one-shot: reconnecting after spectating returns to Hypixel). Kept for habit.
 fn unwatch_command(s: &Session) {
     s.proxy().set_spectate(None);
-    kick(
-        s,
-        "§aLeaving the broadcast.\n\n§7Reconnect to JagProx to return to Hypixel.",
-    );
+    s.chat("§7You aren't watching anyone. §fReconnect after spectating to return to Hypixel.");
 }
 
 /// Disconnects the player's client with a message (they reconnect to apply a mode
@@ -398,11 +417,11 @@ async fn gametrack(s: &Session, args: Vec<String>) -> Result<(), String> {
                 Some(h) => js_parse_int(h),
                 None => Some(1),
             };
-            let Some(hours) = hours.filter(|h| *h > 0) else {
+            let Some(hours) = hours.and_then(|h| u32::try_from(h).ok()).filter(|h| *h > 0) else {
                 s.chat("§cInvalid number of hours.");
                 return Ok(());
             };
-            backend.gametrack_hours(hours as u32).await.map(|data| {
+            backend.gametrack_hours(hours).await.map(|data| {
                 reports::gametrack_modes(
                     &format!("Game Stats for the Last {hours} Hour(s)"),
                     "No game data found for your account in this period.",
@@ -705,7 +724,7 @@ fn help(s: &Session) {
         ),
         (
             "/watch <player>".into(),
-            "Spectates a friend's live broadcast (reconnect to apply; /unwatch to leave).",
+            "Spectates a friend's live broadcast (reconnect to apply; reconnect again to leave).",
         ),
         ("/jagprox".into(), "Displays this help message."),
     ];

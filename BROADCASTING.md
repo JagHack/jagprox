@@ -13,7 +13,11 @@ client over from Hypixel to your feed.
 - When they ask to join you'll get a clickable **§a[Accept]** / **§c[Deny]** line
   in chat (or use `/bc accept <name>` / `/bc deny <name>`).
 - `/bc status` — how many people are watching.
-- `/bc off` — stop broadcasting and disconnect spectators.
+- `/bc off` — stop broadcasting, disconnect spectators and go offline on the
+  rendezvous server (friends no longer see you live). If the connection to the
+  rendezvous server drops, JagProx tells you; run `/bc on` to restart.
+- Your whispers (`From …`/`To …`) and party, guild and officer chat are never
+  shown to spectators.
 
 Set `auto_broadcast: true` in `config.yml` to start broadcasting automatically on
 login, so a friend can `/watch` you without you running `/bc on` each game. It's
@@ -24,7 +28,9 @@ off by default; while off, `/bc on`/`/bc off` remind you it exists.
 - `/watch <their name>` — JagProx disconnects you with a message; **reconnect** and
   you'll spawn into their game as an invisible, flying spectator.
 - Fly around freely; you can't interact with anything.
-- `/unwatch` then reconnect to go back to playing on Hypixel normally.
+- Disconnect, then reconnect to go back to playing on Hypixel normally: `/watch`
+  only applies to the next login. (`/unwatch` still exists, but there's nothing
+  to run it in while spectating.)
 
 Nothing about your Hypixel session changes for the broadcaster — Hypixel sees one
 player (you). Spectators never touch Hypixel at all.
@@ -56,7 +62,10 @@ player (you). Spectators never touch Hypixel at all.
    snapshot and spawns the broadcaster as a player model, then streams live packets.
    Packets about the broadcaster *as a player* (health, inventory, position
    corrections, abilities) are dropped so they can't corrupt the spectator's client;
-   the broadcaster is animated from their own outgoing movement instead.
+   the broadcaster is animated from their own outgoing movement instead. On a
+   server switch or death (Respawn) the spectator is re-placed and the broadcaster
+   model respawned. A spectator that falls too far behind is disconnected rather
+   than silently missing packets; they can rejoin for a fresh snapshot.
 
 4. **Spectator side.** The spectator's proxy dials the broadcaster over the relay,
    logs in, and forwards frames both ways between its own Minecraft client and the

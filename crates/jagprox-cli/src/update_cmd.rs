@@ -131,8 +131,9 @@ pub async fn update(wanted: Option<&str>) -> Result<(), String> {
             println!("Done: JagProx is now v{}.", release.version);
         }
         Plan::WindowsInstaller { .. } => {
+            // Printed first: the installer closes every running jagprox, this one too.
+            println!("Starting the installer; it closes the launcher and any running jagprox.");
             update::run_windows_installer(&file, false)?;
-            println!("The installer is running; it closes the launcher if it's open.");
         }
     }
     Ok(())

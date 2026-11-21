@@ -205,8 +205,17 @@ async fn modules_react_like_on_hypixel() {
             // The game starts.
             c.write('scoreboard_objective', { name: 'sb', action: 0, displayText: '§e§lBED WARS', type: 'integer' });
             setTimeout(() => chat(c, 'Protect your bed and destroy the enemy beds.'), 200);
+            let secondGame = false;
             c.on('chat', p => {
                 console.log('SERVER GOT ' + p.message);
+                // After game 1's gg: switch server and play a second Bed Wars game.
+                if (p.message === '/ac gg' && !secondGame) {
+                    secondGame = true;
+                    c.write('respawn', { dimension: 1, difficulty: 1, gamemode: 0, levelType: 'default' });
+                    c.write('playerlist_header', { header: '{"text":"Hypixel"}', footer: '{"text":"store.hypixel.net"}' });
+                    c.write('scoreboard_objective', { name: 'sb', action: 0, displayText: '§e§lBED WARS', type: 'integer' });
+                    setTimeout(() => c.write('title', { action: 0, text: '{"text":"§6§lVICTORY!"}' }), 100);
+                }
                 if (p.message === '/wtfmap') {
                     chat(c, 'You are currently playing on Lighthouse');
                     setTimeout(() => {
@@ -270,6 +279,7 @@ async fn modules_react_like_on_hypixel() {
         "CHAT §8[§5jag§dprox§8] §r§eOne of your opponents is a §6MVP§c++".to_string(),
         "CHAT §8[§5jag§dprox§8] §r§eOne of your opponents is a §bMVP/MVP§c+".to_string(),
         "FOOTER".to_string(),
+        "FOOTER".to_string(),
         "CHAT §8[§5jag§dprox§8] §r§dAuto-checking §f2 §dplayers for §5Bed Wars§d...".to_string(),
         "CHAT §8[§5jag§dprox§8] §r§eJoining Bedwars 4v4v4v4...".to_string(),
         "CHAT §8[§5jag§dprox§8] §r§dRe-queuing §8» §f/play bedwars_four_four".to_string(),
@@ -279,22 +289,30 @@ async fn modules_react_like_on_hypixel() {
         "SERVER GOT /wtfmap".to_string(),
         "SERVER GOT /who".to_string(),
         "SERVER GOT /ac gg".to_string(),
+        "SERVER GOT /ac gg".to_string(),
         "SERVER GOT /play bedwars_four_four".to_string(),
     ];
+    let mut footers = 0;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
     while !(want_client.is_empty() && want_server.is_empty()) {
         tokio::select! {
             line = client_out.next_line() => {
                 let line = line.unwrap().expect("client exited");
                 if line.starts_with("FOOTER") {
-                    assert!(line.contains("You are currently playing on §5Lighthouse"), "{line}");
+                    footers += 1;
+                    // Only game 1's footer may show its map; game 2's is after a server switch.
+                    assert_eq!(line.contains("You are currently playing on §5Lighthouse"), footers == 1, "{line}");
                 }
-                want_client.retain(|w| !line.starts_with(w.as_str()));
+                if let Some(i) = want_client.iter().position(|w| line.starts_with(w.as_str())) {
+                    want_client.remove(i);
+                }
             }
             line = server_out.next_line() => {
                 let line = line.unwrap().expect("server exited");
                 assert_ne!(line, "SERVER GOT /jagprox", "JagProx commands must not reach the server");
-                want_server.retain(|w| *w != line);
+                if let Some(i) = want_server.iter().position(|w| *w == line) {
+                    want_server.remove(i);
+                }
             }
             _ = tokio::time::sleep_until(deadline) => {
                 panic!("still waiting for client {want_client:?} and server {want_server:?}");

@@ -267,15 +267,6 @@ fn inject_map_into_footer(s: &Session, hf: &mut cb::PlayerListHeaderFooter) -> b
     true
 }
 
-/// Resets on disconnect (JS `resetModules`).
-pub fn reset(st: &mut State) {
-    st.queue.reset();
-    st.tab.reset();
-    st.alerter.reset();
-    st.auto_gg.reset();
-    st.ranks.reset();
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

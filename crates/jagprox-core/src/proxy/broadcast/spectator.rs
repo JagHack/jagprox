@@ -19,7 +19,8 @@ use crate::log::log;
 type ClientConn = Connection<OwnedReadHalf, OwnedWriteHalf>;
 
 /// Bridges `client` to `target`'s broadcast. `client` is already past login on our
-/// side. On failure the client is kicked with `reason`.
+/// side. On failure the client is kicked with `reason`. Spectate mode is one-shot,
+/// so the kick says that reconnecting returns to Hypixel.
 pub async fn run(
     mut client: ClientConn,
     name: String,
@@ -29,7 +30,7 @@ pub async fn run(
 ) -> Result<(), String> {
     macro_rules! kick {
         ($reason:expr) => {{
-            let reason: String = $reason;
+            let reason = format!("{}\n\n§7Reconnect to JagProx to return to Hypixel.", $reason);
             let _ = conn::login_disconnect(&mut client, &json!({ "text": reason }).to_string()).await;
             return Err(reason);
         }};
@@ -80,11 +81,10 @@ pub async fn run(
         reader: host_r,
         writer: host_w,
     } = host;
-    let down = tokio::spawn(forward(host_r, client_w));
-    let up = tokio::spawn(forward(client_r, host_w));
+    // Polled in place, not spawned, so both stop when this connection is aborted.
     tokio::select! {
-        _ = down => {}
-        _ = up => {}
+        _ = forward(host_r, client_w) => {}
+        _ = forward(client_r, host_w) => {}
     }
     log(format!("{name} stopped spectating {target}."));
     Ok(())

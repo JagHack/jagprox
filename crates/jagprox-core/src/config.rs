@@ -4,7 +4,6 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
 
 use serde_json::{Map, Value};
 
@@ -174,37 +173,22 @@ impl Config {
     /// Re-reads the file every 2 s while it keeps changing (port/host need a restart).
     pub fn watch(&self) -> tokio::task::JoinHandle<()> {
         let config = self.clone();
-        tokio::spawn(async move {
-            let mut last = modified(&config.path);
-            loop {
-                tokio::time::sleep(Duration::from_secs(2)).await;
-                let now = modified(&config.path);
-                if now == last {
-                    continue;
-                }
-                last = now;
-                match read(&config.path) {
-                    Ok(fresh) => {
-                        crate::log::set_debug(
-                            fresh
-                                .get("debug_mode")
-                                .and_then(Value::as_bool)
-                                .unwrap_or(false),
-                        );
-                        *config.values.write().unwrap_or_else(|e| e.into_inner()) = fresh;
-                        crate::log::log("config.yml changed on disk, settings reloaded.");
-                    }
-                    Err(e) => crate::log::log(format!(
-                        "[ERROR] config.yml changed but could not be reloaded (keeping old settings): {e}"
-                    )),
-                }
+        file_util::watch_file(self.path.clone(), move || match read(&config.path) {
+            Ok(fresh) => {
+                crate::log::set_debug(
+                    fresh
+                        .get("debug_mode")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                );
+                *config.values.write().unwrap_or_else(|e| e.into_inner()) = fresh;
+                crate::log::log("config.yml changed on disk, settings reloaded.");
             }
+            Err(e) => crate::log::log(format!(
+                "[ERROR] config.yml changed but could not be reloaded (keeping old settings): {e}"
+            )),
         })
     }
-}
-
-fn modified(path: &Path) -> Option<SystemTime> {
-    std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
 fn read(path: &Path) -> Result<Map<String, Value>, ConfigError> {

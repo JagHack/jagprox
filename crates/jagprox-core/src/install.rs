@@ -57,14 +57,38 @@ pub fn detect() -> Install {
     let Some(exe) = current_exe() else {
         return Install::Unknown;
     };
+    let (appimage, appdir) = appimage_env();
+    detect_from(&exe, appimage, appdir, &|path| {
+        fs::read_to_string(path).ok()
+    })
+}
+
+fn appimage_env() -> (Option<PathBuf>, Option<PathBuf>) {
     let appimage = std::env::var_os("APPIMAGE").map(PathBuf::from);
-    detect_from(&exe, appimage, &|path| fs::read_to_string(path).ok())
+    let appdir = std::env::var_os("APPDIR")
+        .map(PathBuf::from)
+        .map(|d| fs::canonicalize(&d).unwrap_or(d));
+    (appimage, appdir)
+}
+
+/// The AppImage file this process was started from, if it was. `APPIMAGE` alone is
+/// not proof: it is inherited by everything started from another AppImage app's
+/// terminal (Cursor, ...), so this binary must also live inside the mounted `APPDIR`.
+pub fn appimage_path() -> Option<PathBuf> {
+    let (appimage, appdir) = appimage_env();
+    own_appimage(&current_exe()?, appimage, appdir)
+}
+
+fn own_appimage(exe: &Path, appimage: Option<PathBuf>, appdir: Option<PathBuf>) -> Option<PathBuf> {
+    appimage.filter(|_| appdir.is_some_and(|dir| exe.starts_with(dir)))
 }
 
 /// `read` reads a small file (the package marker, Cargo.toml); `None` if missing.
+/// `appimage`/`appdir` are the `APPIMAGE`/`APPDIR` variables.
 pub fn detect_from(
     exe: &Path,
     appimage: Option<PathBuf>,
+    appdir: Option<PathBuf>,
     read: &dyn Fn(&Path) -> Option<String>,
 ) -> Install {
     let dev = exe.ancestors().any(|dir| {
@@ -77,7 +101,7 @@ pub fn detect_from(
         return Install::Dev;
     }
     if cfg!(target_os = "linux") {
-        if let Some(path) = appimage {
+        if let Some(path) = own_appimage(exe, appimage, appdir) {
             return Install::AppImage { path };
         }
         if exe.starts_with("/nix/store") {
@@ -250,29 +274,41 @@ pub fn current_path_fix() -> Option<PathFix> {
 }
 
 /// Appends the PATH line unless it's there already. Returns false if it was.
+/// Appends rather than rewrites, so bytes we can't decode (a Latin-1 .zshrc) survive.
 pub fn apply_path_fix(fix: &PathFix) -> Result<bool, String> {
-    let existing = fs::read_to_string(&fix.file).unwrap_or_default();
-    if existing.contains(PATH_MARKER) {
-        return Ok(false);
-    }
-    if let Some(dir) = fix.file.parent() {
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let mut text = existing;
-    if !text.is_empty() {
-        if !text.ends_with('\n') {
-            text.push('\n');
-        }
-        text.push('\n');
-    }
-    text.push_str(&format!("{PATH_MARKER}\n{}\n", fix.line));
-    fs::write(&fix.file, text).map_err(|e| {
+    use std::io::Write;
+    let failed = |e: std::io::Error| {
         format!(
             "could not edit {} ({e}); add this line yourself: {}",
             fix.file.display(),
             fix.line
         )
-    })?;
+    };
+    let existing = match fs::read(&fix.file) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(failed(e)),
+    };
+    if String::from_utf8_lossy(&existing).contains(PATH_MARKER) {
+        return Ok(false);
+    }
+    if let Some(dir) = fix.file.parent() {
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let mut text = String::new();
+    if !existing.is_empty() {
+        if !existing.ends_with(b"\n") {
+            text.push('\n');
+        }
+        text.push('\n');
+    }
+    text.push_str(&format!("{PATH_MARKER}\n{}\n", fix.line));
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&fix.file)
+        .and_then(|mut file| file.write_all(text.as_bytes()))
+        .map_err(failed)?;
     Ok(true)
 }
 
@@ -356,13 +392,26 @@ mod tests {
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn detect_with(exe: &str, appimage: Option<&str>, files: &[(&str, &str)]) -> Install {
+        detect_in(exe, appimage, Some("/tmp/.mount_JagPrxyz"), files)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn detect_in(
+        exe: &str,
+        appimage: Option<&str>,
+        appdir: Option<&str>,
+        files: &[(&str, &str)],
+    ) -> Install {
         let files: HashMap<PathBuf, String> = files
             .iter()
             .map(|(p, c)| (PathBuf::from(p), c.to_string()))
             .collect();
-        detect_from(Path::new(exe), appimage.map(PathBuf::from), &|p| {
-            files.get(p).cloned()
-        })
+        detect_from(
+            Path::new(exe),
+            appimage.map(PathBuf::from),
+            appdir.map(PathBuf::from),
+            &|p| files.get(p).cloned(),
+        )
     }
 
     #[cfg(target_os = "linux")]
@@ -384,6 +433,27 @@ mod tests {
             ),
             Install::AppImage {
                 path: "/home/me/JagProx.AppImage".into()
+            }
+        );
+        // APPIMAGE inherited from another AppImage app's terminal (Cursor): not ours.
+        assert_eq!(
+            detect_in(
+                "/nix/store/abc-jagprox-3.0.0/bin/jagprox",
+                Some("/home/me/Cursor.AppImage"),
+                Some("/tmp/.mount_Cursorab"),
+                &[]
+            ),
+            Install::Nix
+        );
+        assert_eq!(
+            detect_in(
+                "/home/me/.local/bin/jagprox",
+                Some("/home/me/Cursor.AppImage"),
+                None,
+                &[]
+            ),
+            Install::Standalone {
+                exe: "/home/me/.local/bin/jagprox".into()
             }
         );
         assert_eq!(
@@ -513,6 +583,25 @@ mod tests {
         let text = fs::read_to_string(&fix.file).unwrap();
         assert_eq!(text.matches(".local/bin").count(), 1);
         assert!(text.starts_with("alias ll='ls -l'\n"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn path_fix_keeps_a_non_utf8_file() {
+        let dir =
+            std::env::temp_dir().join(format!("jagprox-pathfix-latin1-{}", std::process::id()));
+        let fix = PathFix {
+            file: dir.join(".zshrc"),
+            line: "export PATH=\"$HOME/.local/bin:$PATH\"".into(),
+        };
+        fs::create_dir_all(&dir).unwrap();
+        let original = b"# caf\xe9\nalias ll='ls -l'\n";
+        fs::write(&fix.file, original).unwrap();
+        assert!(apply_path_fix(&fix).unwrap());
+        assert!(!apply_path_fix(&fix).unwrap());
+        let bytes = fs::read(&fix.file).unwrap();
+        assert!(bytes.starts_with(original));
+        assert!(bytes.ends_with(format!("{PATH_MARKER}\n{}\n", fix.line).as_bytes()));
         let _ = fs::remove_dir_all(&dir);
     }
 

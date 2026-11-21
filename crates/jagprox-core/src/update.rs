@@ -649,13 +649,14 @@ pub fn replace_bundle(archive: &Path, bundle: &Path) -> Result<(), String> {
 }
 
 /// Starts the Windows installer and returns; the caller should exit so the installer
-/// can replace its files. `relaunch` starts the launcher when it's done.
+/// can replace its files. `relaunch` starts the launcher when it's done. Our
+/// installer.nsi takes `/S` (silent) and `--force-run` (start the launcher after a
+/// silent install).
 pub fn run_windows_installer(installer: &Path, relaunch: bool) -> Result<(), String> {
     let mut command = std::process::Command::new(installer);
-    // /P: passive (progress bar, no questions). /R: start the app afterwards.
-    command.arg("/P");
+    command.arg("/S");
     if relaunch {
-        command.arg("/R");
+        command.arg("--force-run");
     }
     command
         .spawn()

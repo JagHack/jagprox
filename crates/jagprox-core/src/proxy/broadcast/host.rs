@@ -94,12 +94,10 @@ pub async fn run(relay: TcpStream, broadcast: Arc<Broadcast>) -> Result<(), Stri
 
     // Two loops: push live packets + keep-alives to the spectator, and drain whatever
     // the spectator sends back (keep-alive echoes, their camera movement, commands).
-    let writer_task = tokio::spawn(writer_loop(writer, live));
-    let reader_task = tokio::spawn(reader_loop(reader, broadcast.clone(), name.clone()));
-
+    // Polled in place, not spawned, so both stop with this task (and with the session).
     tokio::select! {
-        _ = writer_task => {}
-        _ = reader_task => {}
+        _ = writer_loop(writer, live) => {}
+        _ = reader_loop(reader, broadcast.clone(), name.clone()) => {}
     }
     log(format!("Spectator {name} left the broadcast."));
     Ok(())

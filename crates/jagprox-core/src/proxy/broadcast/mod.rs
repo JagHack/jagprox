@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use mcproto::packets::{Packet, clientbound as cb, parse_uuid};
 use serde_json::json;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 use compass::{ClientMsg, ServerMsg};
 pub use state::GameState;
@@ -42,14 +42,12 @@ struct Inner {
 }
 
 impl Inner {
-    /// Sends a payload to every spectator, dropping any whose connection has closed.
+    /// Sends a payload to every spectator, dropping any whose connection has closed
+    /// or who fell too far behind: a skipped packet would desync their world for
+    /// good, so they rejoin fresh instead, and the broadcaster never blocks.
     fn fanout(&mut self, payload: &[u8]) {
-        self.spectators.retain(|tx| {
-            !matches!(
-                tx.try_send(payload.to_vec()),
-                Err(mpsc::error::TrySendError::Closed(_))
-            )
-        });
+        self.spectators
+            .retain(|tx| tx.try_send(payload.to_vec()).is_ok());
     }
 }
 
@@ -64,7 +62,11 @@ pub struct Broadcast {
     control_tx: mpsc::Sender<ClientMsg>,
     /// JSON chat component + position to show the broadcaster.
     chat_tx: mpsc::UnboundedSender<(String, i8)>,
-    closed: AtomicBool,
+    /// Flipped once by [`close`](Self::close); the rendezvous tasks watch it and exit.
+    closed: watch::Sender<bool>,
+    /// Set by a Respawn: the next position from Hypixel re-places the spectators and
+    /// respawns the broadcaster model (the client dropped both).
+    respawned: AtomicBool,
 }
 
 impl Broadcast {
@@ -90,16 +92,51 @@ impl Broadcast {
         } else {
             Vec::new()
         };
+        let mut after = equip;
+        match leading_id(payload) {
+            Some(cb::Respawn::ID) => self.respawned.store(true, Ordering::Relaxed),
+            Some(cb::PlayerPositionAndLook::ID)
+                if self.respawned.swap(false, Ordering::Relaxed) =>
+            {
+                after.push(host::abilities());
+                after.extend(self.model_packets(&game));
+            }
+            // Change Game State "change gamemode" resets the spectator's flight.
+            Some(mcproto::world::id::CHANGE_GAME_STATE) if payload.get(1) == Some(&3) => {
+                after.push(host::abilities());
+            }
+            _ => {}
+        }
         let forward = transform::for_spectator(payload);
-        if forward.is_some() || !equip.is_empty() {
+        if forward.is_some() || !after.is_empty() {
             let mut inner = self.lock();
             if let Some(forward) = forward {
                 inner.fanout(&forward);
             }
-            for p in &equip {
+            for p in &after {
                 inner.fanout(p);
             }
         }
+    }
+
+    /// The broadcaster model (spawned + dressed) and a position for the spectator a
+    /// couple of blocks above it.
+    fn model_packets(&self, game: &GameState) -> Vec<Vec<u8>> {
+        let pos = game.position.unwrap_or((0.0, 64.0, 0.0, 0.0, 0.0));
+        let mut out = vec![transform::spawn_broadcaster(
+            game.self_eid,
+            self.uuid,
+            pos.0,
+            pos.1,
+            pos.2,
+            pos.3,
+            pos.4,
+        )];
+        // Dress the model: Hypixel never sends equipment for the player themselves,
+        // so synthesise it from the broadcaster's tracked inventory.
+        out.extend(game.self_equipment_packets());
+        out.push(host::position(pos.0, pos.1 + 2.0, pos.2, pos.3, pos.4));
+        out
     }
 
     /// The broadcaster moved and/or turned; move their model for every spectator.
@@ -160,16 +197,7 @@ impl Broadcast {
         // by `observe` slips in between (it takes the same lock).
         let game = self.game();
         let mut out = game.snapshot();
-        let eid = game.self_eid;
-        let pos = game.position.unwrap_or((0.0, 64.0, 0.0, 0.0, 0.0));
-        out.push(transform::spawn_broadcaster(
-            eid, self.uuid, pos.0, pos.1, pos.2, pos.3, pos.4,
-        ));
-        // Dress the model: Hypixel never sends equipment for the player themselves,
-        // so synthesise it from the broadcaster's tracked inventory.
-        out.extend(game.self_equipment_packets());
-        // Place the spectator a couple of blocks above the broadcaster to start.
-        out.push(host::position(pos.0, pos.1 + 2.0, pos.2, pos.3, pos.4));
+        out.extend(self.model_packets(&game));
         let (tx, rx) = mpsc::channel(2048);
         self.lock().spectators.push(tx);
         (out, rx)
@@ -191,6 +219,11 @@ impl Broadcast {
 
     /// Show the broadcaster a clickable approve/deny prompt for a join request.
     fn prompt_join(&self, from: &str) {
+        // An unchecked name could make the line too long for the client, which
+        // then disconnects the broadcaster from Hypixel.
+        if !valid_name(from) {
+            return;
+        }
         let line = json!({
             "text": format!("§d{from} §7wants to watch your game  "),
             "extra": [
@@ -208,9 +241,10 @@ impl Broadcast {
 
     /// A spectator said something; surface it to the broadcaster.
     pub fn on_spectator_chat(&self, name: &str, message: &str) {
-        if message.starts_with('/') {
+        if message.starts_with('/') || !valid_name(name) {
             return; // spectator commands are handled by their own proxy
         }
+        let message: String = message.chars().take(100).collect();
         self.broadcaster_chat(&format!("§d[Watch] §f{name}§7: §f{message}"));
     }
 
@@ -220,24 +254,33 @@ impl Broadcast {
     }
 
     pub fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::Relaxed)
+        *self.closed.borrow()
     }
 
-    /// Stops broadcasting: disconnect current spectators and refuse new ones. The
-    /// rendezvous control task notices on its next message and exits.
+    /// Stops broadcasting: disconnect current spectators and leave the rendezvous
+    /// server (its control tasks exit), so friends no longer see us live.
     pub fn close(&self) {
-        self.closed.store(true, Ordering::Relaxed);
+        self.closed.send_replace(true);
         self.lock().spectators.clear();
     }
+}
+
+/// A Minecraft username: `[A-Za-z0-9_]{1,16}`.
+fn valid_name(name: &str) -> bool {
+    (1..=16).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+fn leading_id(payload: &[u8]) -> Option<i32> {
+    let mut r: &[u8] = payload;
+    mcproto::buf::Read::varint(&mut r).ok()
 }
 
 /// Whether a clientbound packet changes the broadcaster's own inventory or held
 /// slot, i.e. their visible equipment needs re-sending to spectators.
 fn changes_self_equipment(payload: &[u8]) -> bool {
-    let mut r: &[u8] = payload;
     matches!(
-        mcproto::buf::Read::varint(&mut r),
-        Ok(id) if id == mcproto::world::id::SET_SLOT
+        leading_id(payload),
+        Some(id) if id == mcproto::world::id::SET_SLOT
             || id == mcproto::world::id::WINDOW_ITEMS
             || id == mcproto::world::id::HELD_ITEM_CHANGE
     )
@@ -287,12 +330,25 @@ pub async fn start(session: &Session, compass_addr: &str) -> Result<Arc<Broadcas
         uuid,
         control_tx,
         chat_tx,
-        closed: AtomicBool::new(false),
+        closed: watch::Sender::new(false),
+        respawned: AtomicBool::new(false),
     });
 
-    // Writer task: send control commands up to the rendezvous server.
+    // Writer task: send control commands (and a keep-alive ping) up to the
+    // rendezvous server. Ending it drops the write half, which unregisters us.
+    let mut closed = broadcast.closed.subscribe();
     session.spawn(async move {
-        while let Some(msg) = control_rx.recv().await {
+        let mut ping = tokio::time::interval(std::time::Duration::from_secs(60));
+        ping.tick().await;
+        loop {
+            let msg = tokio::select! {
+                msg = control_rx.recv() => match msg {
+                    Some(msg) => msg,
+                    None => break,
+                },
+                _ = ping.tick() => ClientMsg::Ping,
+                _ = closed.wait_for(|c| *c) => break,
+            };
             if compass::write_msg(&mut write, &msg).await.is_err() {
                 break;
             }
@@ -311,13 +367,29 @@ pub async fn start(session: &Session, compass_addr: &str) -> Result<Arc<Broadcas
     let addr = compass_addr.to_string();
     let b = broadcast.clone();
     let loop_session = session.clone();
+    let mut closed = broadcast.closed.subscribe();
     session.spawn(async move {
         let mut buf = buf;
         loop {
-            let msg = match compass::read_msg(&mut read, &mut buf).await {
+            let next = tokio::select! {
+                r = compass::read_msg(&mut read, &mut buf) => r,
+                _ = closed.wait_for(|c| *c) => break,
+            };
+            let msg = match next {
                 Ok(m) => m,
                 Err(_) => {
                     log("Broadcast: disconnected from the rendezvous server.");
+                    if !b.is_closed() {
+                        b.close();
+                        loop_session
+                            .chat("§cBroadcast connection lost. §7Use §f/bc on§7 to restart.");
+                        if loop_session
+                            .broadcast()
+                            .is_some_and(|cur| Arc::ptr_eq(&cur, &b))
+                        {
+                            loop_session.set_broadcast(None);
+                        }
+                    }
                     break;
                 }
             };
@@ -358,11 +430,11 @@ pub async fn start(session: &Session, compass_addr: &str) -> Result<Arc<Broadcas
 #[cfg(test)]
 impl Broadcast {
     /// A broadcast with no rendezvous connection, for feeding a world and serving
-    /// host sessions directly in tests.
-    fn detached(uuid: u128) -> Arc<Self> {
+    /// host sessions directly in tests. Also returns what it would show the player.
+    fn detached(uuid: u128) -> (Arc<Self>, mpsc::UnboundedReceiver<(String, i8)>) {
         let (control_tx, _control_rx) = mpsc::channel(8);
-        let (chat_tx, _chat_rx) = mpsc::unbounded_channel();
-        Arc::new(Self {
+        let (chat_tx, chat_rx) = mpsc::unbounded_channel();
+        let b = Arc::new(Self {
             inner: Mutex::new(Inner {
                 spectators: Vec::new(),
             }),
@@ -370,8 +442,10 @@ impl Broadcast {
             uuid,
             control_tx,
             chat_tx,
-            closed: AtomicBool::new(false),
-        })
+            closed: watch::Sender::new(false),
+            respawned: AtomicBool::new(false),
+        });
+        (b, chat_rx)
     }
 }
 
@@ -381,7 +455,95 @@ mod tests {
     use mcproto::conn::{self, Connection};
     use mcproto::frame::Frame;
     use mcproto::world;
+    use std::time::Duration;
     use tokio::net::TcpListener;
+
+    fn ids(rx: &mut mpsc::Receiver<Vec<u8>>) -> Vec<i32> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|p| leading_id(&p))
+            .collect()
+    }
+
+    #[test]
+    fn oversized_join_name_is_ignored() {
+        let (b, mut chat) = Broadcast::detached(1);
+        b.prompt_join(&"x".repeat(60_000));
+        b.on_spectator_chat(&"y".repeat(17), "hi");
+        assert!(chat.try_recv().is_err());
+        b.prompt_join("Bob_1");
+        assert!(chat.try_recv().is_ok());
+        b.on_spectator_chat("Bob_1", &"z".repeat(500));
+        let (line, _) = chat.try_recv().unwrap();
+        assert!(line.len() < 200);
+    }
+
+    #[test]
+    fn respawn_replaces_spectator_and_broadcaster_model() {
+        let (b, _chat) = Broadcast::detached(1);
+        let (_snapshot, mut rx) = b.add_spectator();
+        b.observe(
+            &cb::Respawn {
+                dimension: -1,
+                difficulty: 2,
+                game_mode: 0,
+                level_type: "default".into(),
+            }
+            .to_payload(),
+        );
+        assert_eq!(ids(&mut rx), vec![cb::Respawn::ID]);
+        b.observe(&host::position(1.0, 70.0, 2.0, 0.0, 0.0));
+        let got = ids(&mut rx);
+        assert!(got.contains(&cb::PlayerPositionAndLook::ID), "{got:?}");
+        assert!(got.contains(&world::id::SPAWN_PLAYER), "{got:?}");
+        assert!(got.contains(&0x39), "abilities re-sent: {got:?}");
+        // Only the first position after a respawn does this.
+        b.observe(&host::position(1.0, 70.0, 2.0, 0.0, 0.0));
+        assert!(ids(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn slow_spectator_is_dropped_not_desynced() {
+        let (b, _chat) = Broadcast::detached(1);
+        let (_snapshot, _rx) = b.add_spectator();
+        for _ in 0..2049 {
+            b.observe(&[world::id::TIME_UPDATE as u8, 0]);
+        }
+        assert_eq!(b.spectator_count(), 0);
+    }
+
+    /// After `/bc off` the rendezvous server must no longer list us as live.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn closed_broadcast_leaves_the_rendezvous_server() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        tokio::spawn(jagprox_compass::serve(listener));
+        let (session, _to_client) = Session::for_test("Host");
+        let b = start(&session, &addr).await.unwrap();
+        b.close();
+        for attempt in 0.. {
+            let (mut r, mut w) = compass::connect(&addr).await.unwrap().into_split();
+            compass::write_msg(
+                &mut w,
+                &ClientMsg::Join {
+                    target: "Host".into(),
+                    from: "Watcher".into(),
+                },
+            )
+            .await
+            .unwrap();
+            let mut buf = Vec::new();
+            let reply = tokio::time::timeout(
+                Duration::from_millis(200),
+                compass::read_msg(&mut r, &mut buf),
+            )
+            .await;
+            match reply {
+                Ok(Ok(ServerMsg::Denied { .. })) => break,
+                _ if attempt < 25 => continue,
+                other => panic!("still registered after close: {other:?}"),
+            }
+        }
+    }
 
     /// A broadcaster feeds a world, a spectator connects over the real rendezvous
     /// server + relay, and receives the world snapshot: the full host login +
@@ -394,7 +556,7 @@ mod tests {
         tokio::spawn(jagprox_compass::serve(listener));
 
         // Broadcaster: feed a world (JoinGame + a chunk + a mob).
-        let broadcast = Broadcast::detached(0xABCD);
+        let (broadcast, _chat) = Broadcast::detached(0xABCD);
         broadcast.observe(
             &cb::JoinGame {
                 entity_id: 7,

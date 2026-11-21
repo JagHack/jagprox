@@ -142,7 +142,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn callback_server_rejects_wrong_state_and_accepts_the_right_one() {
+    async fn read_target_returns_the_request_target() {
         let listener = bind_callback().await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let server = tokio::spawn(async move {
@@ -156,5 +156,44 @@ mod tests {
             .unwrap();
         let target = server.await.unwrap().unwrap();
         assert_eq!(target, "/auth-callback?token=a.b.c&state=xyz");
+    }
+
+    async fn get(port: u16, target: &str) -> String {
+        let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        client
+            .write_all(format!("GET {target} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes())
+            .await
+            .unwrap();
+        let mut response = String::new();
+        client.read_to_string(&mut response).await.unwrap();
+        response
+    }
+
+    #[tokio::test]
+    async fn callback_server_rejects_wrong_state_and_accepts_the_right_one() {
+        let (url_tx, url_rx) = tokio::sync::oneshot::channel::<String>();
+        let browser = async move {
+            let url = reqwest::Url::parse(&url_rx.await.unwrap()).unwrap();
+            let param = |name: &str| {
+                url.query_pairs()
+                    .find(|(k, _)| k == name)
+                    .map(|(_, v)| v.into_owned())
+                    .unwrap()
+            };
+            let port = reqwest::Url::parse(&param("redirect_uri"))
+                .unwrap()
+                .port()
+                .unwrap();
+            let state = param("state");
+            let bad_state = get(port, "/auth-callback?token=a.b.c&state=nope").await;
+            assert!(bad_state.starts_with("HTTP/1.1 403"), "{bad_state}");
+            let bad_token = get(port, &format!("/auth-callback?token=notajwt&state={state}")).await;
+            assert!(bad_token.starts_with("HTTP/1.1 400"), "{bad_token}");
+            let ok = get(port, &format!("/auth-callback?token=a.b.c&state={state}")).await;
+            assert!(ok.starts_with("HTTP/1.1 200"), "{ok}");
+        };
+        let login = browser_login(|url| url_tx.send(url.to_string()).unwrap());
+        let (token, ()) = tokio::join!(login, browser);
+        assert_eq!(token.unwrap(), "a.b.c");
     }
 }

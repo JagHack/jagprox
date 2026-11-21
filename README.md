@@ -71,7 +71,8 @@ You also need a Minecraft: Java Edition account, and for stats a Hypixel API key
 ### The `jagprox` command
 
 ```
-jagprox                      open the launcher
+jagprox                      open the terminal UI
+jagprox launch launcher      open the launcher window
 jagprox launch proxy         run the proxy in this terminal (Ctrl+C stops it)
 jagprox stats Notch [mode]   stats (Bed Wars by default; `jagprox modes` lists the rest)
 jagprox status Notch         is a player online, and where?

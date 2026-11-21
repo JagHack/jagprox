@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
 
 use serde_json::Value;
 
@@ -33,6 +32,15 @@ fn normalize(value: &Value) -> HashMap<String, String> {
 fn parse(text: &str) -> Result<HashMap<String, String>, serde_json::Error> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     Ok(normalize(&serde_json::from_str::<Value>(text)?))
+}
+
+/// The aliases in `data_dir/aliases.json`, sorted, for the launcher's alias lists.
+/// Empty if the file is missing or invalid.
+pub fn list(data_dir: &Path) -> Vec<(String, String)> {
+    let text = std::fs::read_to_string(data_dir.join("aliases.json")).unwrap_or_default();
+    let mut pairs: Vec<_> = parse(&text).unwrap_or_default().into_iter().collect();
+    pairs.sort();
+    pairs
 }
 
 impl Aliases {
@@ -87,18 +95,7 @@ impl Aliases {
     /// Reloads when the launcher saves new aliases.
     pub fn watch(&self) -> tokio::task::JoinHandle<()> {
         let aliases = self.clone();
-        tokio::spawn(async move {
-            let modified = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-            let mut last: Option<SystemTime> = modified(&aliases.path);
-            loop {
-                tokio::time::sleep(Duration::from_secs(2)).await;
-                let now = modified(&aliases.path);
-                if now != last {
-                    last = now;
-                    aliases.reload();
-                }
-            }
-        })
+        crate::file_util::watch_file(self.path.clone(), move || aliases.reload())
     }
 }
 

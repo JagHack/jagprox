@@ -88,7 +88,8 @@ pub fn save(token: &str) -> Result<Store, String> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    write_private(&path, &json!({ "token": token }).to_string())
+    // Atomic (a crash mid-write must not log the user out) and 0600 on Unix.
+    crate::file_util::write_file_atomic(&path, &json!({ "token": token }).to_string())
         .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(Store::File)
 }
@@ -102,25 +103,6 @@ pub fn clear() -> bool {
 
 fn remove_file() -> bool {
     session_file().is_ok_and(|p| fs::remove_file(p).is_ok())
-}
-
-#[cfg(unix)]
-fn write_private(path: &std::path::Path, content: &str) -> std::io::Result<()> {
-    use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)?;
-    file.write_all(content.as_bytes())
-}
-
-#[cfg(not(unix))]
-fn write_private(path: &std::path::Path, content: &str) -> std::io::Result<()> {
-    // %APPDATA% is already private to the user on Windows.
-    fs::write(path, content)
 }
 
 #[cfg(test)]

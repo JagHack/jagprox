@@ -13,8 +13,8 @@ const LAUNCHER: &str = if cfg!(windows) {
 /// bundle), then anywhere on PATH. Inside the AppImage it's the AppImage itself: its
 /// mount goes away when this command exits, so the launcher needs a fresh start of it.
 fn find_launcher() -> Option<PathBuf> {
-    if let Some(appimage) = std::env::var_os("APPIMAGE") {
-        return Some(PathBuf::from(appimage));
+    if let Some(appimage) = jagprox_core::install::appimage_path() {
+        return Some(appimage);
     }
     let exe = std::env::current_exe().ok()?;
     let exe = std::fs::canonicalize(&exe).unwrap_or(exe);

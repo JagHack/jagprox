@@ -121,23 +121,6 @@ fn push_log(logs: &Arc<Mutex<Vec<String>>>, line: String) {
     }
 }
 
-fn load_aliases(data_dir: &std::path::Path) -> Vec<(String, String)> {
-    let text = std::fs::read_to_string(data_dir.join("aliases.json")).unwrap_or_default();
-    let mut pairs: Vec<(String, String)> =
-        serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
-            .ok()
-            .and_then(|v| {
-                v.as_object().map(|m| {
-                    m.iter()
-                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-                        .collect()
-                })
-            })
-            .unwrap_or_default();
-    pairs.sort();
-    pairs
-}
-
 pub async fn run_tui() -> CmdResult {
     let data_dir = session::data_dir()?;
     let config = Config::load(&data_dir).map_err(|e| format!("could not load config.yml: {e}"))?;
@@ -148,7 +131,7 @@ pub async fn run_tui() -> CmdResult {
     jagprox_core::log::set_sink(move |line| push_log(&sink, format!("§7{line}")));
 
     let mut app = Tui {
-        aliases: load_aliases(&data_dir),
+        aliases: jagprox_core::aliases::list(&data_dir),
         logged_in: session::load().is_some(),
         accounts: Accounts::new(&data_dir).names(),
         data_dir,
@@ -249,12 +232,13 @@ fn handle_key(app: &mut Tui, code: KeyCode) -> bool {
                 app.start_proxy();
             }
         }
-        KeyCode::Char('r') => app.aliases = load_aliases(&app.data_dir),
+        KeyCode::Char('r') => app.aliases = jagprox_core::aliases::list(&app.data_dir),
         KeyCode::Tab | KeyCode::Right => app.tab = (app.tab + 1) % TABS.len(),
         KeyCode::BackTab | KeyCode::Left => app.tab = (app.tab + TABS.len() - 1) % TABS.len(),
         KeyCode::Char(c @ '1'..='3') => app.tab = (c as usize - '1' as usize).min(TABS.len() - 1),
-        KeyCode::Up => app.scroll = app.scroll.saturating_sub(1),
-        KeyCode::Down => app.scroll = app.scroll.saturating_add(1),
+        // `scroll` counts lines up from the tail; draw_logs caps it at the top.
+        KeyCode::Up => app.scroll = app.scroll.saturating_add(1),
+        KeyCode::Down => app.scroll = app.scroll.saturating_sub(1),
         _ => {}
     }
     false
@@ -265,13 +249,17 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
     let mut out = io::stdout();
     out.execute(EnterAlternateScreen)?;
     out.execute(cursor::Hide)?;
-    // Leave the terminal usable if a panic escapes the loop.
+    // Leave the terminal usable if a panic escapes the loop. Only for the UI thread:
+    // the proxy catches panics on its own tasks and the TUI keeps running.
+    let ui_thread = std::thread::current().id();
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let mut out = io::stdout();
-        let _ = out.execute(LeaveAlternateScreen);
-        let _ = out.execute(cursor::Show);
-        let _ = disable_raw_mode();
+        if std::thread::current().id() == ui_thread {
+            let mut out = io::stdout();
+            let _ = out.execute(LeaveAlternateScreen);
+            let _ = out.execute(cursor::Show);
+            let _ = disable_raw_mode();
+        }
         hook(info);
     }));
     Terminal::new(CrosstermBackend::new(out))
@@ -284,7 +272,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) {
     let _ = terminal.show_cursor();
 }
 
-fn draw(f: &mut Frame, app: &Tui) {
+fn draw(f: &mut Frame, app: &mut Tui) {
     let chunks = Layout::vertical([
         Constraint::Length(3), // header
         Constraint::Min(1),    // body
@@ -410,14 +398,15 @@ fn draw_status(f: &mut Frame, app: &Tui, area: Rect) {
     );
 }
 
-fn draw_logs(f: &mut Frame, app: &Tui, area: Rect) {
+fn draw_logs(f: &mut Frame, app: &mut Tui, area: Rect) {
     let logs = app.logs.lock().unwrap_or_else(|e| e.into_inner());
     let lines: Vec<Line> = logs.iter().map(|l| mc_line(l)).collect();
     let total = lines.len() as u16;
     let view = area.height.saturating_sub(2);
     // Follow the tail unless the user scrolled up.
     let base = total.saturating_sub(view);
-    let scroll = base.saturating_add(app.scroll).min(total.saturating_sub(1));
+    app.scroll = app.scroll.min(base);
+    let scroll = base - app.scroll;
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::new().fg(Color::Rgb(70, 70, 70)))
@@ -454,53 +443,13 @@ fn draw_aliases(f: &mut Frame, app: &Tui, area: Rect) {
 
 /// Parses Minecraft §-colour codes into a styled line.
 fn mc_line(line: &str) -> Line<'static> {
-    let mut spans: Vec<Span<'static>> = Vec::new();
-    let mut style = Style::new().fg(Color::Rgb(210, 208, 214));
-    let mut cur = String::new();
-    let mut chars = line.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '§'
-            && let Some(&code) = chars.peek()
-        {
-            chars.next();
-            if !cur.is_empty() {
-                spans.push(Span::styled(std::mem::take(&mut cur), style));
-            }
-            if let Some(c) = mc_color(code) {
-                style = Style::new().fg(c);
-            } else if code == 'l' {
-                style = style.bold();
-            } else if code == 'r' {
-                style = Style::new().fg(Color::Rgb(210, 208, 214));
-            }
-            continue;
-        }
-        cur.push(ch);
-    }
-    if !cur.is_empty() {
-        spans.push(Span::styled(cur, style));
-    }
+    let spans: Vec<Span<'static>> = jagprox_core::formatter::legacy_segments(line)
+        .into_iter()
+        .map(|(color, bold, text)| {
+            let [r, g, b] = color.unwrap_or([210, 208, 214]);
+            let style = Style::new().fg(Color::Rgb(r, g, b));
+            Span::styled(text, if bold { style.bold() } else { style })
+        })
+        .collect();
     Line::from(spans)
-}
-
-fn mc_color(c: char) -> Option<Color> {
-    Some(match c {
-        '0' => Color::Rgb(0, 0, 0),
-        '1' => Color::Rgb(0, 0, 170),
-        '2' => Color::Rgb(0, 170, 0),
-        '3' => Color::Rgb(0, 170, 170),
-        '4' => Color::Rgb(200, 40, 40),
-        '5' => Color::Rgb(170, 0, 170),
-        '6' => Color::Rgb(255, 170, 0),
-        '7' => Color::Rgb(170, 170, 170),
-        '8' => Color::Rgb(85, 85, 85),
-        '9' => Color::Rgb(85, 85, 255),
-        'a' => Color::Rgb(85, 255, 85),
-        'b' => Color::Rgb(85, 255, 255),
-        'c' => Color::Rgb(255, 85, 85),
-        'd' => Color::Rgb(255, 85, 255),
-        'e' => Color::Rgb(255, 255, 85),
-        'f' => Color::Rgb(255, 255, 255),
-        _ => return None,
-    })
 }

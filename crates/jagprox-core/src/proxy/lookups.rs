@@ -165,12 +165,15 @@ pub async fn queue_bulk(s: &Session, names: Vec<String>, game_key: Option<String
     let game = constants::game_mode(&key)
         .unwrap_or_else(|| constants::game_mode("bedwars").expect("bedwars"));
     let own = s.username().to_string();
+    let nicknames = s.proxy().config().nicknames();
+    // Resolved before the self-filter: chat shows your own nickname, not `own`.
     let names: Vec<String> = names
         .iter()
         .map(|n| {
-            remove_rank_brackets(&strip_colors(n), true)
-                .trim()
-                .to_string()
+            reports::resolve_nickname(
+                remove_rank_brackets(&strip_colors(n), true).trim(),
+                &nicknames,
+            )
         })
         .filter(|n| !n.is_empty() && *n != own)
         .collect();

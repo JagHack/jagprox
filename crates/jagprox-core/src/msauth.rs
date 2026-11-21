@@ -380,57 +380,86 @@ impl Accounts {
         }
     }
 
-    fn load(&self) -> Vec<Value> {
-        std::fs::read_to_string(&self.path)
+    /// The saved accounts; none if the file doesn't exist yet. A file that can't be
+    /// read or parsed is an error, never "no accounts": the next save would otherwise
+    /// drop every other account's refresh token.
+    fn load(&self) -> std::io::Result<Vec<Value>> {
+        let text = match std::fs::read_to_string(&self.path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e),
+        };
+        serde_json::from_str::<Value>(&text)
             .ok()
-            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
             .and_then(|v| v.get("accounts").and_then(Value::as_array).cloned())
-            .unwrap_or_default()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("{} is not a valid account list", self.path.display()),
+                )
+            })
     }
 
-    fn save(&self, accounts: &[Value]) -> std::io::Result<()> {
+    /// Read-modify-write of the account list. On a broken file nothing is written; it
+    /// is backed up so the user can recover the tokens in it.
+    // shortcut: no lock across processes, so a CLI `jagprox accounts add` racing the
+    // launcher's proxy refreshing a token can drop one of the two writes; add a file
+    // lock (fs4) around this if that ever shows up.
+    fn modify<T>(&self, change: impl FnOnce(&mut Vec<Value>) -> T) -> std::io::Result<T> {
+        let mut accounts = self.load().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::InvalidData
+                && let Ok(backup) = crate::file_util::backup_file(&self.path)
+            {
+                return std::io::Error::new(
+                    e.kind(),
+                    format!("{e} (left untouched, copy saved to {})", backup.display()),
+                );
+            }
+            e
+        })?;
+        let result = change(&mut accounts);
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir)?;
         }
         let content =
             serde_json::to_string_pretty(&json!({ "accounts": accounts })).unwrap_or_default();
+        // Owner-only: write_file_atomic creates files 0600 on Unix.
         crate::file_util::write_file_atomic(&self.path, &content)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600))?;
-        }
-        Ok(())
+        Ok(result)
     }
 
-    /// Minecraft names of the signed-in accounts.
+    /// Minecraft names of the signed-in accounts (none if accounts.json is broken).
     pub fn names(&self) -> Vec<String> {
-        self.load().iter().filter_map(|a| text(a, "name")).collect()
+        self.load()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|a| text(a, "name"))
+            .collect()
     }
 
     fn store(&self, ms: &MsToken, session: &McSession) -> std::io::Result<()> {
-        let mut accounts = self.load();
-        accounts.retain(|a| text(a, "uuid").as_deref() != Some(&session.uuid));
-        accounts.push(json!({
-            "name": session.name,
-            "uuid": session.uuid,
-            "ms_refresh_token": ms.refresh_token,
-            "mc_access_token": session.access_token,
-            "mc_expires_at": session.expires_at,
-        }));
-        self.save(&accounts)
+        self.modify(|accounts| {
+            accounts.retain(|a| text(a, "uuid").as_deref() != Some(&session.uuid));
+            accounts.push(json!({
+                "name": session.name,
+                "uuid": session.uuid,
+                "ms_refresh_token": ms.refresh_token,
+                "mc_access_token": session.access_token,
+                "mc_expires_at": session.expires_at,
+            }));
+        })
     }
 
     /// Removes an account by Minecraft name (case-insensitive). Returns whether it existed.
     pub fn remove(&self, name: &str) -> std::io::Result<bool> {
-        let mut accounts = self.load();
-        let before = accounts.len();
-        accounts.retain(|a| !text(a, "name").is_some_and(|n| n.eq_ignore_ascii_case(name)));
-        let removed = accounts.len() != before;
-        if removed {
-            self.save(&accounts)?;
+        if !self.load()?.iter().any(|a| has_name(a, name)) {
+            return Ok(false);
         }
-        Ok(removed)
+        self.modify(|accounts| {
+            let before = accounts.len();
+            accounts.retain(|a| !has_name(a, name));
+            accounts.len() != before
+        })
     }
 
     /// Signs in a new account with a device code. `show_code` is called once with
@@ -449,8 +478,9 @@ impl Accounts {
     pub async fn session_for(&self, name: &str) -> AuthResult<McSession> {
         let account = self
             .load()
+            .map_err(|e| AuthError::Rejected(format!("could not read the accounts: {e}")))?
             .into_iter()
-            .find(|a| text(a, "name").is_some_and(|n| n.eq_ignore_ascii_case(name)))
+            .find(|a| has_name(a, name))
             .ok_or_else(|| AuthError::NoAccount(name.to_string()))?;
         let cached = McSession {
             access_token: text(&account, "mc_access_token").unwrap_or_default(),
@@ -472,6 +502,10 @@ impl Accounts {
             .map_err(|e| AuthError::Rejected(format!("could not save the account: {e}")))?;
         Ok(session)
     }
+}
+
+fn has_name(account: &Value, name: &str) -> bool {
+    text(account, "name").is_some_and(|n| n.eq_ignore_ascii_case(name))
 }
 
 #[cfg(test)]
@@ -540,7 +574,40 @@ mod tests {
             Err(AuthError::NoAccount(_))
         ));
         assert!(accounts.remove("STEVE").unwrap());
+        assert!(!accounts.remove("STEVE").unwrap());
         assert!(accounts.names().is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_broken_account_file_is_never_overwritten() {
+        let dir =
+            std::env::temp_dir().join(format!("jagprox-accounts-broken-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let accounts = Accounts::new(&dir);
+        let broken = b"{\"accounts\": [{\"name\": \"Alex\", \"ms_refresh_token\": \"keep";
+        std::fs::write(&accounts.path, broken).unwrap();
+        let ms = MsToken {
+            access_token: "a".into(),
+            refresh_token: "r".into(),
+        };
+        let session = McSession {
+            access_token: "mc".into(),
+            expires_at: 0,
+            uuid: "u1".into(),
+            name: "Steve".into(),
+        };
+        assert!(accounts.store(&ms, &session).is_err());
+        assert!(accounts.remove("Alex").is_err());
+        assert_eq!(std::fs::read(&accounts.path).unwrap(), broken);
+        let backups: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.to_string_lossy().ends_with(".bak"))
+            .collect();
+        assert!(!backups.is_empty());
+        assert_eq!(std::fs::read(&backups[0]).unwrap(), broken);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

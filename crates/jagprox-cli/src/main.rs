@@ -15,8 +15,6 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use commands::{Ctx, GametrackPeriod};
 
-const DEFAULT_CONFIG: &str = include_str!("../../../config.yml");
-
 #[derive(Parser)]
 #[command(name = "jagprox", version, about = "JagProx - a Hypixel proxy", after_help = EXAMPLES)]
 struct Cli {
@@ -182,7 +180,7 @@ async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
         Cmd::Account {
             action: AccountAction::Remove { name },
         } => proxy_cmd::account_remove(&name),
-        Cmd::Config => commands::open_config(DEFAULT_CONFIG),
+        Cmd::Config => commands::open_config(jagprox_core::config::DEFAULT_CONFIG),
         Cmd::Version { version } => update_cmd::update(Some(&version)).await,
         Cmd::Update => update_cmd::update(None).await,
         Cmd::InstallCli => update_cmd::install_cli(),

@@ -93,6 +93,20 @@ impl Session {
             .clone()
     }
 
+    /// Installs `broadcast` unless one is already set; false if it lost that race.
+    pub fn claim_broadcast(&self, broadcast: Arc<super::broadcast::Broadcast>) -> bool {
+        let mut slot = self
+            .inner
+            .broadcast
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let free = slot.is_none();
+        if free {
+            *slot = Some(broadcast);
+        }
+        free
+    }
+
     /// Starts or stops broadcasting.
     pub fn set_broadcast(&self, broadcast: Option<Arc<super::broadcast::Broadcast>>) {
         *self
@@ -174,6 +188,38 @@ impl Session {
     }
 }
 
+#[cfg(test)]
+impl Session {
+    /// A session connected to nothing; returns what it would send the player.
+    pub(crate) fn for_test(username: &str) -> (Self, mpsc::Receiver<Out>) {
+        let (events, _) = tokio::sync::broadcast::channel(8);
+        let proxy = Proxy::new(super::server::ProxyOptions {
+            data_dir: Default::default(),
+            config: crate::config::Config::in_memory(json!({})),
+            jwt: None,
+            events,
+        })
+        .unwrap();
+        let (to_client, client_rx) = mpsc::channel(QUEUE);
+        let (to_server, _) = mpsc::channel(QUEUE);
+        let session = Session {
+            inner: Arc::new(Inner {
+                proxy,
+                username: username.to_string(),
+                uuid: "00000000-0000-0000-0000-00000000abcd".into(),
+                mc_session: None,
+                to_client,
+                to_server,
+                state: Mutex::new(State::default()),
+                tasks: Mutex::new(Vec::new()),
+                broadcast: Mutex::new(None),
+                game: Arc::new(Mutex::new(super::broadcast::GameState::new())),
+            }),
+        };
+        (session, client_rx)
+    }
+}
+
 const QUEUE: usize = 4096;
 
 /// Aborts the session's tasks when dropped, including when the proxy is stopped
@@ -242,20 +288,7 @@ pub(super) async fn run(
     // failure (e.g. the rendezvous server being unreachable) so a normal game isn't
     // disrupted. Spectate logins never reach here, so they don't auto-broadcast.
     if proxy.config().auto_broadcast() {
-        let s = session.clone();
-        let addr = proxy.compass_addr();
-        session.spawn(async move {
-            match super::broadcast::start(&s, &addr).await {
-                Ok(b) => {
-                    s.set_broadcast(Some(b));
-                    s.chat(&format!(
-                        "§a§lAuto-broadcasting! §r§7A friend can watch with §f/watch {}",
-                        s.username()
-                    ));
-                }
-                Err(e) => log(format!("Auto-broadcast couldn't start: {e}")),
-            }
-        });
+        commands::begin_broadcast(&session, true);
     }
     let _guard = AbortOnDrop(vec![
         upstream.abort_handle(),
@@ -283,9 +316,11 @@ pub(super) async fn run(
     // Session over: stop its timers, reset the modules, and let the writers send
     // what's queued (e.g. a kick) before both sockets close.
     proxy.set_current(None);
+    if let Some(b) = session.broadcast() {
+        b.close();
+    }
     session.set_broadcast(None);
     session.abort_tasks();
-    modules::reset(&mut session.state());
     drop(session);
     let _ = tokio::time::timeout(Duration::from_secs(2), async {
         let _ = client_writer.await;
@@ -320,24 +355,28 @@ async fn server_to_client(
         // Track the world on every packet so a broadcast started mid-game already
         // has the chunks Hypixel sent at join; while broadcasting, also fan the
         // live stream out to spectators (both update the same shared GameState).
-        if let Ok(payload) = frame.payload() {
+        // Decompressed once here and shared with the modules below.
+        let payload = frame.payload().ok();
+        if let Some(payload) = &payload {
             if let Some(broadcast) = session.broadcast() {
-                broadcast.observe(&payload);
+                broadcast.observe(payload);
             } else {
-                session.observe_world(&payload);
+                session.observe_world(payload);
             }
         }
-        let out = inspect_server_frame(&session, frame);
+        let changed = payload
+            .as_deref()
+            .and_then(|p| inspect_server_payload(&session, p));
+        drop(payload);
+        let out = changed.map_or(Out::Frame(frame), Out::Packet);
         if session.inner.to_client.send(out).await.is_err() {
             return Ok(());
         }
     }
 }
 
-/// Runs the modules on a packet they care about; anything else (or anything that
-/// fails to decode) is forwarded untouched.
 /// Runs `f` when dropped.
-fn scopeguard(f: impl FnOnce()) -> impl Drop {
+pub(super) fn scopeguard(f: impl FnOnce()) -> impl Drop {
     struct Guard<F: FnOnce()>(Option<F>);
     impl<F: FnOnce()> Drop for Guard<F> {
         fn drop(&mut self) {
@@ -349,22 +388,18 @@ fn scopeguard(f: impl FnOnce()) -> impl Drop {
     Guard(Some(f))
 }
 
-fn inspect_server_frame(session: &Session, frame: Frame) -> Out {
-    let Ok(id) = frame.id() else {
-        return Out::Frame(frame);
-    };
-    let decoded = match frame.payload() {
-        Ok(payload) => ServerPacket::decode(id, &payload),
-        Err(_) => None,
-    };
-    let mut packet = match decoded {
-        None => return Out::Frame(frame),
-        Some(Ok(packet)) => packet,
-        Some(Err(e)) => {
+/// Runs the modules on a decompressed packet they care about. Returns the
+/// re-encoded packet if a module changed it; `None` means forward the frame as-is
+/// (also when it isn't one the modules want, or fails to decode).
+fn inspect_server_payload(session: &Session, payload: &[u8]) -> Option<Vec<u8>> {
+    let id = mcproto::buf::Read::varint(&mut &payload[..]).ok()?;
+    let mut packet = match ServerPacket::decode(id, payload)? {
+        Ok(packet) => packet,
+        Err(e) => {
             crate::log::debug(format!(
                 "Could not decode packet {id:#04x}, forwarding it unchanged: {e}"
             ));
-            return Out::Frame(frame);
+            return None;
         }
     };
     // A bug in one module must never take down the session.
@@ -372,13 +407,13 @@ fn inspect_server_frame(session: &Session, frame: Frame) -> Out {
         modules::on_server_packet(session, &mut packet)
     }));
     match changed {
-        Ok(true) => packet.encode().map_or(Out::Frame(frame), Out::Packet),
-        Ok(false) => Out::Frame(frame),
+        Ok(true) => packet.encode(),
+        Ok(false) => None,
         Err(_) => {
             log(format!(
                 "[ERROR] A module failed on packet {id:#04x}; it was forwarded unchanged."
             ));
-            Out::Frame(frame)
+            None
         }
     }
 }

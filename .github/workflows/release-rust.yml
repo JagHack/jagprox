@@ -26,7 +26,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - id: v
         name: Version from Cargo.toml (must match the tag)
         run: |
@@ -48,12 +48,13 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: stable
           targets: ${{ matrix.arch }}-unknown-linux-musl
       - run: sudo apt-get update && sudo apt-get install -y musl-tools
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Build static jagprox
         run: cargo build --release --locked -p jagprox-cli --target ${{ matrix.arch }}-unknown-linux-musl
       - name: Package
@@ -63,7 +64,7 @@ jobs:
           "$bin" --version
           mkdir -p out && cp "$bin" LICENSE NOTICE out/
           tar -czf jagprox-linux-${{ matrix.arch }}.tar.gz -C out jagprox LICENSE NOTICE
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cli-linux-${{ matrix.arch }}
           path: jagprox-linux-${{ matrix.arch }}.tar.gz
@@ -87,8 +88,10 @@ jobs:
     env:
       V: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
       - name: Build dependencies for the egui launcher, the AppImage and rpm
         run: |
           sudo apt-get update
@@ -96,7 +99,7 @@ jobs:
             wayland-protocols libxcursor-dev libxrandr-dev libxi-dev libx11-dev \
             libfontconfig1-dev libfreetype-dev libssl-dev libdbus-1-dev \
             libfuse2 file rpm
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Install packaging tools
         run: cargo install --locked "$PACKAGER" "$GENERATE_RPM"
       - name: Build the launcher and the jagprox CLI (glibc)
@@ -116,7 +119,7 @@ jobs:
           cp dist-pkg/*_${{ matrix.arch }}.AppImage "dist/JagProx-${V}-${{ matrix.arch }}.AppImage"
           cp target/generate-rpm/jagprox-${V}-1.${{ matrix.arch }}.rpm dist/
           ls -la dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app-linux-${{ matrix.arch }}
           path: dist/*
@@ -150,15 +153,17 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Build jagprox-launcher.exe and jagprox.exe (static C runtime)
         env:
           RUSTFLAGS: -C target-feature=+crt-static
         run: cargo build --release --locked -p jagprox-gui -p jagprox-cli
       - name: Install NSIS
-        run: choco install nsis -y --no-progress
+        run: choco install nsis --version=3.13.0 -y --no-progress
       - name: Build the installer
         run: |
           # NSIS needs native (back-slash) paths; Join-Path gives those.
@@ -205,7 +210,7 @@ jobs:
           if ($path -split ';' -contains $dir) { throw "uninstall left $dir on PATH" }
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app-windows
           path: dist/*
@@ -216,11 +221,12 @@ jobs:
     env:
       V: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: stable
           targets: aarch64-apple-darwin,x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Install cargo-packager
         run: cargo install --locked "$PACKAGER"
       - name: Build universal binaries
@@ -245,7 +251,7 @@ jobs:
           tar -czf "dist/JagProx-${V}-universal.app.tar.gz" -C dist-pkg JagProx.app
           dist-pkg/JagProx.app/Contents/MacOS/jagprox --version | grep -F "$V"
           lipo -archs dist-pkg/JagProx.app/Contents/MacOS/jagprox-launcher
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app-macos
           path: dist/*
@@ -259,8 +265,8 @@ jobs:
     env:
       V: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           merge-multiple: true
