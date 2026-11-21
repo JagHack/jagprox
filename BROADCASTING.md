@@ -66,7 +66,9 @@ The server is the `jagprox-compass` crate — a small standalone TCP server.
 COMPASS_ADDR=0.0.0.0:7676 cargo run -p jagprox-compass --release
 ```
 
-Proxies default to `jagprox.jaghack.com:7676`. Point them elsewhere with a
+Proxies default to the JagProx broker at `77.42.31.200:7676`. It's a raw IP, not
+`jagprox.jaghack.com`, because the broker speaks plain TCP and that hostname is
+Cloudflare-proxied (HTTP/HTTPS only). Point proxies at your own broker with a
 `compass:` line in `config.yml`:
 
 ```yaml

@@ -29,7 +29,12 @@ use super::session::Session;
 use crate::log::log;
 
 /// The default rendezvous server.
-pub const DEFAULT_COMPASS: &str = "jagprox.jaghack.com:7676";
+///
+/// A raw IP rather than a hostname: the compass broker speaks plain TCP on
+/// 7676, and `jagprox.jaghack.com` is Cloudflare-proxied (HTTP/HTTPS only), so
+/// that name can't carry this port. Override it with a `compass:` line in
+/// `config.yml` if you run your own broker.
+pub const DEFAULT_COMPASS: &str = "77.42.31.200:7676";
 
 struct Inner {
     game: GameState,
