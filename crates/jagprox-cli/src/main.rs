@@ -134,6 +134,11 @@ enum LaunchTarget {
 enum AccountAction {
     /// Sign in a Microsoft account
     Add,
+    /// Import an account from a browser cookie export (short-lived, no refresh)
+    Cookie {
+        /// Path to the exported cookies.txt (Netscape format)
+        file: std::path::PathBuf,
+    },
     /// List signed-in accounts
     List,
     /// Sign out an account
@@ -174,6 +179,9 @@ async fn run(cmd: Cmd, ctx: &Ctx) -> Result<(), String> {
         Cmd::Account {
             action: AccountAction::Add,
         } => proxy_cmd::account_add(ctx.color).await,
+        Cmd::Account {
+            action: AccountAction::Cookie { file },
+        } => proxy_cmd::account_add_cookie(&file).await,
         Cmd::Account {
             action: AccountAction::List,
         } => proxy_cmd::account_list(),

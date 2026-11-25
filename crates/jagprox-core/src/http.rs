@@ -6,6 +6,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static NO_REDIRECT: OnceLock<reqwest::Client> = OnceLock::new();
 
 pub const USER_AGENT: &str = concat!("JagProx/", env!("CARGO_PKG_VERSION"));
 
@@ -30,6 +31,21 @@ pub fn client() -> &'static reqwest::Client {
         reqwest::Client::builder()
             .use_preconfigured_tls(tls_config())
             .user_agent(USER_AGENT)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(20))
+            .build()
+            .expect("HTTP client configuration is valid")
+    })
+}
+
+/// A client that does not follow redirects, so a 302 `Location` header can be read
+/// (the cookie sign-in reads the OAuth token out of that redirect).
+pub fn no_redirect_client() -> &'static reqwest::Client {
+    NO_REDIRECT.get_or_init(|| {
+        reqwest::Client::builder()
+            .use_preconfigured_tls(tls_config())
+            .user_agent(USER_AGENT)
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(20))
             .build()

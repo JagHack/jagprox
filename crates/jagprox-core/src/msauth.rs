@@ -225,13 +225,13 @@ pub struct McSession {
     pub name: String,
 }
 
-async fn minecraft_login(ms_access_token: &str) -> AuthResult<McSession> {
+async fn minecraft_login(rps_ticket: &str) -> AuthResult<McSession> {
     let response = client()
         .post("https://user.auth.xboxlive.com/user/authenticate")
         .header("Accept", "application/json")
         .header("x-xbl-contract-version", "1")
         .json(&json!({
-            "Properties": { "AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com", "RpsTicket": ms_access_token },
+            "Properties": { "AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com", "RpsTicket": rps_ticket },
             "RelyingParty": "http://auth.xboxlive.com",
             "TokenType": "JWT"
         }))
@@ -365,6 +365,137 @@ pub async fn has_joined(username: &str, server_hash: &str) -> AuthResult<Option<
 }
 
 // ---------------------------------------------------------------------------
+// Cookie sign-in (import a browser login session, the way Lumiere does)
+// ---------------------------------------------------------------------------
+
+/// A desktop-browser User-Agent for the OAuth request; Microsoft's cookie flow treats
+/// an unknown client more suspiciously, so we look like a browser.
+const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
+
+/// Microsoft login cookies parsed from a Netscape `cookies.txt` export.
+fn parse_microsoft_cookies(contents: &str) -> std::collections::HashMap<String, String> {
+    let mut cookies = std::collections::HashMap::new();
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 7 {
+            continue;
+        }
+        let domain = parts[0].to_ascii_lowercase();
+        if !domain.contains("login.live.com")
+            && domain != ".live.com"
+            && domain != ".account.microsoft.com"
+        {
+            continue;
+        }
+        let (name, value) = (parts[5].trim(), parts[6].trim());
+        if name.is_empty() || value.is_empty() || value == "Disabled" {
+            continue;
+        }
+        cookies
+            .entry(name.to_string())
+            .or_insert_with(|| value.to_string());
+    }
+    cookies
+}
+
+/// The `Cookie:` header for the OAuth request, in the order Microsoft expects.
+fn cookie_header(cookies: &std::collections::HashMap<String, String>, use_jsh: bool) -> String {
+    let mut order: Vec<&str> = vec![
+        if use_jsh { "JSH" } else { "JSHP" },
+        "MSPAuth",
+        "MSPBack",
+        "MSPProf",
+        "MSPRequ",
+        "MSPSoftVis",
+        "NAP",
+        "OParams",
+        "PPLState",
+        "WLSSC",
+    ];
+    for name in cookies.keys() {
+        if !order.contains(&name.as_str())
+            && (name == "uaid" || name.starts_with("__Host-"))
+        {
+            order.push(name.as_str());
+        }
+    }
+    order
+        .iter()
+        .filter_map(|n| cookies.get(*n).map(|v| format!("{n}={v}")))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// Decodes a percent-encoded value (and `+` as space), like Java's `URLDecoder`.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 3 <= bytes.len() => match u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                Ok(byte) => {
+                    out.push(byte);
+                    i += 3;
+                }
+                Err(_) => {
+                    out.push(b'%');
+                    i += 1;
+                }
+            },
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Exchanges Microsoft login cookies for an RPS access token via the implicit OAuth
+/// grant: the token comes back in the `#access_token=` fragment of a 302 redirect that
+/// we do not follow. `None` means these cookies didn't produce a token.
+async fn rps_token_from_cookies(
+    cookies: &std::collections::HashMap<String, String>,
+    use_jsh: bool,
+) -> AuthResult<Option<String>> {
+    let url = "https://login.live.com/oauth20_authorize.srf?redirect_uri=https://sisu.xboxlive.com/connect/oauth/XboxLive&response_type=token&client_id=000000004420578E&scope=XboxLive.Signin%20XboxLive.offline_access";
+    let response = crate::http::no_redirect_client()
+        .get(url)
+        .header("User-Agent", BROWSER_UA)
+        .header("Cookie", cookie_header(cookies, use_jsh))
+        .send()
+        .await?;
+    if response.status().as_u16() != 302 {
+        return Ok(None);
+    }
+    let Some(location) = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return Ok(None);
+    };
+    let token = location
+        .split_once('#')
+        .and_then(|(_, fragment)| {
+            fragment
+                .split('&')
+                .find_map(|p| p.strip_prefix("access_token="))
+        })
+        .map(percent_decode);
+    Ok(token)
+}
+
+// ---------------------------------------------------------------------------
 // Account store
 // ---------------------------------------------------------------------------
 
@@ -474,6 +605,51 @@ impl Accounts {
         Ok(session)
     }
 
+    /// Signs in a new account by importing Microsoft login cookies exported from a
+    /// browser (Netscape `cookies.txt` format), the way Lumiere does. The implicit
+    /// grant returns no refresh token, so the account lasts only until the Minecraft
+    /// token expires (~24h) — then the cookies must be re-imported.
+    pub async fn cookie_sign_in(&self, cookie_file: &str) -> AuthResult<McSession> {
+        let cookies = parse_microsoft_cookies(cookie_file);
+        if cookies.is_empty() {
+            return Err(AuthError::Rejected(
+                "no Microsoft login cookies (login.live.com) found in that file".into(),
+            ));
+        }
+        // JSHP, then JSH — whichever yields a token.
+        let mut token = None;
+        for use_jsh in [false, true] {
+            if token.is_none() {
+                token = rps_token_from_cookies(&cookies, use_jsh).await?;
+            }
+        }
+        let token = token.ok_or_else(|| {
+            AuthError::Rejected(
+                "those cookies didn't produce a Microsoft token — they're likely expired; \
+                 sign in at login.live.com in your browser and export fresh cookies"
+                    .into(),
+            )
+        })?;
+        let session = minecraft_login(&format!("d={token}")).await?;
+        self.store_cookie(&session)
+            .map_err(|e| AuthError::Rejected(format!("could not save the account: {e}")))?;
+        Ok(session)
+    }
+
+    /// Saves a cookie-imported account: like `store`, but with no refresh token.
+    fn store_cookie(&self, session: &McSession) -> std::io::Result<()> {
+        self.modify(|accounts| {
+            accounts.retain(|a| text(a, "uuid").as_deref() != Some(&session.uuid));
+            accounts.push(json!({
+                "name": session.name,
+                "uuid": session.uuid,
+                "ms_refresh_token": "",
+                "mc_access_token": session.access_token,
+                "mc_expires_at": session.expires_at,
+            }));
+        })
+    }
+
     /// A valid session for the account named `name`, refreshing tokens if needed.
     pub async fn session_for(&self, name: &str) -> AuthResult<McSession> {
         let account = self
@@ -496,6 +672,13 @@ impl Accounts {
         }
         let refresh = text(&account, "ms_refresh_token")
             .ok_or_else(|| AuthError::NoAccount(name.to_string()))?;
+        if refresh.is_empty() {
+            // A cookie-imported account has no refresh token; it can't be renewed.
+            return Err(AuthError::Rejected(format!(
+                "{name}'s session was imported from cookies and has expired — \
+                 re-import the cookie file with `jagprox account cookie <file>`"
+            )));
+        }
         let ms = refresh_ms_token(&refresh).await?;
         let session = minecraft_login(&ms.access_token).await?;
         self.store(&ms, &session)
@@ -511,6 +694,26 @@ fn has_name(account: &Value, name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cookie_parsing_and_header() {
+        // Netscape cookies.txt: domain, flag, path, secure, expiry, name, value.
+        let file = "\
+# comment, skipped
+.live.com\tTRUE\t/\tTRUE\t0\tJSHP\tabc123
+login.live.com\tTRUE\t/\tTRUE\t0\tMSPAuth\ttok+val
+example.com\tTRUE\t/\tTRUE\t0\tirrelevant\tnope
+.live.com\tTRUE\t/\tTRUE\t0\tDead\tDisabled
+";
+        let cookies = parse_microsoft_cookies(file);
+        assert_eq!(cookies.get("JSHP").map(String::as_str), Some("abc123"));
+        assert_eq!(cookies.get("MSPAuth").map(String::as_str), Some("tok+val"));
+        assert!(!cookies.contains_key("irrelevant")); // wrong domain dropped
+        assert!(!cookies.contains_key("Dead")); // "Disabled" value dropped
+        // JSHP must lead, in fixed order, with the "; " separator.
+        assert_eq!(cookie_header(&cookies, false), "JSHP=abc123; MSPAuth=tok+val");
+        assert_eq!(percent_decode("a%2Bb+c%2F"), "a+b c/");
+    }
 
     #[test]
     fn device_code_link_prefills_the_code() {

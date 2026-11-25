@@ -108,6 +108,21 @@ pub async fn account_add(color: ColorMode) -> CmdResult {
     Ok(())
 }
 
+pub async fn account_add_cookie(file: &std::path::Path) -> CmdResult {
+    let contents = std::fs::read_to_string(file)
+        .map_err(|e| format!("could not read {}: {e}", file.display()))?;
+    let session = Accounts::new(&session::data_dir()?)
+        .cookie_sign_in(&contents)
+        .await
+        .map_err(|e| e.to_string())?;
+    println!(
+        "Imported {} from cookies. This session is short-lived (no refresh token) — \
+         re-import when it expires. JagProx will use it when {} connects.",
+        session.name, session.name
+    );
+    Ok(())
+}
+
 pub fn account_list() -> CmdResult {
     let names = Accounts::new(&session::data_dir()?).names();
     if names.is_empty() {
